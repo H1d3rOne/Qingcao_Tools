@@ -367,6 +367,18 @@ class XianyuService:
     def _load_secret_chat_ai_api_key(self) -> str:
         return self.chat_ai_store.load_secret_api_key().strip()
 
+
+    def list_chat_ai_session_states(self, cids: list[str]) -> list[Any]:
+        return self.chat_ai_store.list_session_states(cids)
+
+    def set_chat_ai_session_state(self, cid: str, enabled: bool):
+        return self.chat_ai_store.set_session_enabled(cid, enabled)
+
+    async def test_chat_ai_reply(self, text: str, cid: str = "") -> str:
+        config = self.get_chat_ai_config()
+        messages = self._build_chat_ai_messages(config=config, text=text, cid=cid)
+        return await self._request_chat_ai_reply(config=config, messages=messages)
+
     def _build_qrcode_data_url(self, content: str) -> str | None:
         try:
             image = qrcode.make(content, image_factory=qrcode.image.svg.SvgImage)

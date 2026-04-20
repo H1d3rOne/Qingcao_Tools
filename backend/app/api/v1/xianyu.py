@@ -16,6 +16,12 @@ from app.modules.xianyu import (
     XianyuAuthLoginResponse,
     XianyuAuthLogoutResponse,
     XianyuAuthStatusResponse,
+    XianyuChatAiConfig,
+    XianyuChatAiConfigUpdateRequest,
+    XianyuChatAiSessionState,
+    XianyuChatAiSessionUpdateRequest,
+    XianyuChatAiTestRequest,
+    XianyuChatAiTestResponse,
     XianyuChatClearRequest,
     XianyuChatClearResult,
     XianyuChatConversationPage,
@@ -419,6 +425,47 @@ async def upload_and_send_xianyu_chat_image(
     except Exception as exc:
         logger.error(f"上传并发送闲鱼图片消息失败: {exc}")
         return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/chat/ai/config", response_model=ApiResponse[XianyuChatAiConfig])
+async def get_xianyu_chat_ai_config(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    return ApiResponse(data=service.get_chat_ai_config())
+
+
+@router.post("/chat/ai/config", response_model=ApiResponse[XianyuChatAiConfig])
+async def update_xianyu_chat_ai_config(
+    request: XianyuChatAiConfigUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    return ApiResponse(data=service.update_chat_ai_config(request))
+
+
+@router.get("/chat/ai/sessions", response_model=ApiResponse[list[XianyuChatAiSessionState]])
+async def list_xianyu_chat_ai_sessions(
+    cid: list[str] = Query(default_factory=list),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    return ApiResponse(data=service.list_chat_ai_session_states(cid))
+
+
+@router.post("/chat/ai/sessions/{cid}", response_model=ApiResponse[XianyuChatAiSessionState])
+async def update_xianyu_chat_ai_session(
+    cid: str,
+    request: XianyuChatAiSessionUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    return ApiResponse(data=service.set_chat_ai_session_state(cid, request.enabled))
+
+
+@router.post("/chat/ai/test", response_model=ApiResponse[XianyuChatAiTestResponse])
+async def test_xianyu_chat_ai(
+    request: XianyuChatAiTestRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    reply = await service.test_chat_ai_reply(text=request.text, cid=request.cid)
+    return ApiResponse(data=XianyuChatAiTestResponse(reply=reply))
 
 
 @router.websocket("/chat/ws")
