@@ -1210,6 +1210,67 @@ class XianyuService:
             raise ValueError("AI 接口返回了空回复")
         return content
 
+    def _extract_ai_candidate(self, item: dict[str, Any]) -> dict[str, str] | None:
+        decoded = item.get("decoded") or {}
+        if item.get("biz_type") != 40000:
+            return None
+
+        for obj in decoded.get("json_objects") or []:
+            payload = obj.get("1") or {}
+            meta = payload.get("10") or {}
+            cid = str(payload.get("2") or "").split("@")[0].strip()
+            sender_uid = str(meta.get("senderUserId") or "").strip()
+            text = str(meta.get("reminderContent") or "").strip()
+            if cid and sender_uid and text:
+                raw_text = str(decoded.get("raw_text") or "")
+                key = hashlib.sha1(raw_text.encode("utf-8", errors="ignore")).hexdigest()
+                return {"cid": cid, "sender_uid": sender_uid, "text": text, "message_key": key}
+        return None
+
+    def _remember_ai_message_key(self, key: str) -> bool:
+        if key in self._processed_ai_message_set:
+            return False
+        if len(self._processed_ai_message_keys) == self._processed_ai_message_keys.maxlen:
+            dropped = self._processed_ai_message_keys.popleft()
+            self._processed_ai_message_set.discard(dropped)
+        self._processed_ai_message_keys.append(key)
+        self._processed_ai_message_set.add(key)
+        return True
+
+    def _build_chat_ai_messages(self, *, config: XianyuChatAiConfig, text: str, cid: str = "") -> list[dict[str, str]]:
+        content = text if not cid else f"会话 CID：{cid}\n买家消息：{text}"
+        return [
+            {"role": "system", "content": config.system_prompt},
+            {"role": "user", "content": content},
+        ]
+
+    async def maybe_auto_reply_from_decoded_push(self, profile: XianyuChatProfile, decoded: dict[str, Any]) -> str | None:
+        if decoded.get("type") != "sync":
+            return None
+
+        config = self.get_chat_ai_config()
+        if not config.enabled:
+            return None
+
+        current_user_id = profile.main_user_id or profile.user_id
+        for item in decoded.get("items") or []:
+            candidate = self._extract_ai_candidate(item)
+            if not candidate:
+                continue
+            if candidate["sender_uid"] == current_user_id:
+                continue
+            if not self.chat_ai_store.get_session_enabled(candidate["cid"]):
+                continue
+            if not self._remember_ai_message_key(candidate["message_key"]):
+                continue
+
+            messages = self._build_chat_ai_messages(config=config, text=candidate["text"], cid=candidate["cid"])
+            reply = await self._request_chat_ai_reply(config=config, messages=messages)
+            await self.send_chat_text(cid=candidate["cid"], text=reply)
+            return reply
+
+        return None
+
     def _decode_message_data(self, encoded: str) -> Dict[str, Any]:
         """解码推送消息的 data 字段，参照 XianYuApis 的 decode_message_data"""
         try:
