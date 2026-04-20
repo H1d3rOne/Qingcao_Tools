@@ -8,8 +8,8 @@ interface ChatAiDialogModel {
   model: string
   system_prompt: string
   temperature: number
-  api_key_masked?: string
-  api_key_configured?: boolean
+  api_key_masked: string
+  api_key_configured: boolean
 }
 
 const props = defineProps<{
