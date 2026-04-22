@@ -179,6 +179,17 @@ describe('XianyuMonitorPanel', () => {
     expect(wrapper.find('.mp-hits__latest').text()).toContain('4060 显卡')
   })
 
+
+  it('renders framed task cards and balanced dual-pane workspace shell', async () => {
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('.mp-body').classes()).toContain('mp-body--balanced')
+    expect(wrapper.find('.mp-sidebar').classes()).toContain('mp-panel--stretch')
+    expect(wrapper.find('.mp-detail').classes()).toContain('mp-panel--stretch')
+    expect(wrapper.find('.mp-task-list').classes()).toContain('mp-task-list--fill')
+    expect(wrapper.findAll('.mp-task').every((node) => node.classes().includes('mp-task--framed'))).toBe(true)
+  })
   it('resets preview to collapsed after switching tasks and highlights active task title', async () => {
     const wrapper = buildWrapper()
     await flushPromises()

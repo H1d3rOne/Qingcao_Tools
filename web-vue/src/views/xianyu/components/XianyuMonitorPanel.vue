@@ -462,8 +462,8 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="mp-body">
-      <aside class="mp-sidebar">
+    <div class="mp-body mp-body--balanced">
+      <aside class="mp-sidebar mp-panel--stretch">
         <div class="mp-sidebar__head">
           <strong>任务列表</strong>
           <span class="mp-sidebar__count">{{ tasks.length }} 个</span>
@@ -471,13 +471,13 @@ onMounted(async () => {
 
         <div
           v-if="tasks.length"
-          class="mp-task-list"
+          class="mp-task-list mp-task-list--fill"
         >
           <button
             v-for="task in tasks"
             :key="task.id"
             type="button"
-            class="mp-task"
+            class="mp-task mp-task--framed"
             :class="{
               'mp-task--active': activeTaskId === task.id,
               'mp-task--running': task.enabled,
@@ -529,7 +529,7 @@ onMounted(async () => {
         />
       </aside>
 
-      <section class="mp-detail">
+      <section class="mp-detail mp-panel--stretch">
         <template v-if="activeTask">
           <div class="mp-detail__head">
             <div class="mp-detail__summary-head">
@@ -1047,8 +1047,18 @@ onMounted(async () => {
   align-items: start;
 }
 
+.mp-body--balanced {
+  align-items: stretch;
+}
+
+.mp-panel--stretch {
+  min-height: 100%;
+  height: 100%;
+}
+
 .mp-sidebar {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   align-content: start;
   padding: 16px;
@@ -1081,6 +1091,10 @@ onMounted(async () => {
   gap: 8px;
 }
 
+.mp-task-list--fill {
+  align-content: start;
+}
+
 .mp-task {
   display: grid;
   gap: 8px;
@@ -1094,15 +1108,21 @@ onMounted(async () => {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
+.mp-task--framed {
+  border-color: rgba(var(--app-border-rgb), 0.42);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
 .mp-task:hover {
-  border-color: rgba(var(--app-accent-rgb), 0.3);
+  border-color: rgba(var(--app-accent-rgb), 0.36);
   background: rgba(var(--app-surface-rgb), 0.85);
+  box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb), 0.07);
 }
 
 .mp-task--active {
-  border-color: rgba(var(--app-accent-rgb), 0.34);
+  border-color: rgba(var(--app-accent-rgb), 0.42);
   background: rgba(var(--app-accent-rgb), 0.08);
-  box-shadow: inset 3px 0 0 rgba(var(--app-accent-rgb), 0.9), 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
+  box-shadow: inset 3px 0 0 rgba(var(--app-accent-rgb), 0.9), 0 8px 18px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .mp-task__top {
