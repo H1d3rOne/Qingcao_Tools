@@ -168,6 +168,17 @@ describe('XianyuMonitorPanel', () => {
     expect(wrapper.find('.mp-hits__toggle-icon').exists()).toBe(true)
   })
 
+  it('renders compact task identity row, meta strip and hit preview summary row', async () => {
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('.mp-detail__identity').exists()).toBe(true)
+    expect(wrapper.find('.mp-detail__action-group').exists()).toBe(true)
+    expect(wrapper.findAll('.mp-detail__meta-pill')).toHaveLength(4)
+    expect(wrapper.find('.mp-hits__preview').exists()).toBe(true)
+    expect(wrapper.find('.mp-hits__latest').text()).toContain('4060 显卡')
+  })
+
   it('resets preview to collapsed after switching tasks and highlights active task title', async () => {
     const wrapper = buildWrapper()
     await flushPromises()

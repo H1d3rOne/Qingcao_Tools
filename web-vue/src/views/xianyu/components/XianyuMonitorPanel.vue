@@ -129,16 +129,7 @@ function buildTaskSummary(task: XianyuMonitorTask) {
   const parts = [
     `每次拉取 ${task.page_size} 条`,
     normalizeSortLabel(task),
-    `轮询 ${formatInterval(task.interval_seconds)}`,
   ]
-
-  if (task.min_price !== null && task.min_price !== undefined) {
-    parts.push(`最低 ¥${task.min_price}`)
-  }
-
-  if (task.max_price !== null && task.max_price !== undefined) {
-    parts.push(`最高 ¥${task.max_price}`)
-  }
 
   if (task.published_within_hours) {
     parts.push(`近 ${task.published_within_hours} 小时`)
@@ -148,7 +139,25 @@ function buildTaskSummary(task: XianyuMonitorTask) {
     parts.push(`最多 ${task.max_hits} 命中`)
   }
 
+  parts.push(`已见商品 ${task.seen_item_ids.length}`)
+
   return parts.join(' · ')
+}
+
+function buildTaskPriceRange(task: Pick<XianyuMonitorTask, 'min_price' | 'max_price'>) {
+  if (task.min_price !== null && task.min_price !== undefined && task.max_price !== null && task.max_price !== undefined) {
+    return `价格 ¥${task.min_price} - ¥${task.max_price}`
+  }
+
+  if (task.min_price !== null && task.min_price !== undefined) {
+    return `最低 ¥${task.min_price}`
+  }
+
+  if (task.max_price !== null && task.max_price !== undefined) {
+    return `最高 ¥${task.max_price}`
+  }
+
+  return '价格不限'
 }
 
 function formatPropValues(propValues: Record<string, string>) {
@@ -524,69 +533,81 @@ onMounted(async () => {
         <template v-if="activeTask">
           <div class="mp-detail__head">
             <div class="mp-detail__summary-head">
-              <div class="mp-detail__summary-main">
-                <div class="mp-detail__title-row">
-                  <span
-                    class="mp-detail__dot"
-                    :class="{
-                      'mp-detail__dot--on': activeTask.enabled && activeTask.last_status !== 'error',
-                      'mp-detail__dot--err': activeTask.last_status === 'error'
-                    }"
-                  />
-                  <h3>{{ activeTask.name }}</h3>
-                  <span class="mp-detail__keyword">{{ activeTask.keyword }}</span>
+              <div class="mp-detail__identity">
+                <div class="mp-detail__summary-main">
+                  <div class="mp-detail__title-row">
+                    <span
+                      class="mp-detail__dot"
+                      :class="{
+                        'mp-detail__dot--on': activeTask.enabled && activeTask.last_status !== 'error',
+                        'mp-detail__dot--err': activeTask.last_status === 'error'
+                      }"
+                    />
+                    <h3>{{ activeTask.name }}</h3>
+                    <span
+                      class="mp-detail__state"
+                      :class="{
+                        'mp-detail__state--on': activeTask.enabled && activeTask.last_status !== 'error',
+                        'mp-detail__state--err': activeTask.last_status === 'error'
+                      }"
+                    >
+                      {{ activeTask.last_status === 'error' ? '异常' : activeTask.enabled ? '启用中' : '已停用' }}
+                    </span>
+                  </div>
+                  <p class="mp-detail__summary">{{ buildTaskSummary(activeTask) }}</p>
                 </div>
-                <p class="mp-detail__summary">{{ buildTaskSummary(activeTask) }}</p>
-                <div class="mp-detail__meta-pills">
-                  <span class="mp-detail__meta-pill">最近执行 {{ formatTimestamp(activeTask.last_run_at) }}</span>
-                  <span class="mp-detail__meta-pill">更新时间 {{ formatTimestamp(activeTask.updated_at) }}</span>
-                  <span class="mp-detail__meta-pill">已见商品 {{ activeTask.seen_item_ids.length }}</span>
-                </div>
-                <div
-                  v-if="activeTask.webhook_url || activeTask.contact_seller_enabled"
-                  class="mp-detail__actions-row"
-                >
-                  <span
-                    v-if="activeTask.webhook_url"
-                    class="mp-detail__action-badge mp-detail__action-badge--webhook"
+
+                <div class="mp-detail__action-group">
+                  <el-button
+                    type="primary"
+                    :loading="runningTaskIds.includes(activeTask.id)"
+                    @click="handleRun(activeTask)"
                   >
-                    Webhook
-                  </span>
-                  <span
-                    v-if="activeTask.contact_seller_enabled"
-                    class="mp-detail__action-badge mp-detail__action-badge--contact"
+                    <el-icon><VideoPlay /></el-icon>
+                    立即执行
+                  </el-button>
+                  <el-button @click="handleToggle(activeTask)">
+                    <el-icon><SwitchButton /></el-icon>
+                    {{ activeTask.enabled ? '暂停' : '启用' }}
+                  </el-button>
+                  <el-button @click="openEditDialog(activeTask)">
+                    <el-icon><EditPen /></el-icon>
+                    编辑
+                  </el-button>
+                  <el-button
+                    type="danger"
+                    plain
+                    @click="handleDelete(activeTask)"
                   >
-                    自动联系
-                  </span>
+                    <el-icon><Delete /></el-icon>
+                    删除
+                  </el-button>
                 </div>
               </div>
-            </div>
 
-            <div class="mp-detail__actions">
-              <el-button
-                type="primary"
-                :loading="runningTaskIds.includes(activeTask.id)"
-                @click="handleRun(activeTask)"
-              >
-                <el-icon><VideoPlay /></el-icon>
-                立即执行
-              </el-button>
-              <el-button @click="handleToggle(activeTask)">
-                <el-icon><SwitchButton /></el-icon>
-                {{ activeTask.enabled ? '暂停' : '启用' }}
-              </el-button>
-              <el-button @click="openEditDialog(activeTask)">
-                <el-icon><EditPen /></el-icon>
-                编辑
-              </el-button>
-              <el-button
-                type="danger"
-                plain
-                @click="handleDelete(activeTask)"
-              >
-                <el-icon><Delete /></el-icon>
-                删除
-              </el-button>
+              <div class="mp-detail__meta-pills">
+                <span class="mp-detail__meta-pill">关键词 {{ activeTask.keyword }}</span>
+                <span class="mp-detail__meta-pill">轮询 {{ formatInterval(activeTask.interval_seconds) }}</span>
+                <span class="mp-detail__meta-pill">{{ buildTaskPriceRange(activeTask) }}</span>
+                <span class="mp-detail__meta-pill">最近执行 {{ formatTimestamp(activeTask.last_run_at) }}</span>
+              </div>
+
+              <div class="mp-detail__notes-row">
+                <span class="mp-detail__note">更新时间 {{ formatTimestamp(activeTask.updated_at) }}</span>
+                <span class="mp-detail__note">已见商品 {{ activeTask.seen_item_ids.length }}</span>
+                <span
+                  v-if="activeTask.webhook_url"
+                  class="mp-detail__action-badge mp-detail__action-badge--webhook"
+                >
+                  Webhook
+                </span>
+                <span
+                  v-if="activeTask.contact_seller_enabled"
+                  class="mp-detail__action-badge mp-detail__action-badge--contact"
+                >
+                  自动联系
+                </span>
+              </div>
             </div>
           </div>
 
@@ -606,28 +627,33 @@ onMounted(async () => {
                 </div>
                 <p class="mp-hits__helper">默认折叠，按需展开预览当前任务的命中商品</p>
               </div>
-              <div class="mp-hits__controls">
-                <button
-                  type="button"
-                  class="mp-hits__toggle"
-                  @click="toggleHitsPreview"
-                >
-                  <span class="mp-hits__toggle-text">{{ hitsExpanded ? '收起预览' : '展开预览' }}</span>
-                  <el-icon
-                    class="mp-hits__toggle-icon"
-                    :class="{ 'mp-hits__toggle-icon--expanded': hitsExpanded }"
-                  >
-                    <ArrowDown />
-                  </el-icon>
-                </button>
-                <el-button
-                  text
-                  :loading="hitsLoading"
-                  @click="loadHits(activeTask.id)"
-                >
-                  刷新
-                </el-button>
+              <el-button
+                text
+                :loading="hitsLoading"
+                @click="loadHits(activeTask.id)"
+              >
+                刷新
+              </el-button>
+            </div>
+
+            <div class="mp-hits__preview">
+              <div class="mp-hits__preview-main">
+                <strong>{{ activeHits.length }} 条命中</strong>
+                <span class="mp-hits__latest">{{ activeHits[0]?.title || '暂无最近命中' }}</span>
               </div>
+              <button
+                type="button"
+                class="mp-hits__toggle"
+                @click="toggleHitsPreview"
+              >
+                <span class="mp-hits__toggle-text">{{ hitsExpanded ? '收起预览' : '展开预览' }}</span>
+                <el-icon
+                  class="mp-hits__toggle-icon"
+                  :class="{ 'mp-hits__toggle-icon--expanded': hitsExpanded }"
+                >
+                  <ArrowDown />
+                </el-icon>
+              </button>
             </div>
 
             <div v-if="hitsExpanded">
@@ -1206,25 +1232,30 @@ onMounted(async () => {
 }
 
 .mp-detail__head {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
+  display: grid;
+  gap: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
 }
 
 .mp-detail__summary-head {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
-  flex: 1;
+}
+
+.mp-detail__identity {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
 }
 
 .mp-detail__summary-main {
   display: grid;
   gap: 8px;
   min-width: 0;
+  flex: 1;
 }
 
 .mp-detail__title-row {
@@ -1261,14 +1292,23 @@ onMounted(async () => {
   color: rgb(var(--app-text-strong-rgb));
 }
 
-.mp-detail__keyword {
-  padding: 2px 10px;
-  border-radius: 4px;
-  background: rgba(var(--app-accent-rgb), 0.08);
-  border: 1px solid rgba(var(--app-accent-rgb), 0.15);
+.mp-detail__state {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(var(--app-border-rgb), 0.14);
   font-size: 12px;
-  font-weight: 500;
-  color: rgb(var(--app-accent-rgb));
+  font-weight: 600;
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
+.mp-detail__state--on {
+  background: rgba(34, 197, 94, 0.12);
+  color: rgb(22, 163, 74);
+}
+
+.mp-detail__state--err {
+  background: rgba(239, 68, 68, 0.12);
+  color: rgb(220, 38, 38);
 }
 
 .mp-detail__summary {
@@ -1287,18 +1327,23 @@ onMounted(async () => {
 .mp-detail__meta-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 5px 10px;
   border-radius: 999px;
   font-size: 12px;
   background: rgba(var(--app-border-rgb), 0.12);
   color: rgb(var(--app-text-subtle-rgb));
 }
 
-.mp-detail__actions-row {
+.mp-detail__notes-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 8px;
+  align-items: center;
+}
+
+.mp-detail__note {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
 }
 
 .mp-detail__action-badge {
@@ -1318,10 +1363,11 @@ onMounted(async () => {
   color: rgb(147, 51, 234);
 }
 
-.mp-detail__actions {
+.mp-detail__action-group {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
   flex-shrink: 0;
 }
 
@@ -1352,10 +1398,35 @@ onMounted(async () => {
   gap: 6px;
 }
 
-.mp-hits__controls {
+.mp-hits__preview {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--app-border-rgb), 0.28);
+  background: rgba(var(--app-surface-rgb), 0.72);
+}
+
+.mp-hits__preview-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mp-hits__preview-main strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgb(var(--app-text-strong-rgb));
+}
+
+.mp-hits__latest {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mp-hits__toggle {
