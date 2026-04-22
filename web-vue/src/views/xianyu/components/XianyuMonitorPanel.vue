@@ -523,40 +523,42 @@ onMounted(async () => {
       <section class="mp-detail">
         <template v-if="activeTask">
           <div class="mp-detail__head">
-            <div class="mp-detail__info">
-              <div class="mp-detail__title-row">
-                <span
-                  class="mp-detail__dot"
-                  :class="{
-                    'mp-detail__dot--on': activeTask.enabled && activeTask.last_status !== 'error',
-                    'mp-detail__dot--err': activeTask.last_status === 'error'
-                  }"
-                />
-                <h3>{{ activeTask.name }}</h3>
-                <span class="mp-detail__keyword">{{ activeTask.keyword }}</span>
-              </div>
-              <p class="mp-detail__summary">{{ buildTaskSummary(activeTask) }}</p>
-              <div class="mp-detail__meta">
-                <span>最近执行 {{ formatTimestamp(activeTask.last_run_at) }}</span>
-                <span>更新时间 {{ formatTimestamp(activeTask.updated_at) }}</span>
-                <span>已见商品 {{ activeTask.seen_item_ids.length }}</span>
-              </div>
-              <div
-                v-if="activeTask.webhook_url || activeTask.contact_seller_enabled"
-                class="mp-detail__actions-row"
-              >
-                <span
-                  v-if="activeTask.webhook_url"
-                  class="mp-detail__action-badge mp-detail__action-badge--webhook"
+            <div class="mp-detail__summary-head">
+              <div class="mp-detail__summary-main">
+                <div class="mp-detail__title-row">
+                  <span
+                    class="mp-detail__dot"
+                    :class="{
+                      'mp-detail__dot--on': activeTask.enabled && activeTask.last_status !== 'error',
+                      'mp-detail__dot--err': activeTask.last_status === 'error'
+                    }"
+                  />
+                  <h3>{{ activeTask.name }}</h3>
+                  <span class="mp-detail__keyword">{{ activeTask.keyword }}</span>
+                </div>
+                <p class="mp-detail__summary">{{ buildTaskSummary(activeTask) }}</p>
+                <div class="mp-detail__meta-pills">
+                  <span class="mp-detail__meta-pill">最近执行 {{ formatTimestamp(activeTask.last_run_at) }}</span>
+                  <span class="mp-detail__meta-pill">更新时间 {{ formatTimestamp(activeTask.updated_at) }}</span>
+                  <span class="mp-detail__meta-pill">已见商品 {{ activeTask.seen_item_ids.length }}</span>
+                </div>
+                <div
+                  v-if="activeTask.webhook_url || activeTask.contact_seller_enabled"
+                  class="mp-detail__actions-row"
                 >
-                  Webhook
-                </span>
-                <span
-                  v-if="activeTask.contact_seller_enabled"
-                  class="mp-detail__action-badge mp-detail__action-badge--contact"
-                >
-                  自动联系
-                </span>
+                  <span
+                    v-if="activeTask.webhook_url"
+                    class="mp-detail__action-badge mp-detail__action-badge--webhook"
+                  >
+                    Webhook
+                  </span>
+                  <span
+                    v-if="activeTask.contact_seller_enabled"
+                    class="mp-detail__action-badge mp-detail__action-badge--contact"
+                  >
+                    自动联系
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -597,9 +599,12 @@ onMounted(async () => {
 
           <div class="mp-hits">
             <div class="mp-hits__head">
-              <div class="mp-hits__title-row">
-                <strong>最近命中</strong>
-                <span class="mp-hits__count">{{ activeHits.length }} 条</span>
+              <div class="mp-hits__title-block">
+                <div class="mp-hits__title-row">
+                  <strong>最近命中</strong>
+                  <span class="mp-hits__count">{{ activeHits.length }} 条</span>
+                </div>
+                <p class="mp-hits__helper">默认折叠，按需展开预览当前任务的命中商品</p>
               </div>
               <div class="mp-hits__controls">
                 <button
@@ -1209,7 +1214,14 @@ onMounted(async () => {
   border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
 }
 
-.mp-detail__info {
+.mp-detail__summary-head {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.mp-detail__summary-main {
   display: grid;
   gap: 8px;
   min-width: 0;
@@ -1266,21 +1278,20 @@ onMounted(async () => {
   line-height: 1.6;
 }
 
-.mp-detail__meta {
+.mp-detail__meta-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
 }
 
-.mp-detail__meta span {
+.mp-detail__meta-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 12px;
+  background: rgba(var(--app-border-rgb), 0.12);
   color: rgb(var(--app-text-subtle-rgb));
-}
-
-.mp-detail__meta span + span::before {
-  content: '·';
-  margin-right: 12px;
-  color: rgb(var(--app-border-rgb));
 }
 
 .mp-detail__actions-row {
@@ -1332,7 +1343,13 @@ onMounted(async () => {
 .mp-hits__head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.mp-hits__title-block {
+  display: grid;
+  gap: 6px;
 }
 
 .mp-hits__controls {
@@ -1383,6 +1400,13 @@ onMounted(async () => {
   font-size: 15px;
   font-weight: 600;
   color: rgb(var(--app-text-strong-rgb));
+}
+
+.mp-hits__helper {
+  margin: 0;
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+  line-height: 1.5;
 }
 
 .mp-hits__count {

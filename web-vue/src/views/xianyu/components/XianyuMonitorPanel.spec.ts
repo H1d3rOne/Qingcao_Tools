@@ -158,6 +158,16 @@ describe('XianyuMonitorPanel', () => {
     expect(wrapper.find('.mp-hit-grid').exists()).toBe(false)
   })
 
+  it('renders unified task summary head and keeps hit preview helper hierarchy', async () => {
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('.mp-detail__summary-head').exists()).toBe(true)
+    expect(wrapper.findAll('.mp-detail__meta-pill').length).toBeGreaterThan(1)
+    expect(wrapper.find('.mp-hits__helper').text()).toContain('默认折叠')
+    expect(wrapper.find('.mp-hits__toggle-icon').exists()).toBe(true)
+  })
+
   it('resets preview to collapsed after switching tasks and highlights active task title', async () => {
     const wrapper = buildWrapper()
     await flushPromises()
