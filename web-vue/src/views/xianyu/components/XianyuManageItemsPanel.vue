@@ -42,6 +42,19 @@ function formatPrice(price: string) {
   return raw.startsWith('¥') ? raw : `¥${raw}`
 }
 
+function itemStatusLabel(status: string) {
+  if (status === 'onsale') return '在售'
+  if (status === 'offline') return '已下架'
+  return status || '未知状态'
+}
+
+function formatItemTime(value: number) {
+  if (!value) return '未知时间'
+  const date = new Date(value * 1000)
+  if (Number.isNaN(date.getTime())) return '未知时间'
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
 async function loadItems(page = pagination.page) {
   loading.value = true
   try {
@@ -204,22 +217,33 @@ onMounted(() => {
                 <strong>{{ item.item_title || item.item_id }}</strong>
                 <span class="mg-item__id">ID {{ item.item_id }}</span>
               </div>
-              <span
-                class="mg-item__price-pill"
-                :class="{ 'mg-item__price-pill--muted': !hasPrice(item.item_price) }"
-              >
-                {{ formatPrice(item.item_price) }}
-              </span>
+              <div class="mg-item__price-block">
+                <span class="mg-item__price-label">价格</span>
+                <span
+                  class="mg-item__price-pill"
+                  :class="{ 'mg-item__price-pill--muted': !hasPrice(item.item_price) }"
+                >
+                  {{ formatPrice(item.item_price) }}
+                </span>
+              </div>
+            </div>
+            <div class="mg-item__meta">
+              <span class="mg-item__status">{{ itemStatusLabel(item.item_status) }}</span>
+              <span>更新 {{ formatItemTime(item.updated_at) }}</span>
+              <span>同步 {{ formatItemTime(item.synced_at) }}</span>
             </div>
             <p class="mg-item__detail mg-item__detail--clamp">{{ item.item_detail || '暂无商品详情' }}</p>
           </div>
 
           <div class="mg-item__actions">
-            <el-switch
-              :model-value="item.multi_quantity_delivery"
-              active-text="多数量发货"
-              @change="toggleMultiQuantity(item, Boolean($event))"
-            />
+            <div class="mg-item__primary-action">
+              <span class="mg-item__primary-label">多数量发货</span>
+              <el-switch
+                :model-value="item.multi_quantity_delivery"
+                active-text="多数量发货"
+                @change="toggleMultiQuantity(item, Boolean($event))"
+              />
+            </div>
             <div class="mg-item__btns">
               <el-button size="small" @click="openEdit(item)">
                 <el-icon><EditPen /></el-icon>
@@ -488,6 +512,18 @@ onMounted(() => {
   font-family: monospace;
 }
 
+.mg-item__price-block {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mg-item__price-label {
+  font-size: 11px;
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
 .mg-item__price-pill {
   flex-shrink: 0;
   padding: 7px 12px;
@@ -506,6 +542,22 @@ onMounted(() => {
   background: rgba(var(--app-surface-alt-rgb), 0.82);
   box-shadow: none;
   font-size: 12px;
+  font-weight: 600;
+}
+
+.mg-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
+.mg-item__status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.12);
+  color: rgb(22, 163, 74);
   font-weight: 600;
 }
 
@@ -528,6 +580,19 @@ onMounted(() => {
   gap: 10px;
   align-content: center;
   justify-items: end;
+}
+
+.mg-item__primary-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
+.mg-item__primary-label {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
 }
 
 .mg-item__btns {
@@ -567,6 +632,10 @@ onMounted(() => {
   .mg-item__header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .mg-item__price-block {
+    justify-items: start;
   }
 
   .mg-item__price-pill {

@@ -157,4 +157,14 @@ describe('XianyuManageItemsPanel', () => {
     expect(wrapper.find('.mg-item__detail').classes()).toContain('mg-item__detail--clamp')
   })
 
+
+  it('renders item meta strip, highlighted price block and primary action row', async () => {
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('.mg-item__meta').exists()).toBe(true)
+    expect(wrapper.find('.mg-item__price-block').exists()).toBe(true)
+    expect(wrapper.find('.mg-item__status').text()).toContain('在售')
+    expect(wrapper.find('.mg-item__primary-action').text()).toContain('多数量发货')
+  })
 })
