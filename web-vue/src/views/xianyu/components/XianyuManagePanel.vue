@@ -16,11 +16,12 @@ const tabs = computed(() => [
   { key: 'delivery' as const, label: '自动发货', hint: '规则配置', icon: Van, color: 'amber' },
   { key: 'runtime' as const, label: '运行状态', hint: '执行记录', icon: DataAnalysis, color: 'emerald' },
 ])
+const activeTabMeta = computed(() => tabs.value.find((tab) => tab.key === activeTab.value) || tabs.value[0])
 const overviewStats = computed(() => [
   { label: '当前账号', value: props.currentUser?.display_name || '沿用登录态', hint: '管理中心' },
   { label: '模块数量', value: '3', hint: '商品 / 发货 / 状态' },
   { label: '默认入口', value: '商品管理', hint: '同步与编辑' },
-  { label: '当前焦点', value: tabs.value.find((tab) => tab.key === activeTab.value)?.label || '商品管理', hint: '统一操作节奏' },
+  { label: '当前焦点', value: activeTabMeta.value?.label || '商品管理', hint: '统一操作节奏' },
 ])
 </script>
 
@@ -42,16 +43,23 @@ const overviewStats = computed(() => [
       </div>
     </header>
 
-    <div class="mg-overview">
-      <article
-        v-for="stat in overviewStats"
-        :key="stat.label"
-        class="mg-overview__stat"
-      >
-        <span class="mg-overview__label">{{ stat.label }}</span>
-        <strong class="mg-overview__value">{{ stat.value }}</strong>
-        <span class="mg-overview__hint">{{ stat.hint }}</span>
-      </article>
+    <div class="mg-overview-shell">
+      <div class="mg-overview__headline">
+        <strong>管理中心</strong>
+        <span>统一查看当前账号、默认入口与当前焦点</span>
+      </div>
+
+      <div class="mg-overview">
+        <article
+          v-for="stat in overviewStats"
+          :key="stat.label"
+          class="mg-overview__stat"
+        >
+          <span class="mg-overview__label">{{ stat.label }}</span>
+          <strong class="mg-overview__value">{{ stat.value }}</strong>
+          <span class="mg-overview__hint">{{ stat.hint }}</span>
+        </article>
+      </div>
     </div>
 
     <div class="mg-tabs-shell">
@@ -59,6 +67,11 @@ const overviewStats = computed(() => [
         <div>
           <strong>管理模块</strong>
           <p>统一管理商品缓存、发货规则与运行状态</p>
+        </div>
+        <div class="mg-tabs-shell__intro">
+          <span class="mg-tabs-shell__intro-label">当前焦点</span>
+          <strong>{{ activeTabMeta.label }}</strong>
+          <span>{{ activeTabMeta.hint }}</span>
         </div>
       </div>
 
@@ -80,6 +93,7 @@ const overviewStats = computed(() => [
           <div class="mg-tab__text">
             <strong>{{ tab.label }}</strong>
             <span>{{ tab.hint }}</span>
+            <small class="mg-tab__hint">{{ activeTab === tab.key ? '默认工作区节奏' : '点击切换模块' }}</small>
           </div>
         </button>
       </nav>
@@ -157,6 +171,29 @@ const overviewStats = computed(() => [
   color: rgb(var(--app-text-strong-rgb));
 }
 
+.mg-overview-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.mg-overview__headline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.mg-overview__headline strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: rgb(var(--app-text-strong-rgb));
+}
+
+.mg-overview__headline span {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
 .mg-overview {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -207,6 +244,25 @@ const overviewStats = computed(() => [
   margin: 4px 0 0;
   font-size: 13px;
   color: rgb(var(--app-text-subtle-rgb));
+}
+
+.mg-tabs-shell__intro {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  text-align: right;
+}
+
+.mg-tabs-shell__intro-label,
+.mg-tabs-shell__intro span {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
+.mg-tabs-shell__intro strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: rgb(var(--app-text-strong-rgb));
 }
 
 .mg-tabs {
@@ -274,6 +330,11 @@ const overviewStats = computed(() => [
   color: rgb(var(--app-text-subtle-rgb));
 }
 
+.mg-tab__hint {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
 .mg-tab--active.mg-tab--blue {
   border-color: rgba(59, 130, 246, 0.4);
   background: rgba(59, 130, 246, 0.06);
@@ -331,8 +392,23 @@ const overviewStats = computed(() => [
     justify-items: start;
   }
 
+  .mg-overview__headline {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .mg-overview {
     grid-template-columns: 1fr;
+  }
+
+  .mg-tabs-shell__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mg-tabs-shell__intro {
+    justify-items: start;
+    text-align: left;
   }
 
   .mg-tabs {
