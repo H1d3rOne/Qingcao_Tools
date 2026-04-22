@@ -134,6 +134,11 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div class="mg-runtime-summary__focus">
+        <span class="mg-runtime-summary__focus-label">当前观察重点</span>
+        <strong>{{ status.last_error ? '优先处理最近异常' : '运行正常，关注最新执行' }}</strong>
+      </div>
+
       <div v-if="timeInfo.length" class="mg-time-info">
         <div
           v-for="item in timeInfo"
@@ -173,6 +178,7 @@ onUnmounted(() => {
             <div class="mg-exec__info">
               <strong>{{ exec.rule_name }}</strong>
               <p>{{ exec.item_id }}</p>
+              <span class="mg-exec__reason">{{ exec.message || '无附加说明' }}</span>
             </div>
           </div>
           <div class="mg-exec__right">
@@ -228,6 +234,26 @@ onUnmounted(() => {
 .mg-runtime-summary {
   display: grid;
   gap: 12px;
+}
+
+.mg-runtime-summary__focus {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--app-border-rgb), 0.3);
+  background: rgba(var(--app-surface-rgb), 0.68);
+}
+
+.mg-runtime-summary__focus-label {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
+.mg-runtime-summary__focus strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgb(var(--app-text-strong-rgb));
 }
 
 .mg-stat {
@@ -401,6 +427,18 @@ onUnmounted(() => {
   gap: 10px;
   align-items: center;
   min-width: 0;
+}
+
+.mg-exec__info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mg-exec__reason {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgb(var(--app-text-subtle-rgb));
 }
 
 .mg-exec__dot {

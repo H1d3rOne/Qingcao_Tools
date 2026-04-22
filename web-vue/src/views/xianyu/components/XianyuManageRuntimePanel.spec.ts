@@ -93,4 +93,23 @@ describe('XianyuManageRuntimePanel', () => {
     await vi.advanceTimersByTimeAsync(30000)
     expect(mocks.getXianyuDeliveryRuntimeStatus).toHaveBeenCalledTimes(2)
   })
+
+  it('renders runtime focus summary and execution reason text', async () => {
+    const wrapper = mount(XianyuManageRuntimePanel, {
+      global: {
+        stubs: {
+          'el-button': {
+            template: '<button @click="$emit(\'click\')"><slot /></button>',
+          },
+          'el-icon': true,
+          'el-empty': true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.mg-runtime-summary__focus').exists()).toBe(true)
+    expect(wrapper.find('.mg-exec__reason').text()).toContain('delivered')
+  })
 })

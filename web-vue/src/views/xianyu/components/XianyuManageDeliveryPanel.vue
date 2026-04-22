@@ -221,8 +221,12 @@ onMounted(() => {
             <div class="mg-rule__summary">
               <span class="mg-rule__summary-text">匹配 {{ rule.match_value }}</span>
             </div>
+            <div class="mg-rule__meta">
+              <span class="mg-rule__summary-text">{{ rule.enabled ? '规则启用中' : '规则已停用' }}</span>
+              <span class="mg-rule__summary-text">{{ rule.send_chat_text ? '发送聊天' : '不发聊天' }}</span>
+            </div>
           </div>
-          <div class="mg-rule__actions">
+          <div class="mg-rule__primary-actions">
             <el-button size="small" @click="handleToggle(rule)">
               <el-icon><SwitchButton /></el-icon>
               {{ rule.enabled ? '停用' : '启用' }}
@@ -469,13 +473,14 @@ onMounted(() => {
   color: rgb(var(--app-accent-rgb));
 }
 
-.mg-rule__actions {
+.mg-rule__primary-actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
 }
 
-.mg-rule__summary {
+.mg-rule__summary,
+.mg-rule__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

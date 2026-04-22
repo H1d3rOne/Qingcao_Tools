@@ -200,4 +200,29 @@ describe('XianyuManageDeliveryPanel', () => {
     expect(wrapper.find('.mg-rule__body-grid').exists()).toBe(true)
     expect(wrapper.findAll('.mg-rule__flag')).toHaveLength(2)
   })
+
+  it('renders delivery rule meta strip and primary action cluster', async () => {
+    mocks.listXianyuDeliveryRules.mockResolvedValue({
+      data: [
+        {
+          id: 'rule-1',
+          name: '现货卡密',
+          enabled: true,
+          match_mode: 'item_id',
+          match_value: '1001',
+          delivery_text: '复制这段卡密',
+          send_chat_text: true,
+          send_dummy_ship: true,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+    })
+
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('.mg-rule__meta').exists()).toBe(true)
+    expect(wrapper.find('.mg-rule__primary-actions').exists()).toBe(true)
+  })
 })
