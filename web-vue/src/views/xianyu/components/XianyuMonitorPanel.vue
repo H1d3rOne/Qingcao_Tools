@@ -480,6 +480,7 @@ onMounted(async () => {
             class="mp-task mp-task--framed mp-task--compact"
             :class="{
               'mp-task--active': activeTaskId === task.id,
+              'mp-task--active-refined': activeTaskId === task.id,
               'mp-task--running': task.enabled,
               'mp-task--error': task.last_status === 'error'
             }"
@@ -496,7 +497,7 @@ onMounted(async () => {
                 />
                 <strong
                   class="mp-task__name"
-                  :class="{ 'mp-task__name--active': activeTaskId === task.id }"
+                  :class="{ 'mp-task__name--active': activeTaskId === task.id, 'mp-task__name--active-refined': activeTaskId === task.id }"
                 >{{ task.name }}</strong>
               </div>
               <span class="mp-task__status">
@@ -1129,9 +1130,15 @@ onMounted(async () => {
 }
 
 .mp-task--active {
+  border-color: rgba(var(--app-accent-rgb), 0.3);
+  background: rgba(var(--app-accent-rgb), 0.04);
+  box-shadow: 0 8px 18px rgba(var(--app-shadow-rgb), 0.05);
+}
+
+.mp-task--active-refined {
   border-color: rgba(var(--app-accent-rgb), 0.42);
-  background: rgba(var(--app-accent-rgb), 0.08);
-  box-shadow: inset 3px 0 0 rgba(var(--app-accent-rgb), 0.9), 0 8px 18px rgba(var(--app-shadow-rgb), 0.08);
+  background: rgba(var(--app-accent-rgb), 0.03);
+  box-shadow: inset 0 0 0 1px rgba(var(--app-accent-rgb), 0.22), 0 10px 20px rgba(var(--app-shadow-rgb), 0.06);
 }
 
 .mp-task__top {
@@ -1162,6 +1169,10 @@ onMounted(async () => {
 
 .mp-task__name--active {
   color: rgb(var(--app-accent-rgb));
+}
+
+.mp-task__name--active-refined {
+  color: rgb(37, 99, 235);
 }
 
 .mp-task__dot {

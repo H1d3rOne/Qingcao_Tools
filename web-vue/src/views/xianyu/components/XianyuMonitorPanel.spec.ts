@@ -200,6 +200,15 @@ describe('XianyuMonitorPanel', () => {
     expect(wrapper.find('.mp-detail').classes()).toContain('mp-detail--compact')
     expect(wrapper.find('.mp-hits').classes()).toContain('mp-hits--compact')
   })
+
+  it('renders refined active task emphasis with subtle ring styling', async () => {
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    const activeTask = wrapper.findAll('.mp-task')[0]
+    expect(activeTask.classes()).toContain('mp-task--active-refined')
+    expect(activeTask.find('.mp-task__name').classes()).toContain('mp-task__name--active-refined')
+  })
   it('resets preview to collapsed after switching tasks and highlights active task title', async () => {
     const wrapper = buildWrapper()
     await flushPromises()
