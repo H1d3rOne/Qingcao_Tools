@@ -209,6 +209,17 @@ describe('XianyuMonitorPanel', () => {
     expect(activeTask.classes()).toContain('mp-task--active-refined')
     expect(activeTask.find('.mp-task__name').classes()).toContain('mp-task__name--active-refined')
   })
+
+  it('renders unified pill status styling for running paused and error tasks', async () => {
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    const tasks = wrapper.findAll('.mp-task')
+    expect(tasks[0].find('.mp-task__status').classes()).toContain('mp-task__status--pill')
+    expect(tasks[0].find('.mp-task__status').classes()).toContain('mp-task__status--running')
+    expect(tasks[1].find('.mp-task__status').classes()).toContain('mp-task__status--pill')
+    expect(tasks[1].find('.mp-task__status').classes()).toContain('mp-task__status--paused')
+  })
   it('resets preview to collapsed after switching tasks and highlights active task title', async () => {
     const wrapper = buildWrapper()
     await flushPromises()

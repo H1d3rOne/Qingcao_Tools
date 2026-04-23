@@ -500,7 +500,14 @@ onMounted(async () => {
                   :class="{ 'mp-task__name--active': activeTaskId === task.id, 'mp-task__name--active-refined': activeTaskId === task.id }"
                 >{{ task.name }}</strong>
               </div>
-              <span class="mp-task__status">
+              <span
+                class="mp-task__status mp-task__status--pill"
+                :class="{
+                  'mp-task__status--running': task.enabled && task.last_status !== 'error',
+                  'mp-task__status--paused': !task.enabled && task.last_status !== 'error',
+                  'mp-task__status--error': task.last_status === 'error',
+                }"
+              >
                 {{ task.last_status === 'error' ? '异常' : task.enabled ? '运行中' : '已暂停' }}
               </span>
             </div>
@@ -1208,21 +1215,33 @@ onMounted(async () => {
 .mp-task__status {
   flex-shrink: 0;
   align-self: flex-start;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(var(--app-text-subtle-rgb), 0.1);
-  color: rgb(var(--app-text-subtle-rgb));
   font-size: 11px;
   font-weight: 600;
 }
 
-.mp-task--running .mp-task__status {
-  background: rgba(34, 197, 94, 0.1);
+.mp-task__status--pill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--app-border-rgb), 0.28);
+  background: rgba(var(--app-surface-rgb), 0.66);
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
+.mp-task__status--running {
+  border-color: rgba(34, 197, 94, 0.18);
+  background: rgba(34, 197, 94, 0.08);
   color: rgb(22, 163, 74);
 }
 
-.mp-task--error .mp-task__status {
-  background: rgba(239, 68, 68, 0.1);
+.mp-task__status--paused {
+  border-color: rgba(var(--app-border-rgb), 0.34);
+  background: rgba(var(--app-text-subtle-rgb), 0.06);
+  color: rgb(var(--app-text-subtle-rgb));
+}
+
+.mp-task__status--error {
+  border-color: rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.08);
   color: rgb(220, 38, 38);
 }
 
