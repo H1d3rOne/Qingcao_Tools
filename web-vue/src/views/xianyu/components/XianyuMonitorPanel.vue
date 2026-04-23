@@ -515,13 +515,18 @@ onMounted(async () => {
             <p class="mp-task__keyword">{{ task.keyword }}</p>
 
             <div
-              v-if="formatPropValues(task.prop_values).length"
-              class="mp-task__chips"
+              class="mp-task__meta"
+              :class="{ 'mp-task__meta--empty': !formatPropValues(task.prop_values).length }"
             >
-              <span
-                v-for="item in formatPropValues(task.prop_values)"
-                :key="item"
-              >{{ item }}</span>
+              <div
+                v-if="formatPropValues(task.prop_values).length"
+                class="mp-task__chips"
+              >
+                <span
+                  v-for="item in formatPropValues(task.prop_values)"
+                  :key="item"
+                >{{ item }}</span>
+              </div>
             </div>
 
             <div class="mp-task__footer">
@@ -1254,6 +1259,17 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mp-task__meta {
+  min-height: 22px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.mp-task__meta--empty {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .mp-task__chips {

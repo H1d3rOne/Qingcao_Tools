@@ -220,6 +220,71 @@ describe('XianyuMonitorPanel', () => {
     expect(tasks[1].find('.mp-task__status').classes()).toContain('mp-task__status--pill')
     expect(tasks[1].find('.mp-task__status').classes()).toContain('mp-task__status--paused')
   })
+
+  it('keeps task meta rows aligned when some tasks have chips and others do not', async () => {
+    mocks.listXianyuMonitorTasks.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'task-1',
+          name: '4060 监控',
+          keyword: '4060',
+          page: 1,
+          page_size: 20,
+          sort_field: '',
+          sort_value: '',
+          prop_values: { 成色: '95新' },
+          min_price: null,
+          max_price: null,
+          interval_seconds: 180,
+          enabled: true,
+          created_at: 1710000000,
+          updated_at: 1710000000,
+          last_run_at: 1710000000,
+          last_status: 'ok',
+          last_error: '',
+          seen_item_ids: ['1001'],
+          latest_hits: [],
+          max_hits: null,
+          published_within_hours: null,
+          webhook_url: '',
+          contact_seller_enabled: false,
+        },
+        {
+          id: 'task-2',
+          name: '3070 监控',
+          keyword: '3070',
+          page: 1,
+          page_size: 20,
+          sort_field: '',
+          sort_value: '',
+          prop_values: {},
+          min_price: null,
+          max_price: null,
+          interval_seconds: 180,
+          enabled: false,
+          created_at: 1710000000,
+          updated_at: 1710000000,
+          last_run_at: 1710000000,
+          last_status: 'idle',
+          last_error: '',
+          seen_item_ids: [],
+          latest_hits: [],
+          max_hits: null,
+          published_within_hours: null,
+          webhook_url: '',
+          contact_seller_enabled: false,
+        },
+      ],
+    })
+
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    const metaRows = wrapper.findAll('.mp-task__meta')
+    expect(metaRows).toHaveLength(2)
+    expect(metaRows[0].find('.mp-task__chips').exists()).toBe(true)
+    expect(metaRows[1].classes()).toContain('mp-task__meta--empty')
+  })
   it('resets preview to collapsed after switching tasks and highlights active task title', async () => {
     const wrapper = buildWrapper()
     await flushPromises()
