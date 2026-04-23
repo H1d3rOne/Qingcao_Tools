@@ -190,6 +190,16 @@ describe('XianyuMonitorPanel', () => {
     expect(wrapper.find('.mp-task-list').classes()).toContain('mp-task-list--fill')
     expect(wrapper.findAll('.mp-task').every((node) => node.classes().includes('mp-task--framed'))).toBe(true)
   })
+
+  it('renders compact task rhythm for both sidebar cards and detail content', async () => {
+    const wrapper = buildWrapper()
+    await flushPromises()
+
+    expect(wrapper.find('.mp-task-list').classes()).toContain('mp-task-list--compact')
+    expect(wrapper.findAll('.mp-task').every((node) => node.classes().includes('mp-task--compact'))).toBe(true)
+    expect(wrapper.find('.mp-detail').classes()).toContain('mp-detail--compact')
+    expect(wrapper.find('.mp-hits').classes()).toContain('mp-hits--compact')
+  })
   it('resets preview to collapsed after switching tasks and highlights active task title', async () => {
     const wrapper = buildWrapper()
     await flushPromises()

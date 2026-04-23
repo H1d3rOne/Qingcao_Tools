@@ -471,13 +471,13 @@ onMounted(async () => {
 
         <div
           v-if="tasks.length"
-          class="mp-task-list mp-task-list--fill"
+          class="mp-task-list mp-task-list--fill mp-task-list--compact"
         >
           <button
             v-for="task in tasks"
             :key="task.id"
             type="button"
-            class="mp-task mp-task--framed"
+            class="mp-task mp-task--framed mp-task--compact"
             :class="{
               'mp-task--active': activeTaskId === task.id,
               'mp-task--running': task.enabled,
@@ -529,7 +529,7 @@ onMounted(async () => {
         />
       </aside>
 
-      <section class="mp-detail mp-panel--stretch">
+      <section class="mp-detail mp-panel--stretch mp-detail--compact">
         <template v-if="activeTask">
           <div class="mp-detail__head">
             <div class="mp-detail__summary-head">
@@ -618,7 +618,7 @@ onMounted(async () => {
             {{ activeTask.last_error }}
           </div>
 
-          <div class="mp-hits">
+          <div class="mp-hits mp-hits--compact">
             <div class="mp-hits__head">
               <div class="mp-hits__title-block">
                 <div class="mp-hits__title-row">
@@ -1095,6 +1095,10 @@ onMounted(async () => {
   align-content: start;
 }
 
+.mp-task-list--compact {
+  gap: 6px;
+}
+
 .mp-task {
   display: grid;
   gap: 8px;
@@ -1111,6 +1115,11 @@ onMounted(async () => {
 .mp-task--framed {
   border-color: rgba(var(--app-border-rgb), 0.42);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.mp-task--compact {
+  gap: 6px;
+  padding: 11px 12px;
 }
 
 .mp-task:hover {
@@ -1236,7 +1245,7 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 11px;
   color: rgb(var(--app-text-subtle-rgb));
 }
@@ -1251,10 +1260,15 @@ onMounted(async () => {
   background: rgba(var(--app-surface-alt-rgb), 0.4);
 }
 
+.mp-detail--compact {
+  gap: 14px;
+  padding: 18px;
+}
+
 .mp-detail__head {
   display: grid;
-  gap: 16px;
-  padding-bottom: 16px;
+  gap: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
 }
 
@@ -1406,6 +1420,10 @@ onMounted(async () => {
   gap: 12px;
 }
 
+.mp-hits--compact {
+  gap: 10px;
+}
+
 .mp-hits__head {
   display: flex;
   justify-content: space-between;
@@ -1423,7 +1441,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(var(--app-border-rgb), 0.28);
   background: rgba(var(--app-surface-rgb), 0.72);
