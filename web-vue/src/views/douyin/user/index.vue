@@ -302,29 +302,29 @@ function formatNumber(num: number | undefined): string {
 
 <template>
   <div class="user-page">
+    <el-button
+      v-if="isFromOtherPage"
+      text
+      @click="goBack"
+      class="back-btn"
+    >
+      <el-icon class="mr-1"><ArrowLeft /></el-icon>
+      返回
+    </el-button>
     <div class="search-section" :class="{ 'has-results': userInfo }">
-      <div class="page-header">
-        <div class="header-top">
-          <el-button
-            v-if="isFromOtherPage"
-            text
-            @click="goBack"
-            class="back-btn"
-          >
-            <el-icon class="mr-1"><ArrowLeft /></el-icon>
-            返回
-          </el-button>
-          <h2 class="page-title">
-            用户查询
-          </h2>
-        </div>
-        <p class="page-desc">
-          输入抖音用户主页链接，获取用户详细信息和作品列表
-        </p>
-      </div>
-
       <!-- 搜索框 -->
       <div class="search-box">
+        <div class="search-header">
+          <div class="logo-icon">
+            <el-icon><User /></el-icon>
+          </div>
+          <h2 class="search-title">
+            用户查询
+          </h2>
+          <p class="search-subtitle">
+            输入抖音用户主页链接，获取用户详细信息和作品列表
+          </p>
+        </div>
         <div class="search-input-group">
           <el-input
             v-model="inputUrl"
@@ -809,56 +809,71 @@ function formatNumber(num: number | undefined): string {
   min-height: 100%;
 }
 
+.back-btn {
+  padding: 0 !important;
+  margin-right: 8px !important;
+  align-self: flex-start;
+}
+
 .search-section {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  flex: 1;
-  justify-content: center;
+  padding-top: 15vh;
 }
 
 .search-section.has-results {
-  flex: none;
-  justify-content: flex-start;
-}
-
-.page-header {
-  padding-bottom: 16px;
-  border-bottom: 1.5px solid rgba(var(--app-border-rgb) / 0.45);
-}
-
-.header-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.back-btn {
-  padding: 0 !important;
-  margin-right: 8px !important;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: rgb(var(--app-text-strong-rgb));
-  margin: 0;
-}
-
-.page-desc {
-  font-size: 14px;
-  color: rgb(var(--app-text-muted-rgb));
-  margin: 0;
-  line-height: 1.6;
+  padding-top: 0;
 }
 
 .search-box {
-  padding: 18px;
-  border-radius: 16px;
-  border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
-  background: rgba(var(--app-surface-rgb) / 0.95);
-  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb) / 0.08);
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 44px 44px 32px;
+  background: linear-gradient(180deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.92));
+  backdrop-filter: blur(18px);
+  border-radius: 28px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.78);
+  box-shadow: 0 24px 60px rgba(var(--app-shadow-rgb) / 0.12);
+  max-width: 680px;
+  width: min(100%, 680px);
+  margin: 0 auto;
+}
+
+.search-header {
+  margin-bottom: 34px;
+}
+
+.logo-icon {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 22px;
+  background: linear-gradient(135deg, rgb(var(--primary-color-rgb)), rgb(var(--app-accent-soft-rgb)));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42px;
+  color: rgb(var(--utility-white-rgb));
+  box-shadow: 0 18px 34px rgba(var(--primary-color-rgb) / 0.28);
+}
+
+.search-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: rgb(var(--app-text-strong-rgb));
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+
+.search-subtitle {
+  font-size: 15px;
+  color: rgb(var(--app-text-muted-rgb));
+  line-height: 1.7;
+  max-width: 420px;
+  margin: 0 auto;
 }
 
 .search-input-group {

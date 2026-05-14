@@ -1264,13 +1264,11 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  flex: 1;
-  justify-content: center;
+  padding-top: 15vh;
 }
 
 .search-section.has-results {
-  flex: none;
-  justify-content: flex-start;
+  padding-top: 0;
 }
 
 .search-box {
