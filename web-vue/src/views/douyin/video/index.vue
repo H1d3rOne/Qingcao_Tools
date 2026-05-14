@@ -531,6 +531,7 @@ function formatTime(timestamp: number) {
   display: flex;
   gap: 12px;
   padding: 18px;
+  margin-top: 8vh;
   border-radius: 16px;
   border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
   background: rgba(var(--app-surface-rgb) / 0.95);
