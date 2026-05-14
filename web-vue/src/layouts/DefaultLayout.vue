@@ -27,7 +27,7 @@ const menuItems = [
   {
     path: '/wechat',
     icon: Cellphone,
-    title: '视频号下载',
+    title: '视频号助手',
     module: 'wechat'
   },
   {

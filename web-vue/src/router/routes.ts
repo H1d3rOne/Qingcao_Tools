@@ -93,7 +93,7 @@ export const routes: RouteRecordRaw[] = [
         path: '',
         name: 'Wechat',
         component: () => import('@/views/wechat/index.vue'),
-        meta: { title: '视频号下载' }
+        meta: { title: '视频号助手' }
       }
     ]
   },
