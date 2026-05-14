@@ -198,7 +198,7 @@ function goToUser() {
   border-radius: 14px;
   overflow: hidden;
   background: rgb(var(--app-surface-rgb));
-  border: 1px solid rgba(var(--app-border-rgb), 0.7);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.7);
 }
 
 .preview-media {
@@ -228,15 +228,15 @@ function goToUser() {
   gap: 14px;
   padding: 14px 16px;
   border-radius: 12px;
-  background: rgba(var(--app-surface-rgb), 0.92);
-  border: 1px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb) / 0.92);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.7);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .author-card:hover {
-  border-color: rgba(var(--primary-color-rgb), 0.3);
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
+  border-color: rgba(var(--primary-color-rgb) / 0.3);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
 }
 
 .author-avatar {
@@ -266,8 +266,8 @@ function goToUser() {
 .info-panel {
   padding: 16px;
   border-radius: 12px;
-  background: rgba(var(--app-surface-rgb), 0.92);
-  border: 1px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb) / 0.92);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.7);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -306,7 +306,7 @@ function goToUser() {
 .stat-cell {
   padding: 12px 8px;
   border-radius: 10px;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
   text-align: center;
 }
 

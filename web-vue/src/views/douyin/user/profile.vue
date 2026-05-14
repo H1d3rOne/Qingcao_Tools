@@ -250,9 +250,9 @@ function handleVideoClick(video: Video) {
 .user-card {
   padding: 28px;
   border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.95);
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.08);
+  background: rgba(var(--app-surface-rgb) / 0.95);
+  border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb) / 0.08);
 }
 
 .user-card-content {
@@ -266,8 +266,8 @@ function handleVideoClick(video: Video) {
   height: 96px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(var(--app-border-rgb), 0.6);
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.1);
+  border: 3px solid rgba(var(--app-border-rgb) / 0.6);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.1);
   flex-shrink: 0;
 }
 
@@ -302,8 +302,8 @@ function handleVideoClick(video: Video) {
   color: rgb(var(--app-text-muted-rgb));
   padding: 6px 14px;
   border-radius: 20px;
-  background: rgba(var(--app-surface-alt-rgb), 0.8);
-  border: 1px solid rgba(var(--app-border-rgb), 0.5);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
 }
 
 .extra-info {
@@ -311,9 +311,9 @@ function handleVideoClick(video: Video) {
   flex-wrap: wrap;
   gap: 14px;
   padding: 14px 16px;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
 }
 
 .info-item {
@@ -338,9 +338,9 @@ function handleVideoClick(video: Video) {
   align-items: center;
   gap: 0;
   padding: 16px 20px;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
+  background: rgba(var(--app-surface-alt-rgb) / 0.7);
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.35);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.35);
 }
 
 .stat-item {
@@ -354,7 +354,7 @@ function handleVideoClick(video: Video) {
 .stat-divider {
   width: 1px;
   height: 36px;
-  background: rgba(var(--app-border-rgb), 0.4);
+  background: rgba(var(--app-border-rgb) / 0.4);
 }
 
 .stat-value {
@@ -370,9 +370,9 @@ function handleVideoClick(video: Video) {
 
 .signature-text {
   padding: 14px 16px;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
   color: rgb(var(--app-text-rgb));
   font-size: 14px;
   line-height: 1.7;
@@ -381,9 +381,9 @@ function handleVideoClick(video: Video) {
 .tabs-section {
   padding: 20px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
-  background: rgba(var(--app-surface-rgb), 0.92);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.06);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.52);
+  background: rgba(var(--app-surface-rgb) / 0.92);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .video-grid {

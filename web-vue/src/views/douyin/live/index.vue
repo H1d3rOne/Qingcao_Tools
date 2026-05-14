@@ -884,8 +884,8 @@ onUnmounted(() => {
   text-align: center;
   padding: 36px 32px;
   min-width: min(100%, 420px);
-  background: linear-gradient(180deg, rgba(var(--app-surface-rgb), 0.96), rgba(var(--app-surface-alt-rgb), 0.92));
-  border: 1px solid rgba(var(--app-border-rgb), 0.78);
+  background: linear-gradient(180deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.92));
+  border: 1px solid rgba(var(--app-border-rgb) / 0.78);
   border-radius: 28px;
   backdrop-filter: blur(18px);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
@@ -921,8 +921,8 @@ onUnmounted(() => {
   min-height: 28px;
   padding: 0 14px;
   border-radius: 999px;
-  background: rgba(var(--primary-color-rgb), 0.12);
-  border: 1px solid rgba(var(--primary-color-rgb), 0.18);
+  background: rgba(var(--primary-color-rgb) / 0.12);
+  border: 1px solid rgba(var(--primary-color-rgb) / 0.18);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -964,7 +964,7 @@ onUnmounted(() => {
 .bg-circle-1 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(var(--primary-color-rgb), 0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(var(--primary-color-rgb) / 0.3), transparent 70%);
   top: -100px;
   left: -100px;
   animation: float 20s ease-in-out infinite;
@@ -973,7 +973,7 @@ onUnmounted(() => {
 .bg-circle-2 {
   width: 300px;
   height: 300px;
-  background: radial-gradient(circle, rgba(var(--app-accent-alt-rgb), 0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(var(--app-accent-alt-rgb) / 0.3), transparent 70%);
   bottom: -50px;
   right: -50px;
   animation: float 15s ease-in-out infinite reverse;
@@ -982,7 +982,7 @@ onUnmounted(() => {
 .bg-circle-3 {
   width: 200px;
   height: 200px;
-  background: radial-gradient(circle, rgba(var(--app-accent-soft-rgb), 0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(var(--app-accent-soft-rgb) / 0.3), transparent 70%);
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -999,10 +999,10 @@ onUnmounted(() => {
   z-index: 1;
   text-align: center;
   padding: 44px 44px 32px;
-  background: linear-gradient(180deg, rgba(var(--app-surface-rgb), 0.96), rgba(var(--app-surface-alt-rgb), 0.92));
+  background: linear-gradient(180deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.92));
   backdrop-filter: blur(18px);
   border-radius: 28px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.78);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.78);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
   max-width: 680px;
   width: min(100%, 680px);
@@ -1023,7 +1023,7 @@ onUnmounted(() => {
   justify-content: center;
   font-size: 42px;
   color: rgb(var(--utility-white-rgb));
-  box-shadow: 0 18px 34px rgba(var(--primary-color-rgb), 0.28);
+  box-shadow: 0 18px 34px rgba(var(--primary-color-rgb) / 0.28);
 }
 
 .search-title {
@@ -1053,9 +1053,9 @@ onUnmounted(() => {
   gap: 12px;
   padding: 10px;
   border-radius: 22px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.72);
-  background: rgba(var(--app-bg-rgb), 0.74);
-  box-shadow: inset 0 1px 0 rgba(var(--utility-white-rgb), 0.3);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.72);
+  background: rgba(var(--app-bg-rgb) / 0.74);
+  box-shadow: inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.3);
 }
 
 .search-input {
@@ -1065,8 +1065,8 @@ onUnmounted(() => {
 .search-input :deep(.el-input__wrapper) {
   min-height: 52px;
   border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.96);
-  border: 1px solid rgba(var(--app-border-rgb), 0.62);
+  background: rgba(var(--app-surface-rgb) / 0.96);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.62);
   box-shadow: none;
   padding: 0 16px;
 }
@@ -1087,7 +1087,7 @@ onUnmounted(() => {
   border: none;
   font-weight: 600;
   border-radius: 16px;
-  box-shadow: 0 16px 28px rgba(var(--primary-color-rgb), 0.22);
+  box-shadow: 0 16px 28px rgba(var(--primary-color-rgb) / 0.22);
 }
 
 .search-button:hover {
@@ -1107,8 +1107,8 @@ onUnmounted(() => {
   gap: 10px;
   padding: 18px 14px;
   border-radius: 18px;
-  background: rgba(var(--app-surface-rgb), 0.78);
-  border: 1px solid rgba(var(--app-border-rgb), 0.62);
+  background: rgba(var(--app-surface-rgb) / 0.78);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.62);
 }
 
 .feature-icon {
@@ -1170,7 +1170,7 @@ onUnmounted(() => {
   display: flex;
   min-height: 0;
   gap: 1px;
-  background: rgba(var(--app-border-rgb), 0.3);
+  background: rgba(var(--app-border-rgb) / 0.3);
 }
 
 .video-section {
@@ -1179,7 +1179,7 @@ onUnmounted(() => {
   flex-direction: column;
   padding: 20px;
   gap: 12px;
-  background: rgba(var(--app-bg-rgb), 1);
+  background: rgba(var(--app-bg-rgb) / 1);
 }
 
 .video-container {
@@ -1188,8 +1188,8 @@ onUnmounted(() => {
   background: #000;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(var(--app-border-rgb), 0.4);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.1);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.4);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb) / 0.1);
 }
 
 .video-controls {
@@ -1197,10 +1197,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
-  background: rgba(var(--app-surface-rgb), 0.96);
+  background: rgba(var(--app-surface-rgb) / 0.96);
   border-radius: 14px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.5);
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .control-item {
@@ -1208,17 +1208,17 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
   border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
   cursor: pointer;
   transition: all 0.3s ease;
   user-select: none;
 }
 
 .control-item:hover {
-  background: rgba(var(--primary-color-rgb), 0.14);
-  border-color: rgba(var(--primary-color-rgb), 0.3);
+  background: rgba(var(--primary-color-rgb) / 0.14);
+  border-color: rgba(var(--primary-color-rgb) / 0.3);
 }
 
 .control-icon {
@@ -1306,15 +1306,15 @@ onUnmounted(() => {
 
 .sidebar {
   width: 380px;
-  background: rgba(var(--app-surface-rgb), 0.98);
-  border-left: 1px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb) / 0.98);
+  border-left: 1px solid rgba(var(--app-border-rgb) / 0.7);
   display: flex;
   flex-direction: column;
 }
 
 .room-header {
   padding: 22px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.5);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.5);
   position: relative;
 }
 
@@ -1360,9 +1360,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
   border-radius: 50%;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
   color: rgb(var(--app-text-muted-rgb));
   font-size: 16px;
   cursor: pointer;
@@ -1370,9 +1370,9 @@ onUnmounted(() => {
 }
 
 .share-icon-button:hover {
-  background: rgba(var(--primary-color-rgb), 0.14);
+  background: rgba(var(--primary-color-rgb) / 0.14);
   color: rgb(var(--primary-color-rgb));
-  border-color: rgba(var(--primary-color-rgb), 0.3);
+  border-color: rgba(var(--primary-color-rgb) / 0.3);
   transform: scale(1.1);
 }
 
@@ -1392,9 +1392,9 @@ onUnmounted(() => {
 
 .message-item {
   padding: 12px 14px;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
   border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.25);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.25);
   font-size: 13px;
   animation: fadeIn 0.3s ease;
   line-height: 1.5;
@@ -1416,13 +1416,13 @@ onUnmounted(() => {
 }
 
 .message-item.follow {
-  background: rgba(var(--primary-color-rgb), 0.12);
-  border-color: rgba(var(--primary-color-rgb), 0.2);
+  background: rgba(var(--primary-color-rgb) / 0.12);
+  border-color: rgba(var(--primary-color-rgb) / 0.2);
 }
 
 .message-item.member {
-  background: rgba(var(--app-accent-alt-rgb), 0.12);
-  border-color: rgba(var(--app-accent-alt-rgb), 0.2);
+  background: rgba(var(--app-accent-alt-rgb) / 0.12);
+  border-color: rgba(var(--app-accent-alt-rgb) / 0.2);
 }
 
 .user-name {
@@ -1478,8 +1478,8 @@ onUnmounted(() => {
 .notification-area {
   padding: 10px 18px;
   min-height: 40px;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
-  border-top: 1px solid rgba(var(--app-border-rgb), 0.5);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
+  border-top: 1px solid rgba(var(--app-border-rgb) / 0.5);
   display: flex;
   align-items: center;
   opacity: 0;
@@ -1523,13 +1523,13 @@ onUnmounted(() => {
 
 .message-input-area {
   padding: 14px 18px;
-  background: rgba(var(--app-surface-alt-rgb), 0.92);
-  border-top: 1px solid rgba(var(--app-border-rgb), 0.5);
+  background: rgba(var(--app-surface-alt-rgb) / 0.92);
+  border-top: 1px solid rgba(var(--app-border-rgb) / 0.5);
 }
 
 .message-input-area :deep(.el-input__wrapper) {
-  background: rgba(var(--app-bg-rgb), 0.92);
-  border: 1px solid rgba(var(--app-border-rgb), 0.8);
+  background: rgba(var(--app-bg-rgb) / 0.92);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.8);
   box-shadow: none;
 }
 
@@ -1543,7 +1543,7 @@ onUnmounted(() => {
 
 .connection-status {
   padding: 14px 18px;
-  border-top: 1px solid rgba(var(--app-border-rgb), 0.5);
+  border-top: 1px solid rgba(var(--app-border-rgb) / 0.5);
   display: flex;
   align-items: center;
   gap: 10px;

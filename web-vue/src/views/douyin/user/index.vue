@@ -808,7 +808,7 @@ function formatNumber(num: number | undefined): string {
 
 .page-header {
   padding-bottom: 16px;
-  border-bottom: 1.5px solid rgba(var(--app-border-rgb), 0.45);
+  border-bottom: 1.5px solid rgba(var(--app-border-rgb) / 0.45);
 }
 
 .header-top {
@@ -840,9 +840,9 @@ function formatNumber(num: number | undefined): string {
 .search-box {
   padding: 18px;
   border-radius: 16px;
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
-  background: rgba(var(--app-surface-rgb), 0.95);
-  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb), 0.08);
+  border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
+  background: rgba(var(--app-surface-rgb) / 0.95);
+  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb) / 0.08);
 }
 
 .search-input-group {
@@ -857,9 +857,9 @@ function formatNumber(num: number | undefined): string {
 .user-card {
   padding: 24px;
   border-radius: 16px;
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
-  background: rgba(var(--app-surface-rgb), 0.95);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.08);
+  border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
+  background: rgba(var(--app-surface-rgb) / 0.95);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb) / 0.08);
 }
 
 .user-card-content {
@@ -873,8 +873,8 @@ function formatNumber(num: number | undefined): string {
   height: 80px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(var(--app-border-rgb), 0.6);
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.1);
+  border: 3px solid rgba(var(--app-border-rgb) / 0.6);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.1);
   flex-shrink: 0;
 }
 
@@ -909,8 +909,8 @@ function formatNumber(num: number | undefined): string {
   color: rgb(var(--app-text-muted-rgb));
   padding: 6px 14px;
   border-radius: 20px;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
-  border: 1px solid rgba(var(--app-border-rgb), 0.25);
+  background: rgba(var(--app-surface-alt-rgb) / 0.7);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.25);
 }
 
 .extra-info {
@@ -919,9 +919,9 @@ function formatNumber(num: number | undefined): string {
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background: rgba(var(--app-surface-alt-rgb), 0.65);
+  background: rgba(var(--app-surface-alt-rgb) / 0.65);
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
 }
 
 .info-text {
@@ -933,9 +933,9 @@ function formatNumber(num: number | undefined): string {
   display: flex;
   align-items: center;
   padding: 16px 20px;
-  background: rgba(var(--app-surface-alt-rgb), 0.65);
+  background: rgba(var(--app-surface-alt-rgb) / 0.65);
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
 }
 
 .stat-item {
@@ -949,7 +949,7 @@ function formatNumber(num: number | undefined): string {
 .stat-divider {
   width: 1px;
   height: 32px;
-  background: rgba(var(--app-border-rgb), 0.55);
+  background: rgba(var(--app-border-rgb) / 0.55);
 }
 
 .stat-value {
@@ -965,9 +965,9 @@ function formatNumber(num: number | undefined): string {
 
 .signature-text {
   padding: 14px 16px;
-  background: rgba(var(--app-surface-alt-rgb), 0.75);
+  background: rgba(var(--app-surface-alt-rgb) / 0.75);
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
   color: rgb(var(--app-text-rgb));
   font-size: 14px;
   line-height: 1.7;
@@ -977,9 +977,9 @@ function formatNumber(num: number | undefined): string {
 .works-section {
   padding: 20px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
-  background: rgba(var(--app-surface-rgb), 0.92);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.06);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.52);
+  background: rgba(var(--app-surface-rgb) / 0.92);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .works-header {
@@ -988,7 +988,7 @@ function formatNumber(num: number | undefined): string {
   justify-content: space-between;
   margin-bottom: 18px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.3);
 }
 
 .works-title {
@@ -1033,18 +1033,18 @@ function formatNumber(num: number | undefined): string {
 }
 
 .quality-option:hover {
-  background: rgba(var(--app-surface-alt-rgb), 0.8);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
 }
 
 .quality-option.active {
-  background: rgba(var(--primary-color-rgb), 0.12);
+  background: rgba(var(--primary-color-rgb) / 0.12);
 }
 
 .quality-radio {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 2px solid rgba(var(--app-border-rgb), 0.6);
+  border: 2px solid rgba(var(--app-border-rgb) / 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1102,21 +1102,21 @@ function formatNumber(num: number | undefined): string {
 .video-card {
   border-radius: 14px;
   overflow: hidden;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
+  background: rgba(var(--app-surface-alt-rgb) / 0.7);
   border: 2px solid transparent;
   cursor: pointer;
   transition: all 0.25s ease;
 }
 
 .video-card:hover {
-  border-color: rgba(var(--primary-color-rgb), 0.4);
-  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb), 0.12);
+  border-color: rgba(var(--primary-color-rgb) / 0.4);
+  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb) / 0.12);
   transform: translateY(-2px);
 }
 
 .video-card.selected {
   border-color: rgb(var(--primary-color-rgb));
-  box-shadow: 0 0 0 1px rgba(var(--primary-color-rgb), 0.3);
+  box-shadow: 0 0 0 1px rgba(var(--primary-color-rgb) / 0.3);
 }
 
 .video-card-cover {
@@ -1137,7 +1137,7 @@ function formatNumber(num: number | undefined): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--app-surface-alt-rgb), 0.9);
+  background: rgba(var(--app-surface-alt-rgb) / 0.9);
 }
 
 .placeholder-icon {
@@ -1263,7 +1263,7 @@ function formatNumber(num: number | undefined): string {
   width: 100%;
   max-width: 900px;
   margin: 0 16px;
-  background: rgba(var(--app-surface-rgb), 0.98);
+  background: rgba(var(--app-surface-rgb) / 0.98);
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
@@ -1391,7 +1391,7 @@ function formatNumber(num: number | undefined): string {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
+  background: rgba(var(--app-surface-alt-rgb) / 0.7);
   border-radius: 10px;
   font-size: 13px;
   color: rgb(var(--app-text-muted-rgb));
@@ -1417,16 +1417,16 @@ function formatNumber(num: number | undefined): string {
 .feature-card-item {
   padding: 24px;
   border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.92);
-  border: 1px solid rgba(var(--app-border-rgb), 0.56);
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.05);
+  background: rgba(var(--app-surface-rgb) / 0.92);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.56);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.05);
   transition: all 0.25s ease;
 }
 
 .feature-card-item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.1);
-  border-color: rgba(var(--primary-color-rgb), 0.3);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb) / 0.1);
+  border-color: rgba(var(--primary-color-rgb) / 0.3);
 }
 
 .feature-icon {

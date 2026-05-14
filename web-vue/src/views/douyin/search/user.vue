@@ -118,9 +118,9 @@ function goToUser(secUid: string) {
 .search-box {
   padding: 18px;
   border-radius: 16px;
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
-  background: rgba(var(--app-surface-rgb), 0.95);
-  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb), 0.08);
+  border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
+  background: rgba(var(--app-surface-rgb) / 0.95);
+  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb) / 0.08);
 }
 
 .search-input :deep(.el-input__wrapper) {
@@ -142,17 +142,17 @@ function goToUser(secUid: string) {
 .user-card {
   padding: 18px;
   border-radius: 14px;
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.6);
-  background: rgba(var(--app-surface-rgb), 0.95);
+  border: 1.5px solid rgba(var(--app-border-rgb) / 0.6);
+  background: rgba(var(--app-surface-rgb) / 0.95);
   cursor: pointer;
   transition: all 0.25s ease;
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .user-card:hover {
-  border-color: rgba(var(--primary-color-rgb), 0.5);
-  background: rgba(var(--app-surface-rgb), 0.98);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.1);
+  border-color: rgba(var(--primary-color-rgb) / 0.5);
+  background: rgba(var(--app-surface-rgb) / 0.98);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb) / 0.1);
   transform: translateY(-2px);
 }
 
@@ -199,8 +199,8 @@ function goToUser(secUid: string) {
   color: rgb(var(--app-text-subtle-rgb));
   padding: 4px 10px;
   border-radius: 20px;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
-  border: 1px solid rgba(var(--app-border-rgb), 0.2);
+  background: rgba(var(--app-surface-alt-rgb) / 0.7);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.2);
 }
 
 .empty-state {
