@@ -187,4 +187,33 @@ function goToUser() {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.status-bar {
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
+}
+
+.entry-card {
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
+  transition: all 0.25s ease;
+}
+
+.entry-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.08),
+    0 12px 28px rgba(var(--app-shadow-rgb) / 0.08);
+}
+
+.info-section {
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
+}
 </style>

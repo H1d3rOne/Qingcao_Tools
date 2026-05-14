@@ -372,6 +372,9 @@ async function handleTestFeishu() {
   margin-bottom: 12px;
   height: auto;
   line-height: 1.5;
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .settings-collapse :deep(.el-collapse-item__header:hover) {
@@ -440,12 +443,17 @@ async function handleTestFeishu() {
   border-radius: 12px;
   margin-top: -8px;
   margin-bottom: 12px;
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .config-item {
   padding: 16px;
   background: rgba(var(--app-surface-alt-rgb) / 0.92);
   border-radius: 8px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb) / 0.04);
 }
 
 .config-row {
@@ -492,6 +500,9 @@ async function handleTestFeishu() {
   border-radius: 14px;
   background: rgba(var(--app-surface-rgb) / 0.92);
   border: 1px solid rgba(var(--app-border-rgb) / 0.7);
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .guide-title {

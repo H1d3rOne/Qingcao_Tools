@@ -852,6 +852,9 @@ async function handleTestAi() {
   border-radius: 14px;
   background: rgba(var(--app-surface-alt-rgb) / 0.88);
   border: 1px solid rgba(var(--app-border-rgb) / 0.55);
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .section-card__head h3 {
@@ -879,6 +882,7 @@ async function handleTestAi() {
   background-color: rgba(var(--app-surface-rgb) / 0.78);
   border-radius: 12px;
   border: 1px solid rgba(var(--app-border-rgb) / 0.45);
+  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb) / 0.04);
 }
 
 .config-item__head {
