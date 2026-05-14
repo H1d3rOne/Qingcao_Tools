@@ -857,7 +857,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="panel-header">
-            <div class="text-sm text-gray-400">
+            <div class="text-sm text-app-text-muted">
               共 {{ filteredVideos.length }} / {{ videoTabCount }} 个视频
             </div>
 
@@ -1016,14 +1016,14 @@ onBeforeUnmount(() => {
             <template #image>
               <el-icon
                 size="64"
-                class="text-gray-500"
+                class="text-app-text-subtle"
               >
                 <VideoPlay />
               </el-icon>
             </template>
 
             <template #description>
-              <div class="text-gray-400 text-sm leading-6">
+              <div class="text-app-text-muted text-sm leading-6">
                 <div>1. 点击左侧按钮开启监听</div>
                 <div>2. 在微信中打开视频号页面并播放目标视频</div>
                 <div>3. 列表会自动出现可下载的视频记录</div>
@@ -1094,10 +1094,10 @@ onBeforeUnmount(() => {
 
           <div class="panel-header">
             <div class="space-y-1">
-              <div class="text-sm text-gray-200">
+              <div class="text-sm text-app-text-rgb">
                 {{ taskStatusLabel(activeTaskStatusTab) }} {{ filteredTasks.length }} / {{ taskTabCount }}
               </div>
-              <div class="text-xs text-gray-500">
+              <div class="text-xs text-app-text-subtle">
                 任务提交后会立即在后台下载，监听状态不会阻塞下载队列
               </div>
             </div>
@@ -1355,30 +1355,32 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 14px;
   border-radius: 18px;
-  border: 1px solid rgba(75, 85, 99, 0.35);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
   background:
-    linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(16, 185, 129, 0.04)),
-    rgba(17, 24, 39, 0.68);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 14px 32px rgba(0, 0, 0, 0.18);
+    linear-gradient(135deg, rgba(var(--primary-color-rgb) / 0.06), rgba(var(--app-accent-alt-rgb) / 0.03)),
+    rgba(var(--app-surface-rgb) / 0.95);
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .toolbar-listener-btn {
   min-width: 156px;
   font-weight: 700;
-  box-shadow: 0 12px 28px rgba(34, 197, 94, 0.16);
+  box-shadow: 0 12px 28px rgba(var(--primary-color-rgb) / 0.16);
 }
 
 .toolbar-search :deep(.el-input__wrapper) {
   min-height: 44px;
   border-radius: 14px;
-  background: rgba(31, 41, 55, 0.88);
-  box-shadow: inset 0 0 0 1px rgba(75, 85, 99, 0.36);
+  background: rgba(var(--app-surface-rgb) / 0.9);
+  box-shadow: inset 0 0 0 1px rgba(var(--app-border-rgb) / 0.5);
 }
 
 .toolbar-search :deep(.el-input__wrapper.is-focus) {
   box-shadow:
-    inset 0 0 0 1px rgba(34, 197, 94, 0.45),
-    0 0 0 3px rgba(34, 197, 94, 0.08);
+    inset 0 0 0 1px rgba(var(--primary-color-rgb) / 0.45),
+    0 0 0 3px rgba(var(--primary-color-rgb) / 0.08);
 }
 
 .toolbar-status-pill {
@@ -1386,9 +1388,9 @@ onBeforeUnmount(() => {
   height: 44px;
   padding: 0 14px;
   border-radius: 14px;
-  border: 1px solid rgba(75, 85, 99, 0.35);
-  background: rgba(31, 41, 55, 0.82);
-  color: rgb(209 213 219);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
+  background: rgba(var(--app-surface-rgb) / 0.85);
+  color: rgb(var(--app-text-rgb));
   font-size: 13px;
   display: inline-flex;
   align-items: center;
@@ -1401,13 +1403,13 @@ onBeforeUnmount(() => {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: rgb(107 114 128);
-  box-shadow: 0 0 0 4px rgba(107, 114, 128, 0.12);
+  background: rgb(var(--app-text-subtle-rgb));
+  box-shadow: 0 0 0 4px rgba(var(--app-text-subtle-rgb) / 0.15);
 }
 
 .toolbar-status-dot.is-active {
-  background: rgb(34 197 94);
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.16);
+  background: rgb(var(--primary-color-rgb));
+  box-shadow: 0 0 0 4px rgba(var(--primary-color-rgb) / 0.16);
 }
 
 .panel-header {
@@ -1440,7 +1442,7 @@ onBeforeUnmount(() => {
 
 .control-label {
   font-size: 12px;
-  color: rgb(156 163 175);
+  color: rgb(var(--app-text-muted-rgb));
 }
 
 .size-select {
@@ -1470,31 +1472,32 @@ onBeforeUnmount(() => {
   height: 24px;
   padding: 0 7px;
   border-radius: 999px;
-  background: rgba(75, 85, 99, 0.5);
-  color: white;
+  background: rgba(var(--app-border-rgb) / 0.5);
+  color: rgb(var(--app-text-strong-rgb));
   font-size: 12px;
   line-height: 24px;
   text-align: center;
 }
 
 .tab-count-active {
-  background: rgba(34, 197, 94, 0.25);
-  color: rgb(134 239 172);
+  background: rgba(var(--primary-color-rgb) / 0.25);
+  color: rgb(var(--primary-color-rgb));
 }
 
 .status-card {
   padding: 16px;
   border-radius: 14px;
-  background: rgba(17, 24, 39, 0.6);
-  border: 1px solid rgba(75, 85, 99, 0.4);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb) / 0.04);
 }
 
 .status-label {
   font-size: 12px;
-  color: rgb(156 163 175);
+  color: rgb(var(--app-text-muted-rgb));
 }
 
 .video-item,
@@ -1503,18 +1506,24 @@ onBeforeUnmount(() => {
   gap: 16px;
   padding: 16px;
   border-radius: 16px;
-  border: 1px solid rgba(75, 85, 99, 0.35);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
   position: relative;
 }
 
 .video-item {
-  background: rgba(17, 24, 39, 0.65);
+  background: rgba(var(--app-surface-rgb) / 0.85);
   min-height: 184px;
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .task-item {
-  background: rgba(17, 24, 39, 0.45);
+  background: rgba(var(--app-surface-alt-rgb) / 0.7);
   min-height: 188px;
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .cover-wrap {
@@ -1522,7 +1531,7 @@ onBeforeUnmount(() => {
   min-height: 152px;
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(31, 41, 55, 0.9);
+  background: rgba(var(--app-surface-alt-rgb) / 0.9);
   flex-shrink: 0;
   align-self: stretch;
 }
@@ -1538,8 +1547,8 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.78);
-  border: 1px solid rgba(75, 85, 99, 0.42);
+  background: rgba(var(--app-surface-rgb) / 0.9);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
   backdrop-filter: blur(8px);
 }
 
@@ -1556,7 +1565,7 @@ onBeforeUnmount(() => {
   min-height: 124px;
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(31, 41, 55, 0.9);
+  background: rgba(var(--app-surface-alt-rgb) / 0.9);
   flex-shrink: 0;
   align-self: stretch;
 }
@@ -1576,7 +1585,7 @@ onBeforeUnmount(() => {
 .task-cover-placeholder {
   width: 100%;
   height: 100%;
-  color: rgb(107 114 128);
+  color: rgb(var(--app-text-subtle-rgb));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1601,7 +1610,7 @@ onBeforeUnmount(() => {
 }
 
 .video-desc {
-  color: white;
+  color: rgb(var(--app-text-strong-rgb));
   font-size: 15px;
   line-height: 1.6;
   display: -webkit-box;
@@ -1624,7 +1633,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
-  color: rgb(156 163 175);
+  color: rgb(var(--app-text-muted-rgb));
   font-size: 13px;
 }
 
@@ -1673,7 +1682,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: rgb(209 213 219);
+  color: rgb(var(--app-text-rgb));
   font-size: 12px;
 }
 
@@ -1697,7 +1706,7 @@ onBeforeUnmount(() => {
 }
 
 .task-path {
-  color: rgb(156 163 175);
+  color: rgb(var(--app-text-muted-rgb));
   font-size: 12px;
   line-height: 1.6;
   width: 100%;
@@ -1715,7 +1724,7 @@ onBeforeUnmount(() => {
 :deep(.page-tabs > .el-tabs__header) {
   margin: 0 0 18px;
   padding: 0 0 12px;
-  border-bottom: 1px solid rgba(75, 85, 99, 0.24);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.35);
   background: rgb(var(--app-bg-rgb));
   position: sticky;
   top: 0;
@@ -1739,12 +1748,12 @@ onBeforeUnmount(() => {
 
 :deep(.page-tabs .el-tabs__nav-wrap::after),
 :deep(.task-status-tabs .el-tabs__nav-wrap::after) {
-  background-color: rgba(75, 85, 99, 0.35);
+  background-color: rgba(var(--app-border-rgb) / 0.5);
 }
 
 :deep(.page-tabs .el-tabs__item),
 :deep(.task-status-tabs .el-tabs__item) {
-  color: rgb(156 163 175);
+  color: rgb(var(--app-text-muted-rgb));
 }
 
 :deep(.page-tabs .el-tabs__item) {
@@ -1759,23 +1768,23 @@ onBeforeUnmount(() => {
 
 :deep(.page-tabs .el-tabs__item:hover) {
   color: rgb(229 231 235);
-  background: rgba(31, 41, 55, 0.3);
+  background: rgba(var(--app-surface-alt-rgb) / 0.5);
 }
 
 :deep(.page-tabs .el-tabs__item.is-active),
 :deep(.task-status-tabs .el-tabs__item.is-active) {
-  color: white;
+  color: rgb(var(--app-text-strong-rgb));
 }
 
 :deep(.page-tabs .el-tabs__item.is-active) {
-  background: rgba(31, 41, 55, 0.38);
+  background: rgba(var(--app-surface-alt-rgb) / 0.6);
   border-color: transparent;
-  box-shadow: inset 0 -3px 0 rgb(34 197 94);
+  box-shadow: inset 0 -3px 0 rgb(var(--primary-color-rgb));
 }
 
 :deep(.page-tabs .el-tabs__active-bar),
 :deep(.task-status-tabs .el-tabs__active-bar) {
-  background-color: rgb(34 197 94);
+  background-color: rgb(var(--primary-color-rgb));
 }
 
 :deep(.page-tabs .el-tabs__active-bar) {
@@ -1783,7 +1792,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.page-tabs .el-tabs__item.is-active .tab-count) {
-  background: rgba(34, 197, 94, 0.2);
+  background: rgba(var(--primary-color-rgb) / 0.2);
 }
 
 :deep(.page-tabs .el-tabs__item.is-active .top-tab-label .el-icon) {
