@@ -324,6 +324,8 @@ onUnmounted(() => {
 .xianyu-login-page {
   display: flex;
   justify-content: center;
+  align-items: center;
+  min-height: 100%;
   padding: 48px 16px;
 }
 
