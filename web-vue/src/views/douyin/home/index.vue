@@ -159,17 +159,17 @@ const quickStats = [
 
 /* 通用卡片样式 */
 .card {
-  background: rgba(var(--app-surface-rgb), 0.95);
-  border: 1.5px solid rgba(var(--app-border-strong-rgb), 0.55);
+  background: #fff;
+  border: 2px solid #8cc3a5;
   border-radius: 16px;
-  box-shadow: 0 6px 20px rgba(var(--app-shadow-rgb), 0.1);
-  overflow: hidden;
+  box-shadow: 0 6px 24px rgba(20, 60, 35, 0.12);
+  overflow: visible;
 }
 
 .card-header {
   padding: 0 0 16px 0;
   margin-bottom: 16px;
-  border-bottom: 1.5px solid rgba(var(--app-border-strong-rgb), 0.4);
+  border-bottom: 1.5px solid #b5d9c5;
 }
 
 .card-title {
@@ -326,8 +326,8 @@ const quickStats = [
   justify-content: space-between;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
-  border: 1px solid rgba(var(--app-border-strong-rgb), 0.35);
+  background: #f5fcf8;
+  border: 1.5px solid #b5d9c5;
 }
 
 .stat-label {
@@ -364,8 +364,8 @@ const quickStats = [
   align-items: flex-start;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
-  border: 1px solid rgba(var(--app-border-strong-rgb), 0.35);
+  background: #f5fcf8;
+  border: 1.5px solid #b5d9c5;
   transition: all 0.2s ease;
 }
 
