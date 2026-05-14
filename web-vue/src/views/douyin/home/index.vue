@@ -160,11 +160,11 @@ const quickStats = [
 /* 通用卡片样式 */
 .card {
   background: rgba(var(--app-surface-rgb), 0.95);
-  border: 1px solid rgba(var(--app-border-rgb), 0.18);
+  border: 1px solid rgba(var(--app-border-rgb), 0.2);
   border-radius: 16px;
   box-shadow:
-    0 1px 3px rgba(var(--app-shadow-rgb), 0.06),
-    0 6px 16px rgba(var(--app-shadow-rgb), 0.08);
+    0 2px 8px rgba(var(--app-shadow-rgb), 0.1),
+    0 8px 24px rgba(var(--app-shadow-rgb), 0.12);
   overflow: hidden;
 }
 
@@ -242,8 +242,9 @@ const quickStats = [
 
 .feature-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(var(--primary-color-rgb), 0.4);
-  box-shadow: 0 12px 32px rgba(var(--app-shadow-rgb), 0.12);
+  box-shadow:
+    0 4px 12px rgba(var(--app-shadow-rgb), 0.14),
+    0 12px 32px rgba(var(--app-shadow-rgb), 0.16);
 }
 
 .feature-card__icon {
@@ -328,7 +329,7 @@ const quickStats = [
   padding: 12px 14px;
   border-radius: 10px;
   background: rgba(var(--app-surface-alt-rgb), 0.7);
-  box-shadow: 0 1px 4px rgba(var(--app-shadow-rgb), 0.05);
+  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .stat-label {
@@ -366,7 +367,7 @@ const quickStats = [
   padding: 14px;
   border-radius: 12px;
   background: rgba(var(--app-surface-alt-rgb), 0.7);
-  box-shadow: 0 1px 4px rgba(var(--app-shadow-rgb), 0.05);
+  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb), 0.08);
   transition: all 0.2s ease;
 }
 
