@@ -672,8 +672,8 @@ onUnmounted(() => {
         <!-- 搜索条件筛选（仅视频搜索时显示） -->
         <div v-if="activeType === 'video'" class="search-filters">
           <div class="filter-item">
-            <span class="filter-label">排序:</span>
-            <el-select v-model="searchFilters.sortType" placeholder="选择排序" size="default" style="width: 120px">
+            <span class="filter-label">排序</span>
+            <el-select v-model="searchFilters.sortType" placeholder="选择排序" size="default">
               <el-option
                 v-for="item in sortOptions"
                 :key="item.value"
@@ -683,8 +683,8 @@ onUnmounted(() => {
             </el-select>
           </div>
           <div class="filter-item">
-            <span class="filter-label">发布时间:</span>
-            <el-select v-model="searchFilters.publishTime" placeholder="选择时间" size="default" style="width: 120px">
+            <span class="filter-label">发布时间</span>
+            <el-select v-model="searchFilters.publishTime" placeholder="选择时间" size="default">
               <el-option
                 v-for="item in publishTimeOptions"
                 :key="item.value"
@@ -694,8 +694,8 @@ onUnmounted(() => {
             </el-select>
           </div>
           <div class="filter-item">
-            <span class="filter-label">视频时长:</span>
-            <el-select v-model="searchFilters.filterDuration" placeholder="选择时长" size="default" style="width: 120px" clearable>
+            <span class="filter-label">视频时长</span>
+            <el-select v-model="searchFilters.filterDuration" placeholder="选择时长" size="default" clearable>
               <el-option
                 v-for="item in durationOptions"
                 :key="item.value"
@@ -705,8 +705,8 @@ onUnmounted(() => {
             </el-select>
           </div>
           <div class="filter-item">
-            <span class="filter-label">内容形式:</span>
-            <el-select v-model="searchFilters.contentType" placeholder="选择类型" size="default" style="width: 120px" clearable>
+            <span class="filter-label">内容形式</span>
+            <el-select v-model="searchFilters.contentType" placeholder="选择类型" size="default" clearable>
               <el-option
                 v-for="item in contentTypeOptions"
                 :key="item.value"
@@ -1347,24 +1347,30 @@ onUnmounted(() => {
 }
 
 .search-filters {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
   margin-top: 24px;
   padding-top: 20px;
-  border-top: 1px solid rgba(var(--app-border-rgb) / 0.4);
-  flex-wrap: wrap;
-  justify-content: center;
+  border-top: 1px solid rgba(var(--app-border-rgb) / 0.35);
 }
 
 .filter-item {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .filter-label {
-  font-size: 13px;
-  color: rgb(var(--app-text-muted-rgb));
-  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--app-text-subtle-rgb));
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  .search-filters {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>
