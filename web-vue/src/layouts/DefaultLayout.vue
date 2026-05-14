@@ -86,7 +86,7 @@ const currentSubMenus = computed(() => {
 const isQuarkImmersive = computed(() => activeModule.value === 'quark')
 const mainContainerClass = computed(() => {
   if (isQuarkImmersive.value) return 'is-immersive p-0'
-  if (activeModule.value === 'wechat') return 'is-default px-6 pb-6 pt-0'
+  if (activeModule.value === 'wechat') return 'is-default px-6 pb-3 pt-0'
   if (activeModule.value === 'xianyu') return 'is-default px-6 pb-6 pt-0'
   return 'is-default p-6'
 })
