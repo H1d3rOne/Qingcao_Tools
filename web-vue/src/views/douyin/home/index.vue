@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { VideoPlay, User, Search, VideoCamera, Setting } from '@element-plus/icons-vue'
+import { VideoPlay, User, Search, VideoCamera } from '@element-plus/icons-vue'
 import { getStatus } from '@/api'
 
 const router = useRouter()
@@ -21,7 +21,7 @@ async function loadStatus() {
       status.value = res.data
     }
   } catch (err) {
-    // console.error('获取状态失败:', err)
+    // ignore
   }
 }
 
@@ -65,29 +65,29 @@ const quickStats = [
 
 <template>
   <div class="douyin-home">
-    <div class="welcome-banner">
+    <!-- 欢迎横幅卡片 -->
+    <div class="card welcome-card">
       <div class="welcome-glow" />
       <div class="welcome-content">
-        <div>
-          <h1 class="welcome-title">抖音数据解析工具</h1>
-          <p class="welcome-desc">专业的抖音内容解析与数据采集工具，支持视频、用户、直播等多种数据解析</p>
-          <div class="welcome-tags">
-            <el-tag :type="status?.cookie_configured ? 'success' : 'warning'" size="small">
-              Cookie: {{ status?.cookie_configured ? '已配置' : '未配置' }}
-            </el-tag>
-            <el-tag v-if="status?.live_cookie_configured" type="success" size="small">
-              直播Cookie: 已配置
-            </el-tag>
-          </div>
+        <h1 class="welcome-title">抖音数据解析工具</h1>
+        <p class="welcome-desc">专业的抖音内容解析与数据采集工具，支持视频、用户、直播等多种数据解析</p>
+        <div class="welcome-tags">
+          <el-tag :type="status?.cookie_configured ? 'success' : 'warning'" size="small">
+            Cookie: {{ status?.cookie_configured ? '已配置' : '未配置' }}
+          </el-tag>
+          <el-tag v-if="status?.live_cookie_configured" type="success" size="small">
+            直播Cookie: 已配置
+          </el-tag>
         </div>
       </div>
     </div>
 
+    <!-- 功能卡片网格 -->
     <div class="feature-grid">
       <div
         v-for="feature in features"
         :key="feature.path"
-        class="feature-card"
+        class="card feature-card"
         :class="`feature-card--${feature.accent}`"
         @click="router.push(feature.path)"
       >
@@ -104,9 +104,13 @@ const quickStats = [
       </div>
     </div>
 
+    <!-- 底部卡片区域 -->
     <div class="bottom-grid">
-      <div class="stats-panel">
-        <h3 class="panel-title">使用统计</h3>
+      <!-- 统计卡片 -->
+      <div class="card stats-card">
+        <div class="card-header">
+          <h3 class="card-title">使用统计</h3>
+        </div>
         <div class="stats-list">
           <div v-for="stat in quickStats" :key="stat.label" class="stat-row">
             <span class="stat-label">{{ stat.label }}</span>
@@ -118,8 +122,11 @@ const quickStats = [
         </div>
       </div>
 
-      <div class="guide-panel">
-        <h3 class="panel-title">快速开始</h3>
+      <!-- 快速开始卡片 -->
+      <div class="card guide-card">
+        <div class="card-header">
+          <h3 class="card-title">快速开始</h3>
+        </div>
         <div class="guide-grid">
           <div v-for="(step, i) in 4" :key="i" class="guide-step">
             <span class="guide-step__num">{{ i + 1 }}</span>
@@ -150,14 +157,32 @@ const quickStats = [
   to { opacity: 1; transform: translateY(0); }
 }
 
-.welcome-banner {
+/* 通用卡片样式 */
+.card {
+  background: rgba(var(--app-surface-rgb), 0.95);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.65);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 0 0 16px 0;
+  margin-bottom: 16px;
+  border-bottom: 1.5px solid rgba(var(--app-border-rgb), 0.4);
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgb(var(--app-text-strong-rgb));
+  margin: 0;
+}
+
+/* 欢迎卡片 */
+.welcome-card {
   position: relative;
   padding: 32px 36px;
-  border-radius: 18px;
-  overflow: hidden;
-  background: rgba(var(--app-surface-rgb), 0.95);
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.6);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .welcome-glow {
@@ -196,6 +221,7 @@ const quickStats = [
   gap: 10px;
 }
 
+/* 功能卡片网格 */
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -207,19 +233,15 @@ const quickStats = [
   flex-direction: column;
   gap: 16px;
   padding: 22px;
-  border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.95);
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.65);
   cursor: pointer;
   transition: all 0.25s ease;
   position: relative;
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
 }
 
 .feature-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(var(--primary-color-rgb), 0.35);
-  box-shadow: 0 12px 32px rgba(var(--app-shadow-rgb), 0.15), 0 0 0 1px rgba(var(--primary-color-rgb), 0.12);
+  border-color: rgba(var(--primary-color-rgb), 0.4);
+  box-shadow: 0 12px 32px rgba(var(--app-shadow-rgb), 0.12);
 }
 
 .feature-card__icon {
@@ -278,34 +300,23 @@ const quickStats = [
   transform: translateX(3px);
 }
 
+/* 底部卡片网格 */
 .bottom-grid {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 16px;
 }
 
-.stats-panel,
-.guide-panel {
+.stats-card,
+.guide-card {
   padding: 24px;
-  border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.95);
-  border: 1.5px solid rgba(var(--app-border-rgb), 0.65);
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
 }
 
-.panel-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: rgb(var(--app-text-strong-rgb));
-  margin: 0 0 20px;
-  padding-bottom: 14px;
-  border-bottom: 1.5px solid rgba(var(--app-border-rgb), 0.45);
-}
-
+/* 统计卡片 */
 .stats-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .stat-row {
@@ -315,7 +326,7 @@ const quickStats = [
   padding: 12px 14px;
   border-radius: 10px;
   background: rgba(var(--app-surface-alt-rgb), 0.7);
-  border: 1px solid rgba(var(--app-border-rgb), 0.45);
+  border: 1px solid rgba(var(--app-border-rgb), 0.4);
 }
 
 .stat-label {
@@ -339,10 +350,11 @@ const quickStats = [
   margin-left: 4px;
 }
 
+/* 快速开始卡片 */
 .guide-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 18px;
+  gap: 12px;
 }
 
 .guide-step {
@@ -352,7 +364,13 @@ const quickStats = [
   padding: 14px;
   border-radius: 12px;
   background: rgba(var(--app-surface-alt-rgb), 0.7);
-  border: 1px solid rgba(var(--app-border-rgb), 0.45);
+  border: 1px solid rgba(var(--app-border-rgb), 0.4);
+  transition: all 0.2s ease;
+}
+
+.guide-step:hover {
+  background: rgba(var(--app-surface-alt-rgb), 0.9);
+  border-color: rgba(var(--app-border-rgb), 0.6);
 }
 
 .guide-step__num {
@@ -383,6 +401,7 @@ const quickStats = [
   line-height: 1.6;
 }
 
+/* 响应式 */
 @media (max-width: 1024px) {
   .feature-grid {
     grid-template-columns: repeat(2, 1fr);
