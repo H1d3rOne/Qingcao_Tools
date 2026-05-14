@@ -160,18 +160,16 @@ const quickStats = [
 /* 通用卡片样式 */
 .card {
   background: rgba(var(--app-surface-rgb), 0.95);
-  border: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border: 1.5px solid rgba(var(--app-border-strong-rgb), 0.55);
   border-radius: 16px;
-  box-shadow:
-    0 2px 8px rgba(var(--app-shadow-rgb), 0.1),
-    0 8px 24px rgba(var(--app-shadow-rgb), 0.12);
+  box-shadow: 0 6px 20px rgba(var(--app-shadow-rgb), 0.1);
   overflow: hidden;
 }
 
 .card-header {
   padding: 0 0 16px 0;
   margin-bottom: 16px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1.5px solid rgba(var(--app-border-strong-rgb), 0.4);
 }
 
 .card-title {
@@ -329,7 +327,7 @@ const quickStats = [
   padding: 12px 14px;
   border-radius: 10px;
   background: rgba(var(--app-surface-alt-rgb), 0.7);
-  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb), 0.08);
+  border: 1px solid rgba(var(--app-border-strong-rgb), 0.35);
 }
 
 .stat-label {
@@ -367,7 +365,7 @@ const quickStats = [
   padding: 14px;
   border-radius: 12px;
   background: rgba(var(--app-surface-alt-rgb), 0.7);
-  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb), 0.08);
+  border: 1px solid rgba(var(--app-border-strong-rgb), 0.35);
   transition: all 0.2s ease;
 }
 
