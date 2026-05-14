@@ -126,13 +126,30 @@
         
         <!-- 工具栏 -->
         <div class="toolbar" v-if="selectedFiles.length > 0">
-          <span class="selected-info">已选择 {{ selectedFiles.length }} 项</span>
-          <el-button size="small" @click="handleBatchDownload">下载</el-button>
-          <el-button size="small" @click="handleBatchMove">移动</el-button>
-          <el-button size="small" type="success" @click="handleBatchShare">分享</el-button>
-          <el-button v-if="selectedFiles.length === 1" size="small" @click="handleBatchRename">重命名</el-button>
-          <el-button size="small" type="danger" @click="handleBatchDelete">删除</el-button>
-          <el-button size="small" @click="clearSelection">取消选择</el-button>
+          <span class="selected-info">
+            <el-icon><DocumentCopy /></el-icon>
+            已选择 {{ selectedFiles.length }} 项
+          </span>
+          <div class="toolbar-actions">
+            <el-button class="toolbar-btn" size="small" @click="handleBatchDownload">
+              <el-icon><Download /></el-icon>下载
+            </el-button>
+            <el-button class="toolbar-btn" size="small" @click="handleBatchMove">
+              <el-icon><Position /></el-icon>移动
+            </el-button>
+            <el-button class="toolbar-btn toolbar-btn--accent" size="small" @click="handleBatchShare">
+              <el-icon><Share /></el-icon>分享
+            </el-button>
+            <el-button v-if="selectedFiles.length === 1" class="toolbar-btn" size="small" @click="handleBatchRename">
+              <el-icon><Edit /></el-icon>重命名
+            </el-button>
+            <el-button class="toolbar-btn toolbar-btn--danger" size="small" @click="handleBatchDelete">
+              <el-icon><Delete /></el-icon>删除
+            </el-button>
+            <el-button class="toolbar-btn toolbar-btn--ghost" size="small" @click="clearSelection">
+              <el-icon><Close /></el-icon>取消
+            </el-button>
+          </div>
         </div>
 
         <div class="file-list-hint">
@@ -209,25 +226,25 @@
               {{ formatDateTime(row.updated_at) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="280" fixed="right">
+          <el-table-column label="操作" width="300" fixed="right">
             <template #default="{ row }">
-              <el-button-group>
-                <el-button link type="primary" size="small" @click.stop="handleDownload(row)">
-                  下载
+              <div class="row-actions">
+                <el-button class="row-action-btn" link size="small" @click.stop="handleDownload(row)">
+                  <el-icon><Download /></el-icon>下载
                 </el-button>
-                <el-button link type="primary" size="small" @click.stop="handleMove(row)">
-                  移动
+                <el-button class="row-action-btn" link size="small" @click.stop="handleMove(row)">
+                  <el-icon><Position /></el-icon>移动
                 </el-button>
-                <el-button link type="success" size="small" @click.stop="handleShare(row)">
-                  分享
+                <el-button class="row-action-btn row-action-btn--accent" link size="small" @click.stop="handleShare(row)">
+                  <el-icon><Share /></el-icon>分享
                 </el-button>
-                <el-button link type="primary" size="small" @click.stop="handleRename(row)">
-                  重命名
+                <el-button class="row-action-btn" link size="small" @click.stop="handleRename(row)">
+                  <el-icon><Edit /></el-icon>重命名
                 </el-button>
-                <el-button link type="danger" size="small" @click.stop="handleDelete(row)">
-                  删除
+                <el-button class="row-action-btn row-action-btn--danger" link size="small" @click.stop="handleDelete(row)">
+                  <el-icon><Delete /></el-icon>删除
                 </el-button>
-              </el-button-group>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -643,7 +660,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, Upload, FolderAdd, Folder, Document, Refresh, SwitchButton,
   Search, More, PieChart, VideoPlay, Headset, Picture, DocumentCopy,
-  User, Link, Download, CaretTop, CaretBottom, Close
+  User, Link, Download, CaretTop, CaretBottom, Close, Delete, Edit,
+  Position, Share
 } from '@element-plus/icons-vue'
 import { filesAPI } from '@/api/modules/quark'
 import { useQuarkUserStore } from '@/stores'
@@ -2455,13 +2473,17 @@ onUnmounted(() => {
 
 .toolbar {
   background: rgba(var(--quark-surface-soft-rgb) / 0.52);
-  padding: 10px 16px;
+  padding: 12px 18px;
   margin-bottom: 16px;
-  border-radius: 4px;
+  border-radius: 12px;
   border: 1px solid rgba(var(--quark-border-rgb) / 0.28);
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .file-list-hint {
@@ -2484,7 +2506,109 @@ onUnmounted(() => {
 
 .selected-info {
   color: rgb(var(--quark-primary-rgb));
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-btn {
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  border: 1px solid rgba(var(--quark-border-rgb) / 0.4) !important;
+  background: rgba(var(--quark-surface-rgb) / 0.8) !important;
+  color: rgb(var(--quark-text-rgb)) !important;
+  transition: all 0.2s ease !important;
+}
+
+.toolbar-btn:hover {
+  border-color: rgba(var(--quark-primary-rgb) / 0.5) !important;
+  background: rgba(var(--quark-primary-rgb) / 0.08) !important;
+  color: rgb(var(--quark-primary-rgb)) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(var(--quark-primary-rgb) / 0.12);
+}
+
+.toolbar-btn--accent {
+  border-color: rgba(var(--quark-accent-rgb) / 0.4) !important;
+  color: rgb(var(--quark-accent-rgb)) !important;
+}
+
+.toolbar-btn--accent:hover {
+  border-color: rgba(var(--quark-accent-rgb) / 0.6) !important;
+  background: rgba(var(--quark-accent-rgb) / 0.08) !important;
+  color: rgb(var(--quark-accent-rgb)) !important;
+}
+
+.toolbar-btn--danger {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #ef4444 !important;
+}
+
+.toolbar-btn--danger:hover {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  background: rgba(239, 68, 68, 0.06) !important;
+  color: #ef4444 !important;
+}
+
+.toolbar-btn--ghost {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: rgb(var(--quark-text-muted-rgb)) !important;
+}
+
+.toolbar-btn--ghost:hover {
+  background: rgba(var(--quark-surface-alt-rgb) / 0.8) !important;
+  color: rgb(var(--quark-text-rgb)) !important;
+  transform: none;
+  box-shadow: none;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.row-action-btn {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: rgb(var(--quark-text-muted-rgb)) !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.row-action-btn:hover {
+  background: rgba(var(--quark-primary-rgb) / 0.08) !important;
+  color: rgb(var(--quark-primary-rgb)) !important;
+}
+
+.row-action-btn--accent {
+  color: rgb(var(--quark-accent-rgb)) !important;
+}
+
+.row-action-btn--accent:hover {
+  background: rgba(var(--quark-accent-rgb) / 0.08) !important;
+  color: rgb(var(--quark-accent-rgb)) !important;
+}
+
+.row-action-btn--danger {
+  color: #ef4444 !important;
+}
+
+.row-action-btn--danger:hover {
+  background: rgba(239, 68, 68, 0.06) !important;
+  color: #ef4444 !important;
 }
 
 .sortable-header {
