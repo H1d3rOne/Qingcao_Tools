@@ -159,20 +159,20 @@ const quickStats = [
 
 /* 通用卡片样式 */
 .card {
-  background: rgba(var(--app-surface-rgb), 0.96);
-  border: 1px solid rgba(var(--app-border-strong-rgb), 0.4);
+  background: rgba(var(--app-surface-rgb) / 0.96);
+  border: 1px solid rgba(var(--app-border-strong-rgb) / 0.45);
   border-radius: 16px;
   box-shadow:
-    0 1px 2px rgba(var(--app-shadow-rgb), 0.06),
-    0 4px 12px rgba(var(--app-shadow-rgb), 0.08),
-    0 12px 28px rgba(var(--app-shadow-rgb), 0.06);
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.06),
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.08),
+    0 12px 28px rgba(var(--app-shadow-rgb) / 0.06);
   overflow: visible;
 }
 
 .card-header {
   padding: 0 0 16px 0;
   margin-bottom: 16px;
-  border-bottom: 1px solid rgba(var(--app-border-strong-rgb), 0.25);
+  border-bottom: 1px solid rgba(var(--app-border-strong-rgb) / 0.3);
 }
 
 .card-title {
@@ -195,7 +195,7 @@ const quickStats = [
   width: 320px;
   height: 320px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(var(--primary-color-rgb), 0.12), transparent 70%);
+  background: radial-gradient(circle, rgba(var(--primary-color-rgb) / 0.12), transparent 70%);
   pointer-events: none;
 }
 
@@ -244,8 +244,8 @@ const quickStats = [
 .feature-card:hover {
   transform: translateY(-3px);
   box-shadow:
-    0 4px 12px rgba(var(--app-shadow-rgb), 0.14),
-    0 12px 32px rgba(var(--app-shadow-rgb), 0.16);
+    0 4px 12px rgba(var(--app-shadow-rgb) / 0.14),
+    0 12px 32px rgba(var(--app-shadow-rgb) / 0.16);
 }
 
 .feature-card__icon {
@@ -258,17 +258,17 @@ const quickStats = [
 }
 
 .feature-card--emerald .feature-card__icon {
-  background: rgba(var(--primary-color-rgb), 0.14);
+  background: rgba(var(--primary-color-rgb) / 0.14);
   color: rgb(var(--primary-color-rgb));
 }
 
 .feature-card--teal .feature-card__icon {
-  background: rgba(var(--app-accent-soft-rgb), 0.14);
+  background: rgba(var(--app-accent-soft-rgb) / 0.14);
   color: rgb(var(--app-accent-soft-rgb));
 }
 
 .feature-card--cyan .feature-card__icon {
-  background: rgba(var(--app-accent-alt-rgb), 0.14);
+  background: rgba(var(--app-accent-alt-rgb) / 0.14);
   color: rgb(var(--app-accent-alt-rgb));
 }
 
@@ -329,9 +329,9 @@ const quickStats = [
   justify-content: space-between;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(var(--app-surface-alt-rgb), 0.8);
-  border: 1px solid rgba(var(--app-border-strong-rgb), 0.2);
-  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb), 0.04);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
+  border: 1px solid rgba(var(--app-border-strong-rgb) / 0.2);
+  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb) / 0.04);
 }
 
 .stat-label {
@@ -368,22 +368,22 @@ const quickStats = [
   align-items: flex-start;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(var(--app-surface-alt-rgb), 0.8);
-  border: 1px solid rgba(var(--app-border-strong-rgb), 0.2);
-  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb), 0.04);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
+  border: 1px solid rgba(var(--app-border-strong-rgb) / 0.2);
+  box-shadow: 0 2px 6px rgba(var(--app-shadow-rgb) / 0.04);
   transition: all 0.2s ease;
 }
 
 .guide-step:hover {
-  background: rgba(var(--app-surface-alt-rgb), 0.9);
-  border-color: rgba(var(--app-border-rgb), 0.6);
+  background: rgba(var(--app-surface-alt-rgb) / 0.9);
+  border-color: rgba(var(--app-border-rgb) / 0.6);
 }
 
 .guide-step__num {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(var(--primary-color-rgb), 0.14);
+  background: rgba(var(--primary-color-rgb) / 0.14);
   color: rgb(var(--primary-color-rgb));
   font-size: 13px;
   font-weight: 700;
