@@ -155,9 +155,9 @@ const quickStats = [
   padding: 32px 36px;
   border-radius: 18px;
   overflow: hidden;
-  background: rgba(var(--app-surface-rgb), 0.92);
-  border: 1px solid rgba(var(--primary-color-rgb), 0.18);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.06);
+  background: rgba(var(--app-surface-rgb), 0.95);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.6);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .welcome-glow {
@@ -208,12 +208,12 @@ const quickStats = [
   gap: 16px;
   padding: 22px;
   border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.92);
-  border: 1px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb), 0.95);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.65);
   cursor: pointer;
   transition: all 0.25s ease;
   position: relative;
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.05);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
 }
 
 .feature-card:hover {
@@ -288,9 +288,9 @@ const quickStats = [
 .guide-panel {
   padding: 24px;
   border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.92);
-  border: 1px solid rgba(var(--app-border-rgb), 0.7);
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.05);
+  background: rgba(var(--app-surface-rgb), 0.95);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.65);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
 }
 
 .panel-title {
@@ -299,7 +299,7 @@ const quickStats = [
   color: rgb(var(--app-text-strong-rgb));
   margin: 0 0 20px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border-bottom: 1.5px solid rgba(var(--app-border-rgb), 0.45);
 }
 
 .stats-list {
@@ -314,8 +314,8 @@ const quickStats = [
   justify-content: space-between;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
-  border: 1px solid rgba(var(--app-border-rgb), 0.2);
+  background: rgba(var(--app-surface-alt-rgb), 0.7);
+  border: 1px solid rgba(var(--app-border-rgb), 0.45);
 }
 
 .stat-label {
@@ -351,8 +351,8 @@ const quickStats = [
   align-items: flex-start;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
-  border: 1px solid rgba(var(--app-border-rgb), 0.2);
+  background: rgba(var(--app-surface-alt-rgb), 0.7);
+  border: 1px solid rgba(var(--app-border-rgb), 0.45);
 }
 
 .guide-step__num {

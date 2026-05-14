@@ -116,14 +116,11 @@ function goToUser(secUid: string) {
 }
 
 .search-box {
-  padding: 16px;
+  padding: 18px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
-  background: rgba(var(--app-surface-rgb), 0.88);
-  box-shadow:
-    0 10px 24px rgba(var(--app-shadow-rgb), 0.07),
-    inset 0 1px 0 rgba(var(--utility-white-rgb), 0.5);
-  backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb), 0.95);
+  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .search-input :deep(.el-input__wrapper) {
@@ -145,11 +142,11 @@ function goToUser(secUid: string) {
 .user-card {
   padding: 18px;
   border-radius: 14px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.45);
-  background: rgba(var(--app-surface-rgb), 0.92);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.6);
+  background: rgba(var(--app-surface-rgb), 0.95);
   cursor: pointer;
   transition: all 0.25s ease;
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.05);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.06);
 }
 
 .user-card:hover {

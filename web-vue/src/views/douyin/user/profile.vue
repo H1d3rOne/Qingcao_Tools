@@ -250,9 +250,9 @@ function handleVideoClick(video: Video) {
 .user-card {
   padding: 28px;
   border-radius: 16px;
-  background: rgba(var(--app-surface-rgb), 0.92);
-  border: 1px solid rgba(var(--app-border-rgb), 0.7);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.06);
+  background: rgba(var(--app-surface-rgb), 0.95);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .user-card-content {
@@ -266,7 +266,7 @@ function handleVideoClick(video: Video) {
   height: 96px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(var(--app-border-rgb), 0.4);
+  border: 3px solid rgba(var(--app-border-rgb), 0.6);
   box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.1);
   flex-shrink: 0;
 }
@@ -302,8 +302,8 @@ function handleVideoClick(video: Video) {
   color: rgb(var(--app-text-muted-rgb));
   padding: 6px 14px;
   border-radius: 20px;
-  background: rgba(var(--app-surface-alt-rgb), 0.7);
-  border: 1px solid rgba(var(--app-border-rgb), 0.25);
+  background: rgba(var(--app-surface-alt-rgb), 0.8);
+  border: 1px solid rgba(var(--app-border-rgb), 0.5);
 }
 
 .extra-info {

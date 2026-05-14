@@ -523,20 +523,19 @@ function formatTime(timestamp: number) {
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 .search-bar {
   display: flex;
   gap: 12px;
-  padding: 16px;
+  padding: 18px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
-  background: rgba(var(--app-surface-rgb), 0.88);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb), 0.95);
   box-shadow:
-    0 10px 24px rgba(var(--app-shadow-rgb), 0.07),
-    inset 0 1px 0 rgba(var(--utility-white-rgb), 0.5);
-  backdrop-filter: blur(12px);
+    0 8px 20px rgba(var(--app-shadow-rgb), 0.08),
+    inset 0 1px 0 rgba(var(--utility-white-rgb), 0.6);
 }
 
 .search-bar .el-input {
@@ -546,30 +545,29 @@ function formatTime(timestamp: number) {
 .video-content {
   border-radius: 16px;
   padding: 24px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.56);
-  background:
-    linear-gradient(135deg, rgba(var(--app-surface-rgb), 0.94), rgba(var(--app-surface-alt-rgb), 0.88));
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb), 0.95);
   box-shadow:
-    0 14px 36px rgba(var(--app-shadow-rgb), 0.09),
+    0 8px 24px rgba(var(--app-shadow-rgb), 0.08),
     inset 0 1px 0 rgba(var(--utility-white-rgb), 0.5);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .back-row {
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.36);
+  border-bottom: 1.5px solid rgba(var(--app-border-rgb), 0.5);
 }
 
 .author-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-radius: 14px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.65);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.55);
+  background: rgba(var(--app-surface-alt-rgb), 0.8);
 }
 
 .author-avatar {
@@ -577,7 +575,7 @@ function formatTime(timestamp: number) {
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid rgba(var(--app-border-rgb), 0.4);
+  border: 2px solid rgba(var(--app-border-rgb), 0.6);
 }
 
 .author-name {
@@ -591,10 +589,10 @@ function formatTime(timestamp: number) {
   font-weight: 600;
   color: rgb(var(--app-text-strong-rgb));
   line-height: 1.5;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-radius: 12px;
-  background: rgba(var(--app-surface-alt-rgb), 0.45);
-  border: 1px solid rgba(var(--app-border-rgb), 0.28);
+  background: rgba(var(--app-surface-alt-rgb), 0.7);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.5);
 }
 
 .video-row {
@@ -608,8 +606,8 @@ function formatTime(timestamp: number) {
   background: rgb(var(--app-text-strong-rgb));
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  box-shadow: 0 10px 28px rgba(var(--app-shadow-rgb), 0.12);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.5);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.12);
 }
 
 .video-player video,
@@ -660,13 +658,13 @@ function formatTime(timestamp: number) {
   position: absolute;
   right: 62px;
   bottom: 14px;
-  background: rgba(var(--app-surface-rgb), 0.94);
+  background: rgba(var(--app-surface-rgb), 0.96);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
   border-radius: 14px;
   padding: 10px;
   min-width: 90px;
-  box-shadow: 0 10px 28px rgba(var(--app-shadow-rgb), 0.12);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.12);
 }
 
 .quality-item {
@@ -702,22 +700,22 @@ function formatTime(timestamp: number) {
   font-size: 14px;
   color: rgb(var(--app-text-muted-rgb));
   line-height: 1.7;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-radius: 12px;
-  background: rgba(var(--app-surface-alt-rgb), 0.55);
-  border: 1px solid rgba(var(--app-border-rgb), 0.28);
+  background: rgba(var(--app-surface-alt-rgb), 0.75);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.5);
 }
 
 .time-row {
   font-size: 13px;
   color: rgb(var(--app-text-subtle-rgb));
-  padding: 8px 0;
-  border-top: 1px solid rgba(var(--app-border-rgb), 0.2);
+  padding: 12px 0;
+  border-top: 1.5px solid rgba(var(--app-border-rgb), 0.4);
 }
 
 .download-row {
-  padding-top: 16px;
-  border-top: 1px solid rgba(var(--app-border-rgb), 0.2);
+  padding-top: 20px;
+  border-top: 1.5px solid rgba(var(--app-border-rgb), 0.4);
 }
 
 .download-btn-wrapper {
@@ -734,14 +732,13 @@ function formatTime(timestamp: number) {
   top: 100%;
   left: 0;
   margin-top: 10px;
-  background: rgba(var(--app-surface-rgb), 0.96);
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
+  background: rgba(var(--app-surface-rgb), 0.98);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
   border-radius: 14px;
   padding: 10px;
   min-width: 180px;
   z-index: 100;
-  box-shadow: 0 10px 28px rgba(var(--app-shadow-rgb), 0.12);
-  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.12);
 }
 
 .dropdown-item {
@@ -772,8 +769,8 @@ function formatTime(timestamp: number) {
 .progress-row {
   border-radius: 14px;
   padding: 18px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
-  background: rgba(var(--app-surface-alt-rgb), 0.82);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.6);
+  background: rgba(var(--app-surface-alt-rgb), 0.85);
   box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb), 0.06);
 }
 
@@ -820,13 +817,13 @@ function formatTime(timestamp: number) {
   gap: 14px;
   padding: 14px;
   border-radius: 14px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.28);
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.5);
+  background: rgba(var(--app-surface-alt-rgb), 0.7);
   transition: background 0.2s ease;
 }
 
 .comment-item:hover {
-  background: rgba(var(--app-surface-alt-rgb), 0.72);
+  background: rgba(var(--app-surface-alt-rgb), 0.85);
 }
 
 .comment-avatar {
@@ -835,7 +832,7 @@ function formatTime(timestamp: number) {
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.5);
 }
 
 .comment-content {
@@ -886,7 +883,7 @@ function formatTime(timestamp: number) {
   color: rgb(var(--app-text-subtle-rgb));
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(var(--app-border-rgb), 0.15);
+  border-top: 1px solid rgba(var(--app-border-rgb), 0.35);
 }
 
 .empty-state {

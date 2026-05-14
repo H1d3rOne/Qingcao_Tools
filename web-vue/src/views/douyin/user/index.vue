@@ -808,7 +808,7 @@ function formatNumber(num: number | undefined): string {
 
 .page-header {
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border-bottom: 1.5px solid rgba(var(--app-border-rgb), 0.45);
 }
 
 .header-top {
@@ -840,12 +840,9 @@ function formatNumber(num: number | undefined): string {
 .search-box {
   padding: 18px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.52);
-  background: rgba(var(--app-surface-rgb), 0.88);
-  box-shadow:
-    0 10px 24px rgba(var(--app-shadow-rgb), 0.07),
-    inset 0 1px 0 rgba(var(--utility-white-rgb), 0.5);
-  backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb), 0.95);
+  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .search-input-group {
@@ -860,9 +857,9 @@ function formatNumber(num: number | undefined): string {
 .user-card {
   padding: 24px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.56);
-  background: rgba(var(--app-surface-rgb), 0.92);
-  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.06);
+  border: 1.5px solid rgba(var(--app-border-rgb), 0.7);
+  background: rgba(var(--app-surface-rgb), 0.95);
+  box-shadow: 0 8px 24px rgba(var(--app-shadow-rgb), 0.08);
 }
 
 .user-card-content {
@@ -876,7 +873,7 @@ function formatNumber(num: number | undefined): string {
   height: 80px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid rgba(var(--app-border-rgb), 0.4);
+  border: 3px solid rgba(var(--app-border-rgb), 0.6);
   box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.1);
   flex-shrink: 0;
 }
@@ -952,7 +949,7 @@ function formatNumber(num: number | undefined): string {
 .stat-divider {
   width: 1px;
   height: 32px;
-  background: rgba(var(--app-border-rgb), 0.4);
+  background: rgba(var(--app-border-rgb), 0.55);
 }
 
 .stat-value {
@@ -968,9 +965,9 @@ function formatNumber(num: number | undefined): string {
 
 .signature-text {
   padding: 14px 16px;
-  background: rgba(var(--app-surface-alt-rgb), 0.65);
+  background: rgba(var(--app-surface-alt-rgb), 0.75);
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
+  border: 1px solid rgba(var(--app-border-rgb), 0.5);
   color: rgb(var(--app-text-rgb));
   font-size: 14px;
   line-height: 1.7;
