@@ -83,7 +83,7 @@ const quickStats = [
     </div>
 
     <!-- 功能卡片网格 -->
-    <div class="card feature-grid">
+    <div class="feature-grid">
       <div
         v-for="feature in features"
         :key="feature.path"
@@ -105,7 +105,7 @@ const quickStats = [
     </div>
 
     <!-- 底部卡片区域 -->
-    <div class="card bottom-grid">
+    <div class="bottom-grid">
       <!-- 统计卡片 -->
       <div class="card stats-card">
         <div class="card-header">
@@ -226,7 +226,6 @@ const quickStats = [
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  padding: 20px;
 }
 
 .feature-card {
@@ -306,7 +305,6 @@ const quickStats = [
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 16px;
-  padding: 20px;
 }
 
 .stats-card,
