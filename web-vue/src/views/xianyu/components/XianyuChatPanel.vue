@@ -6,6 +6,7 @@ import {
   clearXianyuChatRedPoint,
   createXianyuChatWebSocket,
   getXianyuChatAiConfig,
+  getXianyuChatHealth,
   getXianyuChatAiSessions,
   getXianyuChatConversations,
   getXianyuChatMessages,
@@ -13,11 +14,11 @@ import {
   markXianyuChatRead,
   recallXianyuChatMessage,
   sendXianyuChatMessage,
-  testXianyuChatAi,
-  updateXianyuChatAiConfig,
+  setXianyuChatAiEnabled,
   updateXianyuChatAiSession,
   uploadAndSendXianyuChatImage,
   type XianyuChatAiConfig,
+  type XianyuChatHealthStatus,
   type XianyuChatAiSessionState,
   type XianyuChatConversation,
   type XianyuChatMessage,
@@ -25,9 +26,6 @@ import {
   type XianyuChatPushEvent,
   type XianyuUserProfile,
 } from '@/api/modules/xianyu'
-import XianyuChatAiConfigDialog from './XianyuChatAiConfigDialog.vue'
-
-type EditableXianyuChatAiConfig = XianyuChatAiConfig & { api_key: string }
 
 const props = defineProps<{
   currentUser?: XianyuUserProfile | null
@@ -57,10 +55,9 @@ const contextMenu = ref<{ visible: boolean; x: number; y: number; message: Xiany
   y: 0,
   message: null,
 })
-const chatAiConfig = ref<EditableXianyuChatAiConfig | null>(null)
-const chatAiConfigDialogVisible = ref(false)
-const chatAiConfigSaving = ref(false)
-const chatAiTesting = ref(false)
+const chatAiConfig = ref<XianyuChatAiConfig | null>(null)
+const chatHealth = ref<XianyuChatHealthStatus | null>(null)
+const chatHealthLoading = ref(false)
 const sessionAiStateMap = ref<Record<string, boolean>>({})
 
 let wsClient: ReturnType<typeof createXianyuChatWebSocket> | null = null
@@ -119,16 +116,65 @@ const connectionLabel = computed(() => {
       return '已断开'
   }
 })
+const chatHealthTone = computed(() => {
+  switch (chatHealth.value?.status) {
+    case 'ok':
+      return 'is-ok'
+    case 'risk_blocked':
+      return 'is-risk'
+    case 'auth_invalid':
+    case 'cookie_missing':
+    case 'error':
+      return 'is-error'
+    default:
+      return 'is-neutral'
+  }
+})
+const chatHealthTitle = computed(() => {
+  switch (chatHealth.value?.status) {
+    case 'ok':
+      return '聊天链路正常'
+    case 'risk_blocked':
+      return '聊天链路被风控拦截'
+    case 'auth_invalid':
+      return '聊天登录态失效'
+    case 'cookie_missing':
+      return '未配置闲鱼 Cookie'
+    case 'error':
+      return '聊天链路异常'
+    default:
+      return '聊天链路检测中'
+  }
+})
 
 async function loadChatAiConfig() {
   try {
     const response = await getXianyuChatAiConfig()
-    chatAiConfig.value = {
-      ...response.data,
-      api_key: '',
-    }
+    chatAiConfig.value = response.data || null
   } catch {
     chatAiConfig.value = null
+  }
+}
+
+async function loadChatHealth(showError = false) {
+  chatHealthLoading.value = true
+  try {
+    const response = await getXianyuChatHealth()
+    chatHealth.value = response.data || null
+  } catch (err: any) {
+    chatHealth.value = {
+      ok: false,
+      status: 'error',
+      message: err?.message || '聊天链路检测失败',
+      captcha_url: '',
+      shared_ws_connected: false,
+      cookie_configured: false,
+    }
+    if (showError) {
+      ElMessage.warning(chatHealth.value.message)
+    }
+  } finally {
+    chatHealthLoading.value = false
   }
 }
 
@@ -148,76 +194,14 @@ async function loadChatAiSessionStates() {
   }
 }
 
-function buildChatAiConfigPayload(payload: EditableXianyuChatAiConfig) {
-  return {
-    enabled: payload.enabled,
-    base_url: payload.base_url,
-    api_key: payload.api_key,
-    model: payload.model,
-    system_prompt: payload.system_prompt,
-    temperature: payload.temperature,
-  }
-}
-
-async function persistChatAiConfig(
-  payload: EditableXianyuChatAiConfig,
-  options: { closeDialog?: boolean; successMessage?: string } = {},
-) {
-  chatAiConfigSaving.value = true
+async function handleToggleGlobalAi(enabled: boolean) {
   try {
-    const response = await updateXianyuChatAiConfig(buildChatAiConfigPayload(payload))
-    chatAiConfig.value = {
-      ...response.data,
-      api_key: '',
-    }
-    if (options.closeDialog ?? true) {
-      chatAiConfigDialogVisible.value = false
-    }
-    if (options.successMessage) {
-      ElMessage.success(options.successMessage)
-    }
-  } finally {
-    chatAiConfigSaving.value = false
+    const response = await setXianyuChatAiEnabled(enabled)
+    chatAiConfig.value = response.data
+    ElMessage.success(enabled ? '已开启 AI 总开关' : '已关闭 AI 总开关')
+  } catch (err: any) {
+    ElMessage.error(err.message || '操作失败')
   }
-}
-
-async function saveChatAiConfig(payload: EditableXianyuChatAiConfig) {
-  await persistChatAiConfig(payload, {
-    closeDialog: true,
-    successMessage: 'AI 配置已保存',
-  })
-}
-
-async function handleTestChatAi() {
-  chatAiTesting.value = true
-  try {
-    const sampleText = activeCid.value && activeSession.value
-      ? `${activeSession.value.item_title || '当前商品'}，这个还在吗？`
-      : '你好，在吗？'
-    const response = await testXianyuChatAi({
-      text: sampleText,
-      cid: activeCid.value || undefined,
-    })
-    ElMessage.success(`测试成功：${response.data.reply}`)
-  } finally {
-    chatAiTesting.value = false
-  }
-}
-
-async function handleToggleGlobalAi(enabled: string | number | boolean) {
-  if (!chatAiConfig.value) return
-  const nextEnabled = Boolean(enabled)
-  await persistChatAiConfig(
-    {
-      ...chatAiConfig.value,
-      enabled: nextEnabled,
-      api_key: '',
-    },
-    {
-      closeDialog: false,
-      successMessage: nextEnabled ? '已开启 AI 总开关' : '已关闭 AI 总开关',
-    },
-  )
 }
 
 async function handleToggleCurrentSessionAi(enabled: string | number | boolean) {
@@ -245,6 +229,7 @@ function connectChatSocket() {
     onError(message) {
       connectionStatus.value = 'error'
       ElMessage.warning(message)
+      void loadChatHealth(false)
     },
     onDisconnected() {
       if (connectionStatus.value !== 'error') {
@@ -590,9 +575,16 @@ async function handleRefreshAll() {
   await Promise.all([
     loadChatProfile(),
     loadChatAiConfig(),
+    loadChatHealth(),
     loadConversations(false),
     activeCid.value ? loadMessages(activeCid.value, null, 'replace') : Promise.resolve(),
   ])
+}
+
+function openCaptchaUrl() {
+  const url = chatHealth.value?.captcha_url?.trim()
+  if (!url) return
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 watch(
@@ -607,7 +599,7 @@ watch(
 )
 
 onMounted(async () => {
-  await Promise.all([loadChatProfile(), loadConversations(), loadChatAiConfig()])
+  await Promise.all([loadChatProfile(), loadConversations(), loadChatAiConfig(), loadChatHealth()])
   connectChatSocket()
   startSyncPolling()
 })
@@ -624,60 +616,89 @@ onBeforeUnmount(() => {
 <template>
   <section class="chat-panel theme-surface-card">
     <div class="chat-shell">
-      <aside class="chat-sidebar theme-surface-soft">
-        <div class="chat-sidebar__account">
-          <div class="chat-account">
+      <header class="chat-topbar theme-surface-card">
+        <div class="chat-topbar__left">
+          <template v-if="chatAiConfig">
+            <label class="ai-switch" :class="{ 'is-on': chatAiConfig.enabled }">
+              <input
+                type="checkbox"
+                :checked="chatAiConfig.enabled"
+                @change="handleToggleGlobalAi(!chatAiConfig.enabled)"
+              >
+              <span class="ai-switch__slider" />
+              <span class="ai-switch__label">AI 助手</span>
+            </label>
+            <label
+              class="ai-switch ai-switch--session"
+              :class="{ 'is-on': currentSessionAiEnabled, 'is-disabled': !activeCid }"
+            >
+              <input
+                type="checkbox"
+                :checked="currentSessionAiEnabled"
+                :disabled="!activeCid"
+                @change="handleToggleCurrentSessionAi(!currentSessionAiEnabled)"
+              >
+              <span class="ai-switch__slider" />
+              <span class="ai-switch__label">当前会话</span>
+            </label>
+          </template>
+        </div>
+
+        <div class="chat-topbar__right">
+          <div class="chat-account-pill">
             <img
               v-if="currentAccount.avatar"
               :src="currentAccount.avatar"
               :alt="currentAccount.display_name"
-              class="chat-account__avatar"
+              class="chat-account-pill__avatar"
             >
             <div
               v-else
-              class="chat-account__avatar chat-account__avatar--placeholder"
+              class="chat-account-pill__avatar chat-account-pill__avatar--placeholder"
             >
               {{ currentAccount.display_name.slice(0, 1) || '鱼' }}
             </div>
-
-            <div class="chat-account__main">
-              <strong>{{ currentAccount.display_name }}</strong>
-              <span>{{ currentAccount.user_id || '账号识别中...' }}</span>
-            </div>
-
-            <div class="chat-account__ai-actions">
-              <div
-                class="chat-status"
-                :class="`is-${connectionStatus}`"
-              >
-                {{ connectionLabel }}
-              </div>
-              <template v-if="chatAiConfig">
-                <el-switch
-                  :model-value="chatAiConfig.enabled"
-                  inline-prompt
-                  active-text="AI 总开"
-                  inactive-text="AI 总关"
-                  @change="handleToggleGlobalAi"
-                />
-                <el-switch
-                  :model-value="currentSessionAiEnabled"
-                  :disabled="!activeCid"
-                  inline-prompt
-                  active-text="会话 AI"
-                  inactive-text="会话 AI"
-                  @change="handleToggleCurrentSessionAi"
-                />
-                <el-button
-                  size="small"
-                  @click="chatAiConfigDialogVisible = true"
-                >
-                  AI 配置
-                </el-button>
-              </template>
-            </div>
+            <span class="chat-account-pill__name">{{ currentAccount.display_name }}</span>
+            <span
+              class="chat-account-pill__status"
+              :class="`is-${connectionStatus}`"
+            >
+              {{ connectionLabel }}
+            </span>
           </div>
         </div>
+      </header>
+
+      <div
+        v-if="chatHealth"
+        class="chat-health-banner"
+        :class="chatHealthTone"
+      >
+        <div class="chat-health-banner__main">
+          <strong>{{ chatHealthTitle }}</strong>
+          <p>{{ chatHealth.message || '等待检测结果…' }}</p>
+        </div>
+        <div class="chat-health-banner__actions">
+          <el-button
+            v-if="chatHealth.captcha_url"
+            size="small"
+            type="warning"
+            plain
+            @click="openCaptchaUrl"
+          >
+            打开验证链接
+          </el-button>
+          <el-button
+            size="small"
+            :loading="chatHealthLoading"
+            @click="loadChatHealth(true)"
+          >
+            重新检测
+          </el-button>
+        </div>
+      </div>
+
+      <aside class="chat-sidebar theme-surface-soft">
 
         <div class="chat-sidebar__header">
           <div>
@@ -896,17 +917,6 @@ onBeforeUnmount(() => {
       </section>
     </div>
 
-    <XianyuChatAiConfigDialog
-      v-if="chatAiConfig"
-      :visible="chatAiConfigDialogVisible"
-      :saving="chatAiConfigSaving"
-      :testing="chatAiTesting"
-      :model-value="chatAiConfig"
-      @update:visible="chatAiConfigDialogVisible = $event"
-      @save="saveChatAiConfig"
-      @test="handleTestChatAi"
-    />
-
     <Teleport to="body">
       <div
         v-if="contextMenu.visible"
@@ -936,100 +946,245 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 16px;
   padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.56);
+  box-shadow:
+    0 14px 36px rgba(var(--app-shadow-rgb) / 0.09),
+    inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.5);
 }
 
-.chat-sidebar__account {
-  margin-bottom: 14px;
-  padding: 14px;
-  border-radius: 22px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.28);
-  background: linear-gradient(135deg, rgba(var(--app-surface-rgb), 0.62), rgba(var(--app-surface-alt-rgb), 0.58));
+.chat-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.36);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.2);
 }
 
-.chat-account {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.chat-topbar__left {
+  display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
-.chat-account__avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 18px;
+.chat-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ai-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: rgba(var(--app-surface-rgb) / 0.9);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.ai-switch:hover {
+  border-color: rgba(var(--app-accent-rgb) / 0.4);
+}
+
+.ai-switch input {
+  display: none;
+}
+
+.ai-switch__slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: rgba(var(--app-border-rgb) / 0.4);
+  transition: all 0.2s ease;
+}
+
+.ai-switch__slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.ai-switch.is-on .ai-switch__slider {
+  background: linear-gradient(135deg, rgb(99, 102, 241), rgb(139, 92, 246));
+}
+
+.ai-switch.is-on .ai-switch__slider::after {
+  left: 18px;
+}
+
+.ai-switch__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--app-text-rgb));
+}
+
+.ai-switch.is-on .ai-switch__label {
+  color: rgb(99, 102, 241);
+}
+
+.ai-switch--session.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-account-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: rgba(var(--app-surface-rgb) / 0.9);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.4);
+}
+
+.chat-account-pill__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
 }
 
-.chat-account__avatar--placeholder {
+.chat-account-pill__avatar--placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(var(--app-accent-rgb), 0.94), rgba(var(--app-accent-alt-rgb), 0.84));
+  background: linear-gradient(135deg, rgba(var(--app-accent-rgb) / 0.94), rgba(var(--app-accent-alt-rgb) / 0.84));
   color: white;
-  font-size: 22px;
+  font-size: 14px;
   font-weight: 700;
 }
 
-.chat-account__main {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.chat-account__main strong {
-  font-size: 18px;
-}
-
-.chat-account__main span {
-  color: rgb(var(--app-text-subtle-rgb));
-  font-size: 12px;
-  word-break: break-all;
-}
-
-.chat-account__ai-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.chat-status {
-  padding: 8px 12px;
-  border-radius: 999px;
-  font-size: 12px;
+.chat-account-pill__name {
+  font-size: 13px;
   font-weight: 600;
-  background: rgba(var(--app-border-rgb), 0.2);
+  color: rgb(var(--app-text-rgb));
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-account-pill__status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: rgba(var(--app-border-rgb) / 0.2);
   color: rgb(var(--app-text-subtle-rgb));
 }
 
-.chat-status.is-connected {
-  background: rgba(34, 197, 94, 0.14);
+.chat-account-pill__status.is-connected {
+  background: rgba(34, 197, 94, 0.15);
   color: rgb(34, 197, 94);
 }
 
-.chat-status.is-connecting {
-  background: rgba(245, 158, 11, 0.14);
+.chat-account-pill__status.is-connecting {
+  background: rgba(245, 158, 11, 0.15);
   color: rgb(245, 158, 11);
 }
 
-.chat-status.is-error {
-  background: rgba(239, 68, 68, 0.14);
+.chat-account-pill__status.is-error {
+  background: rgba(239, 68, 68, 0.15);
   color: rgb(239, 68, 68);
 }
 
 .chat-shell {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-rows: auto auto 1fr;
+  gap: 0 16px;
   height: 720px;
+}
+
+.chat-topbar {
+  grid-column: 1 / -1;
+}
+
+.chat-health-banner {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.42);
+  box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb) / 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: rgba(var(--app-surface-rgb) / 0.88);
+}
+
+.chat-health-banner__main {
+  display: grid;
+  gap: 4px;
+}
+
+.chat-health-banner__main strong {
+  font-size: 14px;
+  color: rgb(var(--app-text-strong-rgb));
+}
+
+.chat-health-banner__main p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgb(var(--app-text-muted-rgb));
+}
+
+.chat-health-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-health-banner.is-ok {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.chat-health-banner.is-risk {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.chat-health-banner.is-error {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.chat-health-banner.is-neutral {
+  border-color: rgba(var(--app-border-rgb) / 0.3);
 }
 
 .chat-sidebar,
 .chat-main {
   border-radius: 26px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.42);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.52);
+  box-shadow:
+    0 10px 28px rgba(var(--app-shadow-rgb) / 0.07),
+    inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.4);
 }
 
 .chat-sidebar {
@@ -1081,15 +1236,16 @@ onBeforeUnmount(() => {
   padding: 12px;
   border-radius: 20px;
   text-align: left;
-  border: 1px solid rgba(var(--app-border-rgb), 0.22);
-  background: rgba(var(--app-surface-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.32);
+  background: rgba(var(--app-surface-rgb) / 0.55);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.04);
   transition: all 0.22s ease;
 }
 
 .chat-session:hover,
 .chat-session.is-active {
-  border-color: rgba(var(--app-accent-rgb), 0.38);
-  background: linear-gradient(135deg, rgba(var(--app-accent-rgb), 0.1), rgba(var(--app-accent-alt-rgb), 0.08));
+  border-color: rgba(var(--app-accent-rgb) / 0.38);
+  background: linear-gradient(135deg, rgba(var(--app-accent-rgb) / 0.1), rgba(var(--app-accent-alt-rgb) / 0.08));
   transform: translateY(-1px);
 }
 
@@ -1099,7 +1255,7 @@ onBeforeUnmount(() => {
   height: 64px;
   border-radius: 18px;
   overflow: hidden;
-  background: rgba(var(--app-border-rgb), 0.14);
+  background: rgba(var(--app-border-rgb) / 0.14);
   flex-shrink: 0;
 }
 
@@ -1120,7 +1276,7 @@ onBeforeUnmount(() => {
   font-size: 22px;
   font-weight: 700;
   color: white;
-  background: linear-gradient(135deg, rgba(var(--app-accent-rgb), 0.9), rgba(var(--app-accent-alt-rgb), 0.86));
+  background: linear-gradient(135deg, rgba(var(--app-accent-rgb) / 0.9), rgba(var(--app-accent-alt-rgb) / 0.86));
 }
 
 .chat-session__main {
@@ -1203,7 +1359,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--app-accent-rgb), 0.92);
+  background: rgba(var(--app-accent-rgb) / 0.92);
   color: white;
   font-size: 12px;
   font-weight: 700;
@@ -1221,7 +1377,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 16px;
   padding: 18px 20px 16px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.22);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.22);
 }
 
 .chat-main__header-main {
@@ -1263,7 +1419,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   font-size: 12px;
   color: rgb(var(--app-text-subtle-rgb));
-  background: rgba(var(--app-border-rgb), 0.14);
+  background: rgba(var(--app-border-rgb) / 0.14);
 }
 
 .chat-message-area {
@@ -1305,14 +1461,15 @@ onBeforeUnmount(() => {
   max-width: min(72%, 540px);
   padding: 12px 14px 10px;
   border-radius: 20px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.26);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.36);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.05);
   display: grid;
   gap: 8px;
 }
 
 .chat-bubble-row.is-out .chat-bubble {
-  background: linear-gradient(135deg, rgba(var(--app-accent-rgb), 0.14), rgba(var(--app-accent-alt-rgb), 0.12));
-  border-color: rgba(var(--app-accent-rgb), 0.22);
+  background: linear-gradient(135deg, rgba(var(--app-accent-rgb) / 0.14), rgba(var(--app-accent-alt-rgb) / 0.12));
+  border-color: rgba(var(--app-accent-rgb) / 0.22);
 }
 
 .chat-bubble p {
@@ -1336,14 +1493,14 @@ onBeforeUnmount(() => {
 }
 
 .chat-composer {
-  border-top: 1px solid rgba(var(--app-border-rgb), 0.22);
+  border-top: 1px solid rgba(var(--app-border-rgb) / 0.22);
   padding: 16px 20px 20px;
   display: grid;
   gap: 10px;
   position: sticky;
   bottom: 0;
   background:
-    linear-gradient(180deg, rgba(var(--app-surface-rgb), 0.92), rgba(var(--app-surface-alt-rgb), 0.96));
+    linear-gradient(180deg, rgba(var(--app-surface-rgb) / 0.92), rgba(var(--app-surface-alt-rgb) / 0.96));
   backdrop-filter: blur(12px);
 }
 
@@ -1351,7 +1508,7 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
   border-radius: 16px;
   color: rgb(var(--app-text-subtle-rgb));
-  background: rgba(var(--app-border-rgb), 0.1);
+  background: rgba(var(--app-border-rgb) / 0.1);
   font-size: 12px;
 }
 
@@ -1383,12 +1540,12 @@ onBeforeUnmount(() => {
 
 .chat-composer__input-row :deep(.el-textarea__inner) {
   min-height: 52px;
-  background: rgba(var(--app-surface-rgb), 0.96) !important;
-  border: 1px solid rgba(var(--app-border-rgb), 0.72) !important;
+  background: rgba(var(--app-surface-rgb) / 0.96) !important;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.72) !important;
   color: rgb(var(--app-text-strong-rgb)) !important;
   -webkit-text-fill-color: rgb(var(--app-text-strong-rgb)) !important;
   caret-color: rgb(var(--app-text-strong-rgb)) !important;
-  box-shadow: 0 0 0 1px rgba(var(--app-border-rgb), 0.36) inset !important;
+  box-shadow: 0 0 0 1px rgba(var(--app-border-rgb) / 0.36) inset !important;
 }
 
 .chat-composer__input-row :deep(.el-textarea__inner::placeholder) {
@@ -1397,8 +1554,8 @@ onBeforeUnmount(() => {
 }
 
 .chat-composer__input-row :deep(.el-textarea__inner:focus) {
-  border-color: rgba(var(--primary-color-rgb), 0.82) !important;
-  box-shadow: 0 0 0 1px rgba(var(--primary-color-rgb), 0.58) inset !important;
+  border-color: rgba(var(--primary-color-rgb) / 0.82) !important;
+  box-shadow: 0 0 0 1px rgba(var(--primary-color-rgb) / 0.58) inset !important;
 }
 
 .chat-composer__input-row .el-button {
@@ -1417,8 +1574,8 @@ onBeforeUnmount(() => {
   min-width: 120px;
   padding: 4px 0;
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.98);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.98);
   backdrop-filter: blur(12px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
@@ -1436,7 +1593,7 @@ onBeforeUnmount(() => {
 }
 
 .chat-context-menu__item:hover {
-  background: rgba(var(--app-accent-rgb), 0.08);
+  background: rgba(var(--app-accent-rgb) / 0.08);
 }
 
 .chat-context-menu__item--danger {
@@ -1471,6 +1628,17 @@ onBeforeUnmount(() => {
 @media (max-width: 768px) {
   .chat-panel {
     padding: 14px;
+  }
+
+  .chat-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .chat-topbar__left,
+  .chat-topbar__right {
+    justify-content: flex-start;
   }
 
   .chat-composer__input-row {

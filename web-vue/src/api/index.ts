@@ -1,0 +1,11 @@
+// API 模块统一导出
+export * from './modules/video'
+export * from './modules/user'
+export * from './modules/search'
+export * from './modules/live'
+export * from './modules/home'
+export * from './modules/settings'
+export * from './modules/quark'
+export * from './modules/wechat'
+export * from './modules/xianyu'
+export { request } from './request'

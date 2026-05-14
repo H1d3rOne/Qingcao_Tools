@@ -73,6 +73,12 @@ export interface XianyuMonitorTask {
   last_error: string
   seen_item_ids: string[]
   latest_hits: XianyuMonitorHit[]
+  // 触发条件
+  max_hits?: number | null
+  published_within_hours?: number | null
+  // 执行动作
+  webhook_url?: string
+  contact_seller_enabled?: boolean
 }
 
 export interface XianyuMonitorTaskCreate {
@@ -86,6 +92,13 @@ export interface XianyuMonitorTaskCreate {
   min_price?: number | null
   max_price?: number | null
   interval_seconds?: number
+  enabled?: boolean
+  // 触发条件
+  max_hits?: number | null
+  published_within_hours?: number | null
+  // 执行动作
+  webhook_url?: string
+  contact_seller_enabled?: boolean
 }
 
 export interface XianyuMonitorTaskUpdate {
@@ -100,6 +113,12 @@ export interface XianyuMonitorTaskUpdate {
   max_price?: number | null
   interval_seconds?: number
   enabled?: boolean
+  // 触发条件
+  max_hits?: number | null
+  published_within_hours?: number | null
+  // 执行动作
+  webhook_url?: string
+  contact_seller_enabled?: boolean
 }
 
 export interface XianyuUserProfile {
@@ -141,6 +160,105 @@ export interface XianyuItemDetail {
   seller_last_visit: string
   seller_item_count: number
   detail_url: string
+}
+
+export interface XianyuOrder {
+  order_id: string
+  item_id: string
+  item_title: string
+  item_image: string
+  item_price: string
+  buyer_id: string
+  buyer_nick: string
+  buyer_avatar: string
+  amount: string
+  status_code: string
+  status_text: string
+  status_group: string
+  created_at: string
+  paid_at: string
+  finished_at: string
+  is_dummy: boolean
+  quantity: number
+  remark: string
+}
+
+export interface XianyuOrderPage {
+  orders: XianyuOrder[]
+  page: number
+  page_size: number
+  total: number
+  has_more: boolean
+}
+
+export interface XianyuOrderShipResult {
+  order_id: string
+  success: boolean
+  message: string
+}
+
+export interface XianyuOrderListParams {
+  page?: number
+  page_size?: number
+  status?: string
+  order_id?: string
+}
+
+export interface XianyuManageItem {
+  item_id: string
+  item_title: string
+  item_price: string
+  item_image: string
+  item_status: string
+  item_detail: string
+  multi_quantity_delivery: boolean
+  synced_at: number
+  updated_at: number
+}
+
+export interface XianyuManageItemPage {
+  items: XianyuManageItem[]
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+}
+
+export interface XianyuDeliveryRule {
+  id: string
+  name: string
+  enabled: boolean
+  item_id: string
+  keyword: string
+  match_mode: string
+  delivery_text: string
+  send_chat_text: boolean
+  send_dummy_ship: boolean
+  created_at: number
+  updated_at: number
+}
+
+export interface XianyuDeliveryExecutionRecord {
+  id: string
+  rule_id: string
+  rule_name: string
+  order_id: string
+  item_id: string
+  buyer_id: string
+  status: string
+  message: string
+  created_at: number
+}
+
+export interface XianyuDeliveryRuntimeStatus {
+  running: boolean
+  last_event_at: number
+  last_success_at: number
+  last_failure_at: number
+  last_error: string
+  enabled_rule_count: number
+  recent_success_count: number
+  recent_failure_count: number
 }
 
 export interface XianyuChatProfile {
@@ -231,23 +349,42 @@ export interface XianyuChatSendResult {
   summary: string
 }
 
-export interface XianyuChatAiConfig {
-  enabled: boolean
+export interface XianyuChatAiProvider {
+  id: string
+  name: string
   base_url: string
-  model: string
+  models: string[]
+  active_model: string
   system_prompt: string
-  temperature: number
   api_key_configured: boolean
   api_key_masked: string
+  is_active: boolean
 }
 
-export interface XianyuChatAiConfigUpdatePayload {
+export interface XianyuChatAiConfig {
   enabled: boolean
+  chat_keepalive_interval_seconds: number
+  providers: XianyuChatAiProvider[]
+  active_provider_id: string
+}
+
+export interface XianyuChatAiProviderCreatePayload {
+  name: string
   base_url: string
   api_key: string
-  model: string
+  models: string[]
+  active_model: string
   system_prompt: string
-  temperature: number
+  provider_id?: string
+}
+
+export interface XianyuChatAiProviderUpdatePayload {
+  name?: string
+  base_url?: string
+  api_key?: string
+  models?: string[]
+  active_model?: string
+  system_prompt?: string
 }
 
 export interface XianyuChatAiSessionState {
@@ -257,6 +394,19 @@ export interface XianyuChatAiSessionState {
 
 export interface XianyuChatAiSessionUpdatePayload {
   enabled: boolean
+}
+
+export interface XianyuChatAiTestResponse {
+  reply: string
+}
+
+export interface XianyuChatHealthStatus {
+  ok: boolean
+  status: 'ok' | 'risk_blocked' | 'auth_invalid' | 'cookie_missing' | 'error' | string
+  message: string
+  captcha_url: string
+  shared_ws_connected: boolean
+  cookie_configured: boolean
 }
 
 export interface XianyuSearchPayload {
@@ -307,6 +457,22 @@ export interface XianyuAuthLogoutResponse {
   message: string
 }
 
+export interface XianyuBrowserLoginStartResponse {
+  success: boolean
+  message: string
+  session_id: string
+  qrcode_image?: string | null
+  expires_in: number
+}
+
+export interface XianyuBrowserLoginStatusResponse {
+  success: boolean
+  message: string
+  status: 'waiting' | 'scanned' | 'confirmed' | 'success' | 'expired' | 'failed' | 'cancelled' | string
+  is_logged_in: boolean
+  login_token?: string | null
+}
+
 export function searchXianyuItems(payload: XianyuSearchPayload) {
   return request.post<ApiResponse<XianyuSearchResult>>('/xianyu/search', payload)
 }
@@ -321,6 +487,22 @@ export function checkXianyuLogin(payload: XianyuAuthCheckLoginPayload) {
 
 export function loginXianyu(payload: XianyuAuthLoginPayload) {
   return request.post<XianyuAuthLoginResponse>('/xianyu/auth/login', payload)
+}
+
+export function startXianyuBrowserLogin() {
+  return request.post<XianyuBrowserLoginStartResponse>('/xianyu/auth/browser-qrcode/start')
+}
+
+export function getXianyuBrowserLoginStatus(sessionId: string) {
+  return request.get<XianyuBrowserLoginStatusResponse>('/xianyu/auth/browser-qrcode/status', {
+    session_id: sessionId,
+  })
+}
+
+export function cancelXianyuBrowserLogin(sessionId: string) {
+  return request.post<XianyuAuthLogoutResponse>('/xianyu/auth/browser-qrcode/cancel', {
+    session_id: sessionId,
+  })
 }
 
 export function getXianyuAuthStatus() {
@@ -367,6 +549,91 @@ export function getXianyuItemDetail(itemId: string) {
   return request.get<ApiResponse<XianyuItemDetail>>('/xianyu/detail', { item_id: itemId })
 }
 
+export function listXianyuOrders(params: XianyuOrderListParams = {}) {
+  return request.get<ApiResponse<XianyuOrderPage>>('/xianyu/orders', {
+    page: params.page ?? 1,
+    page_size: params.page_size ?? 20,
+    status: params.status ?? 'ALL',
+    order_id: params.order_id ?? '',
+  })
+}
+
+export function shipXianyuOrder(orderId: string, tradeText = '') {
+  return request.post<ApiResponse<XianyuOrderShipResult>>('/xianyu/orders/ship', {
+    order_id: orderId,
+    trade_text: tradeText,
+  })
+}
+
+export function listXianyuManageItems(params?: { page?: number; page_size?: number }) {
+  return request.get<ApiResponse<XianyuManageItemPage>>('/xianyu/manage/items', params)
+}
+
+export function syncXianyuManageItemsPage(payload: { page: number; page_size: number }) {
+  return request.post<ApiResponse<XianyuManageItemPage>>('/xianyu/manage/items/sync-page', payload)
+}
+
+export function syncXianyuManageItemsAll() {
+  return request.post<ApiResponse<{ synced: number; pages: number }>>('/xianyu/manage/items/sync-all')
+}
+
+export function getXianyuManageItem(itemId: string) {
+  return request.get<ApiResponse<XianyuManageItem>>(`/xianyu/manage/items/${itemId}`)
+}
+
+export function updateXianyuManageItem(itemId: string, payload: { item_detail: string }) {
+  return request.put<ApiResponse<XianyuManageItem>>(`/xianyu/manage/items/${itemId}`, payload)
+}
+
+export function deleteXianyuManageItem(itemId: string) {
+  return request.delete<ApiResponse<{ deleted: boolean }>>(`/xianyu/manage/items/${itemId}`)
+}
+
+export function setXianyuManageItemMultiQuantityDelivery(itemId: string, enabled: boolean) {
+  return request.put<ApiResponse<XianyuManageItem>>(`/xianyu/manage/items/${itemId}/multi-quantity-delivery`, {
+    enabled,
+  })
+}
+
+export function polishXianyuManageItem(itemId: string, enableNotification = false) {
+  return request.post<ApiResponse<{ success: boolean; item_id: string; message: string }>>('/xianyu/manage/items/polish', {
+    item_id: itemId,
+    enable_notification: enableNotification,
+  })
+}
+
+export function polishAllXianyuManageItems() {
+  return request.post<ApiResponse<{ total: number; polished: number }>>('/xianyu/manage/items/polish-all')
+}
+
+export function listXianyuDeliveryRules() {
+  return request.get<ApiResponse<XianyuDeliveryRule[]>>('/xianyu/manage/delivery-rules')
+}
+
+export function createXianyuDeliveryRule(payload: Omit<XianyuDeliveryRule, 'id' | 'created_at' | 'updated_at'>) {
+  return request.post<ApiResponse<XianyuDeliveryRule>>('/xianyu/manage/delivery-rules', payload)
+}
+
+export function updateXianyuDeliveryRule(ruleId: string, payload: Partial<Omit<XianyuDeliveryRule, 'id' | 'created_at' | 'updated_at'>>) {
+  return request.put<ApiResponse<XianyuDeliveryRule>>(`/xianyu/manage/delivery-rules/${ruleId}`, payload)
+}
+
+export function deleteXianyuDeliveryRule(ruleId: string) {
+  return request.delete<ApiResponse<{ deleted: boolean }>>(`/xianyu/manage/delivery-rules/${ruleId}`)
+}
+
+export function toggleXianyuDeliveryRule(ruleId: string) {
+  return request.post<ApiResponse<XianyuDeliveryRule>>(`/xianyu/manage/delivery-rules/${ruleId}/toggle`)
+}
+
+export function getXianyuDeliveryRuntimeStatus() {
+  return request.get<ApiResponse<XianyuDeliveryRuntimeStatus>>('/xianyu/manage/runtime/status')
+}
+
+export function listXianyuDeliveryExecutions(params?: { limit?: number }) {
+  return request.get<ApiResponse<XianyuDeliveryExecutionRecord[]>>('/xianyu/manage/runtime/executions', params)
+}
+
 export function getXianyuChatProfile() {
   return request.get<ApiResponse<XianyuChatProfile>>('/xianyu/chat/profile')
 }
@@ -375,8 +642,46 @@ export function getXianyuChatAiConfig() {
   return request.get<ApiResponse<XianyuChatAiConfig>>('/xianyu/chat/ai/config')
 }
 
-export function updateXianyuChatAiConfig(payload: XianyuChatAiConfigUpdatePayload) {
-  return request.post<ApiResponse<XianyuChatAiConfig>>('/xianyu/chat/ai/config', payload)
+export function setXianyuChatAiEnabled(enabled: boolean) {
+  return request.post<ApiResponse<XianyuChatAiConfig>>('/xianyu/chat/ai/enabled', null, {
+    params: { enabled },
+  })
+}
+
+export function setXianyuChatKeepaliveInterval(seconds: number) {
+  return request.post<ApiResponse<XianyuChatAiConfig>>('/xianyu/chat/ai/keepalive-interval', null, {
+    params: { seconds },
+  })
+}
+
+export function createXianyuChatAiProvider(payload: XianyuChatAiProviderCreatePayload) {
+  return request.post<ApiResponse<XianyuChatAiProvider>>('/xianyu/chat/ai/providers', payload)
+}
+
+export function testXianyuChatAiProvider(payload: XianyuChatAiProviderCreatePayload) {
+  return request.post<ApiResponse<XianyuChatAiTestResponse>>('/xianyu/chat/ai/providers/test', payload)
+}
+
+export function updateXianyuChatAiProvider(providerId: string, payload: XianyuChatAiProviderUpdatePayload) {
+  return request.patch<ApiResponse<XianyuChatAiProvider>>(`/xianyu/chat/ai/providers/${providerId}`, payload)
+}
+
+export function deleteXianyuChatAiProvider(providerId: string) {
+  return request.delete<ApiResponse<{ deleted: boolean }>>(`/xianyu/chat/ai/providers/${providerId}`)
+}
+
+export function setActiveXianyuChatAiProvider(providerId: string) {
+  return request.post<ApiResponse<{ active: string }>>(`/xianyu/chat/ai/providers/${providerId}/active`)
+}
+
+export function getXianyuChatAiProviderApiKey(providerId: string) {
+  return request.get<ApiResponse<{ api_key: string }>>(`/xianyu/chat/ai/providers/${providerId}/api-key`)
+}
+
+export function setXianyuChatAiProviderActiveModel(providerId: string, model: string) {
+  return request.post<ApiResponse<XianyuChatAiProvider>>(`/xianyu/chat/ai/providers/${providerId}/active-model`, null, {
+    params: { model },
+  })
 }
 
 export function getXianyuChatAiSessions(cids: string[]) {
@@ -389,6 +694,10 @@ export function updateXianyuChatAiSession(cid: string, payload: XianyuChatAiSess
 
 export function testXianyuChatAi(payload: { text: string; cid?: string }) {
   return request.post<ApiResponse<{ reply: string }>>('/xianyu/chat/ai/test', payload)
+}
+
+export function getXianyuChatHealth() {
+  return request.get<ApiResponse<XianyuChatHealthStatus>>('/xianyu/chat/health')
 }
 
 export function getXianyuChatConversations(params?: { offset?: number; limit?: number }) {

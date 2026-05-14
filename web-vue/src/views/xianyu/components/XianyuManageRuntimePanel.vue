@@ -203,7 +203,7 @@ onUnmounted(() => {
   gap: 16px;
   align-items: center;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.2);
 }
 
 .mg-section__info h3 {
@@ -241,8 +241,8 @@ onUnmounted(() => {
   gap: 4px;
   padding: 12px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.68);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.68);
 }
 
 .mg-runtime-summary__focus-label {
@@ -262,8 +262,8 @@ onUnmounted(() => {
   gap: 6px;
   padding: 14px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.36);
+  background: rgba(var(--app-surface-alt-rgb) / 0.5);
 }
 
 .mg-stat--accent {
@@ -335,8 +335,8 @@ onUnmounted(() => {
   gap: 12px;
   padding: 12px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.6);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.6);
 }
 
 .mg-time-info__item {
@@ -400,7 +400,7 @@ onUnmounted(() => {
 .mg-exec__count {
   padding: 1px 8px;
   border-radius: 4px;
-  background: rgba(var(--app-accent-rgb), 0.1);
+  background: rgba(var(--app-accent-rgb) / 0.1);
   font-size: 12px;
   font-weight: 600;
   color: rgb(var(--app-accent-rgb));
@@ -418,8 +418,8 @@ onUnmounted(() => {
   align-items: center;
   padding: 10px 14px;
   border-radius: 8px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.6);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.6);
 }
 
 .mg-exec__left {

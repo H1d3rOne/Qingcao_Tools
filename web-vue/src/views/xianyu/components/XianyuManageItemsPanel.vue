@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, EditPen, RefreshRight } from '@element-plus/icons-vue'
+import { Delete, EditPen, MagicStick, RefreshRight } from '@element-plus/icons-vue'
 import {
   deleteXianyuManageItem,
   listXianyuManageItems,
@@ -9,11 +9,14 @@ import {
   syncXianyuManageItemsAll,
   syncXianyuManageItemsPage,
   updateXianyuManageItem,
+  polishXianyuManageItem,
+  polishAllXianyuManageItems,
   type XianyuManageItem,
 } from '@/api/modules/xianyu'
 
 const loading = ref(false)
 const syncLoading = ref(false)
+const polishLoading = ref(false)
 const items = ref<XianyuManageItem[]>([])
 const editVisible = ref(false)
 const editingItemId = ref('')
@@ -98,6 +101,31 @@ async function syncAll() {
   }
 }
 
+async function handlePolish(item: XianyuManageItem) {
+  try {
+    const response = await polishXianyuManageItem(item.item_id, true)
+    if (response.success) {
+      ElMessage.success('擦亮成功，商品排名已刷新')
+      await loadItems(pagination.page)
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '擦亮商品失败')
+  }
+}
+
+async function handlePolishAll() {
+  polishLoading.value = true
+  try {
+    const response = await polishAllXianyuManageItems()
+    ElMessage.success(`批量擦亮完成，共擦亮 ${response.data.polished} 个商品`)
+    await loadItems(1)
+  } catch (error: any) {
+    ElMessage.error(error?.message || '批量擦亮失败')
+  } finally {
+    polishLoading.value = false
+  }
+}
+
 function openEdit(item: XianyuManageItem) {
   editingItemId.value = item.item_id
   editDetail.value = item.item_detail || ''
@@ -165,8 +193,12 @@ onMounted(() => {
           <el-icon><RefreshRight /></el-icon>
           同步当前页
         </el-button>
-        <el-button type="primary" :loading="syncLoading" @click="syncAll">
+        <el-button :loading="syncLoading" @click="syncAll">
           同步全部
+        </el-button>
+        <el-button type="primary" :loading="polishLoading" @click="handlePolishAll">
+          <el-icon><MagicStick /></el-icon>
+          全体擦亮
         </el-button>
       </div>
     </div>
@@ -245,6 +277,10 @@ onMounted(() => {
               />
             </div>
             <div class="mg-item__btns">
+              <el-button size="small" type="primary" plain @click="handlePolish(item)">
+                <el-icon><MagicStick /></el-icon>
+                擦亮
+              </el-button>
               <el-button size="small" @click="openEdit(item)">
                 <el-icon><EditPen /></el-icon>
                 编辑
@@ -307,7 +343,7 @@ onMounted(() => {
   gap: 16px;
   align-items: center;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.2);
 }
 
 .mg-section__info h3 {
@@ -346,13 +382,13 @@ onMounted(() => {
   gap: 6px;
   padding: 14px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.36);
+  background: rgba(var(--app-surface-alt-rgb) / 0.5);
 }
 
 .mg-stat--accent {
-  border-color: rgba(var(--app-accent-rgb), 0.24);
-  background: rgba(var(--app-accent-rgb), 0.06);
+  border-color: rgba(var(--app-accent-rgb) / 0.24);
+  background: rgba(var(--app-accent-rgb) / 0.06);
 }
 
 .mg-stat__label {
@@ -406,8 +442,8 @@ onMounted(() => {
   gap: 6px;
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: rgba(var(--app-surface-alt-rgb) / 0.5);
 }
 
 .mg-items-aside__card strong {
@@ -430,14 +466,14 @@ onMounted(() => {
   align-items: center;
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.6);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.6);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .mg-item:hover {
-  border-color: rgba(var(--app-accent-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.85);
+  border-color: rgba(var(--app-accent-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.85);
 }
 
 .mg-item__media {
@@ -445,8 +481,8 @@ onMounted(() => {
   height: 88px;
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(var(--app-surface-alt-rgb), 0.8);
-  border: 1px solid rgba(var(--app-border-rgb), 0.22);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.22);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -468,7 +504,7 @@ onMounted(() => {
   font-size: 11px;
   line-height: 1.4;
   color: rgb(var(--app-text-subtle-rgb));
-  background: linear-gradient(135deg, rgba(var(--app-surface-alt-rgb), 0.95), rgba(var(--app-border-rgb), 0.1));
+  background: linear-gradient(135deg, rgba(var(--app-surface-alt-rgb) / 0.95), rgba(var(--app-border-rgb) / 0.1));
 }
 
 .mg-item__body {
@@ -506,7 +542,7 @@ onMounted(() => {
   max-width: 100%;
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(var(--app-text-subtle-rgb), 0.1);
+  background: rgba(var(--app-text-subtle-rgb) / 0.1);
   font-size: 11px;
   color: rgb(var(--app-text-subtle-rgb));
   font-family: monospace;
@@ -539,7 +575,7 @@ onMounted(() => {
 
 .mg-item__price-pill--muted {
   color: rgb(var(--app-text-subtle-rgb));
-  background: rgba(var(--app-surface-alt-rgb), 0.82);
+  background: rgba(var(--app-surface-alt-rgb) / 0.82);
   box-shadow: none;
   font-size: 12px;
   font-weight: 600;

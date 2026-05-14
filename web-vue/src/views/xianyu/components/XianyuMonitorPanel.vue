@@ -951,6 +951,13 @@ onMounted(async () => {
   display: grid;
   gap: 20px;
   padding: 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.56);
+  background:
+    linear-gradient(135deg, rgba(var(--app-surface-rgb) / 0.94), rgba(var(--app-surface-alt-rgb) / 0.88));
+  box-shadow:
+    0 14px 36px rgba(var(--app-shadow-rgb) / 0.09),
+    inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.5);
 }
 
 .mp-header {
@@ -959,11 +966,14 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 24px;
   padding: 24px 28px;
-  border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.4);
+  border-radius: 18px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.52);
   background:
-    radial-gradient(ellipse at 0 0, rgba(var(--app-accent-rgb), 0.1), transparent 50%),
-    linear-gradient(135deg, rgba(var(--app-surface-rgb), 0.96), rgba(var(--app-surface-alt-rgb), 0.92));
+    radial-gradient(ellipse at 0 0, rgba(var(--app-accent-rgb) / 0.1), transparent 50%),
+    linear-gradient(135deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.92));
+  box-shadow:
+    0 10px 24px rgba(var(--app-shadow-rgb) / 0.07),
+    inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.5);
 }
 
 .mp-header__badge {
@@ -972,7 +982,7 @@ onMounted(async () => {
   gap: 6px;
   padding: 5px 12px;
   border-radius: 6px;
-  background: rgba(var(--app-accent-rgb), 0.1);
+  background: rgba(var(--app-accent-rgb) / 0.1);
   color: rgb(var(--app-accent-rgb));
   font-size: 12px;
   font-weight: 600;
@@ -1013,9 +1023,10 @@ onMounted(async () => {
   flex-direction: column;
   gap: 6px;
   padding: 16px 18px;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
+  border-radius: 14px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.48);
+  background: rgba(var(--app-surface-alt-rgb) / 0.5);
+  box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb) / 0.05);
 }
 
 .mp-stat--accent {
@@ -1075,9 +1086,12 @@ onMounted(async () => {
   gap: 12px;
   align-content: start;
   padding: 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.4);
+  border-radius: 18px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.52);
+  background: rgba(var(--app-surface-alt-rgb) / 0.4);
+  box-shadow:
+    0 10px 24px rgba(var(--app-shadow-rgb) / 0.07),
+    inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.4);
 }
 
 .mp-sidebar__head {
@@ -1085,7 +1099,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.32);
 }
 
 .mp-sidebar__head strong {
@@ -1116,18 +1130,19 @@ onMounted(async () => {
   display: grid;
   gap: 8px;
   padding: 13px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.6);
+  border-radius: 14px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.48);
+  background: rgba(var(--app-surface-rgb) / 0.6);
   color: inherit;
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.04);
 }
 
 .mp-task--framed {
-  border-color: rgba(var(--app-border-rgb), 0.42);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  border-color: rgba(var(--app-border-rgb) / 0.52);
+  box-shadow: inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.3), 0 4px 12px rgba(var(--app-shadow-rgb) / 0.04);
 }
 
 .mp-task--compact {
@@ -1136,21 +1151,21 @@ onMounted(async () => {
 }
 
 .mp-task:hover {
-  border-color: rgba(var(--app-accent-rgb), 0.36);
-  background: rgba(var(--app-surface-rgb), 0.85);
-  box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb), 0.07);
+  border-color: rgba(var(--app-accent-rgb) / 0.36);
+  background: rgba(var(--app-surface-rgb) / 0.85);
+  box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb) / 0.07);
 }
 
 .mp-task--active {
-  border-color: rgba(var(--app-accent-rgb), 0.3);
-  background: rgba(var(--app-accent-rgb), 0.04);
-  box-shadow: 0 8px 18px rgba(var(--app-shadow-rgb), 0.05);
+  border-color: rgba(var(--app-accent-rgb) / 0.3);
+  background: rgba(var(--app-accent-rgb) / 0.04);
+  box-shadow: 0 8px 18px rgba(var(--app-shadow-rgb) / 0.05);
 }
 
 .mp-task--active-refined {
-  border-color: rgba(var(--app-accent-rgb), 0.42);
-  background: rgba(var(--app-accent-rgb), 0.03);
-  box-shadow: inset 0 0 0 1px rgba(var(--app-accent-rgb), 0.22), 0 10px 20px rgba(var(--app-shadow-rgb), 0.06);
+  border-color: rgba(var(--app-accent-rgb) / 0.42);
+  background: rgba(var(--app-accent-rgb) / 0.03);
+  box-shadow: inset 0 0 0 1px rgba(var(--app-accent-rgb) / 0.22), 0 10px 20px rgba(var(--app-shadow-rgb) / 0.06);
 }
 
 .mp-task__top {
@@ -1227,8 +1242,8 @@ onMounted(async () => {
 .mp-task__status--pill {
   padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.28);
-  background: rgba(var(--app-surface-rgb), 0.66);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.28);
+  background: rgba(var(--app-surface-rgb) / 0.66);
   color: rgb(var(--app-text-subtle-rgb));
 }
 
@@ -1239,8 +1254,8 @@ onMounted(async () => {
 }
 
 .mp-task__status--paused {
-  border-color: rgba(var(--app-border-rgb), 0.34);
-  background: rgba(var(--app-text-subtle-rgb), 0.06);
+  border-color: rgba(var(--app-border-rgb) / 0.34);
+  background: rgba(var(--app-text-subtle-rgb) / 0.06);
   color: rgb(var(--app-text-subtle-rgb));
 }
 
@@ -1281,8 +1296,8 @@ onMounted(async () => {
 .mp-task__chips span {
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(var(--app-accent-rgb), 0.08);
-  border: 1px solid rgba(var(--app-accent-rgb), 0.15);
+  background: rgba(var(--app-accent-rgb) / 0.08);
+  border: 1px solid rgba(var(--app-accent-rgb) / 0.15);
   font-size: 11px;
   color: rgb(var(--app-accent-rgb));
 }
@@ -1301,9 +1316,12 @@ onMounted(async () => {
   gap: 16px;
   align-content: start;
   padding: 20px;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.4);
+  border-radius: 18px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.52);
+  background: rgba(var(--app-surface-alt-rgb) / 0.4);
+  box-shadow:
+    0 10px 24px rgba(var(--app-shadow-rgb) / 0.07),
+    inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.4);
 }
 
 .mp-detail--compact {
@@ -1315,7 +1333,7 @@ onMounted(async () => {
   display: grid;
   gap: 14px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.32);
 }
 
 .mp-detail__summary-head {
@@ -1375,7 +1393,8 @@ onMounted(async () => {
 .mp-detail__state {
   padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(var(--app-border-rgb), 0.14);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.28);
+  background: rgba(var(--app-surface-rgb) / 0.62);
   font-size: 12px;
   font-weight: 600;
   color: rgb(var(--app-text-subtle-rgb));
@@ -1410,7 +1429,8 @@ onMounted(async () => {
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 12px;
-  background: rgba(var(--app-border-rgb), 0.12);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.28);
+  background: rgba(var(--app-surface-rgb) / 0.62);
   color: rgb(var(--app-text-subtle-rgb));
 }
 
@@ -1488,9 +1508,10 @@ onMounted(async () => {
   align-items: center;
   gap: 16px;
   padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.28);
-  background: rgba(var(--app-surface-rgb), 0.72);
+  border-radius: 14px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.48);
+  background: rgba(var(--app-surface-rgb) / 0.72);
+  box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb) / 0.05);
 }
 
 .mp-hits__preview-main {
@@ -1529,7 +1550,7 @@ onMounted(async () => {
 }
 
 .mp-hits__toggle:hover {
-  background: rgba(var(--app-accent-rgb), 0.08);
+  background: rgba(var(--app-accent-rgb) / 0.08);
 }
 
 .mp-hits__toggle-text {
@@ -1567,7 +1588,7 @@ onMounted(async () => {
 .mp-hits__count {
   padding: 1px 8px;
   border-radius: 4px;
-  background: rgba(var(--app-accent-rgb), 0.1);
+  background: rgba(var(--app-accent-rgb) / 0.1);
   font-size: 12px;
   font-weight: 600;
   color: rgb(var(--app-accent-rgb));
@@ -1581,22 +1602,23 @@ onMounted(async () => {
 
 .mp-hit {
   overflow: hidden;
-  border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.7);
+  border-radius: 14px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.48);
+  background: rgba(var(--app-surface-rgb) / 0.7);
+  box-shadow: 0 6px 16px rgba(var(--app-shadow-rgb) / 0.05);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .mp-hit:hover {
-  border-color: rgba(var(--app-accent-rgb), 0.3);
-  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb), 0.08);
+  border-color: rgba(var(--app-accent-rgb) / 0.3);
+  box-shadow: 0 4px 12px rgba(var(--app-shadow-rgb) / 0.08);
 }
 
 .mp-hit__cover {
   width: 100%;
   height: 160px;
   overflow: hidden;
-  background: rgba(var(--app-surface-alt-rgb), 0.6);
+  background: rgba(var(--app-surface-alt-rgb) / 0.6);
 }
 
 .mp-hit__img {
@@ -1614,7 +1636,7 @@ onMounted(async () => {
   font-size: 28px;
   font-weight: 700;
   color: rgb(var(--app-text-subtle-rgb));
-  background: rgba(var(--app-surface-alt-rgb), 0.8);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
 }
 
 .mp-hit__body {
@@ -1659,6 +1681,10 @@ onMounted(async () => {
 
 .mp-form__section {
   margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.36);
+  background: rgba(var(--app-surface-alt-rgb) / 0.42);
 }
 
 .mp-form__section:last-child {
@@ -1672,7 +1698,7 @@ onMounted(async () => {
   font-weight: 600;
   color: rgb(var(--app-text-subtle-rgb));
   letter-spacing: 0.02em;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.28);
 }
 
 .mp-form__row {

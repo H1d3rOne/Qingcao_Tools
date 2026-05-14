@@ -119,10 +119,10 @@ const overviewStats = computed(() => [
   gap: 24px;
   padding: 24px 28px;
   border-radius: 16px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.4);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.4);
   background:
-    radial-gradient(ellipse at 0 0, rgba(var(--app-accent-rgb), 0.1), transparent 50%),
-    linear-gradient(135deg, rgba(var(--app-surface-rgb), 0.96), rgba(var(--app-surface-alt-rgb), 0.92));
+    radial-gradient(ellipse at 0 0, rgba(var(--app-accent-rgb) / 0.1), transparent 50%),
+    linear-gradient(135deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.92));
 }
 
 .mg-header__badge {
@@ -131,7 +131,7 @@ const overviewStats = computed(() => [
   gap: 6px;
   padding: 5px 12px;
   border-radius: 6px;
-  background: rgba(var(--app-accent-rgb), 0.1);
+  background: rgba(var(--app-accent-rgb) / 0.1);
   color: rgb(var(--app-accent-rgb));
   font-size: 12px;
   font-weight: 600;
@@ -205,8 +205,8 @@ const overviewStats = computed(() => [
   gap: 8px;
   padding: 16px 18px;
   border-radius: 14px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: linear-gradient(135deg, rgba(var(--app-surface-rgb), 0.96), rgba(var(--app-surface-alt-rgb), 0.88));
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: linear-gradient(135deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.88));
 }
 
 .mg-overview__label,
@@ -277,8 +277,8 @@ const overviewStats = computed(() => [
   align-items: center;
   padding: 18px 20px;
   border-radius: 14px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.36);
+  background: rgba(var(--app-surface-alt-rgb) / 0.5);
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -287,7 +287,7 @@ const overviewStats = computed(() => [
 
 .mg-tab:hover {
   transform: translateY(-1px);
-  background: rgba(var(--app-surface-rgb), 0.9);
+  background: rgba(var(--app-surface-rgb) / 0.9);
 }
 
 .mg-tab__icon {

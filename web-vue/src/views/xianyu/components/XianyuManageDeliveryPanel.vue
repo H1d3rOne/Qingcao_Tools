@@ -328,7 +328,7 @@ onMounted(() => {
   gap: 16px;
   align-items: center;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.2);
 }
 
 .mg-section__info h3 {
@@ -362,8 +362,8 @@ onMounted(() => {
   gap: 6px;
   padding: 14px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.36);
-  background: rgba(var(--app-surface-alt-rgb), 0.5);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.36);
+  background: rgba(var(--app-surface-alt-rgb) / 0.5);
 }
 
 .mg-stat--accent {
@@ -410,14 +410,14 @@ onMounted(() => {
   gap: 10px;
   padding: 14px 16px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--app-border-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.6);
+  border: 1px solid rgba(var(--app-border-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.6);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .mg-rule:hover {
-  border-color: rgba(var(--app-accent-rgb), 0.3);
-  background: rgba(var(--app-surface-rgb), 0.85);
+  border-color: rgba(var(--app-accent-rgb) / 0.3);
+  background: rgba(var(--app-surface-rgb) / 0.85);
 }
 
 .mg-rule--disabled {
@@ -466,8 +466,8 @@ onMounted(() => {
 .mg-rule__mode {
   padding: 1px 8px;
   border-radius: 4px;
-  background: rgba(var(--app-accent-rgb), 0.08);
-  border: 1px solid rgba(var(--app-accent-rgb), 0.15);
+  background: rgba(var(--app-accent-rgb) / 0.08);
+  border: 1px solid rgba(var(--app-accent-rgb) / 0.15);
   font-size: 11px;
   font-weight: 500;
   color: rgb(var(--app-accent-rgb));
@@ -520,7 +520,7 @@ onMounted(() => {
 .mg-rule__match code {
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(var(--app-surface-alt-rgb), 0.8);
+  background: rgba(var(--app-surface-alt-rgb) / 0.8);
   font-size: 12px;
   font-family: monospace;
   color: rgb(var(--app-text-strong-rgb));
@@ -576,7 +576,7 @@ onMounted(() => {
   font-weight: 600;
   color: rgb(var(--app-text-subtle-rgb));
   letter-spacing: 0.02em;
-  border-bottom: 1px solid rgba(var(--app-border-rgb), 0.2);
+  border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.2);
 }
 
 .mg-form__row {
