@@ -619,8 +619,19 @@ onUnmounted(() => {
   <div class="search-page">
     <div class="search-section" :class="{ 'has-results': keyword }">
       <!-- 搜索框 -->
-      <div class="search-box mb-6">
-        <div class="flex gap-4 mb-4">
+      <div class="search-box">
+        <div class="search-header">
+          <div class="logo-icon">
+            <el-icon><Search /></el-icon>
+          </div>
+          <h2 class="search-title">
+            全能搜索
+          </h2>
+          <p class="search-subtitle">
+            搜索抖音视频、用户、直播内容
+          </p>
+        </div>
+        <div class="search-type-selector mb-4">
           <el-radio-group
             v-model="activeType"
             size="large"
@@ -636,7 +647,7 @@ onUnmounted(() => {
             </el-radio-button>
           </el-radio-group>
         </div>
-        <div class="flex gap-4">
+        <div class="search-input-wrapper">
           <el-input
             v-model="keyword"
             placeholder="请输入搜索关键词"
@@ -659,9 +670,9 @@ onUnmounted(() => {
         </div>
 
         <!-- 搜索条件筛选（仅视频搜索时显示） -->
-        <div v-if="activeType === 'video'" class="flex gap-4 mt-4 flex-wrap items-center">
-          <div class="flex items-center gap-2">
-            <span class="text-gray-400 text-sm whitespace-nowrap">排序:</span>
+        <div v-if="activeType === 'video'" class="search-filters">
+          <div class="filter-item">
+            <span class="filter-label">排序:</span>
             <el-select v-model="searchFilters.sortType" placeholder="选择排序" size="default" style="width: 120px">
               <el-option
                 v-for="item in sortOptions"
@@ -671,8 +682,8 @@ onUnmounted(() => {
               />
             </el-select>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="text-gray-400 text-sm whitespace-nowrap">发布时间:</span>
+          <div class="filter-item">
+            <span class="filter-label">发布时间:</span>
             <el-select v-model="searchFilters.publishTime" placeholder="选择时间" size="default" style="width: 120px">
               <el-option
                 v-for="item in publishTimeOptions"
@@ -682,8 +693,8 @@ onUnmounted(() => {
               />
             </el-select>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="text-gray-400 text-sm whitespace-nowrap">视频时长:</span>
+          <div class="filter-item">
+            <span class="filter-label">视频时长:</span>
             <el-select v-model="searchFilters.filterDuration" placeholder="选择时长" size="default" style="width: 120px" clearable>
               <el-option
                 v-for="item in durationOptions"
@@ -693,8 +704,8 @@ onUnmounted(() => {
               />
             </el-select>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="text-gray-400 text-sm whitespace-nowrap">内容形式:</span>
+          <div class="filter-item">
+            <span class="filter-label">内容形式:</span>
             <el-select v-model="searchFilters.contentType" placeholder="选择类型" size="default" style="width: 120px" clearable>
               <el-option
                 v-for="item in contentTypeOptions"
@@ -1264,7 +1275,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding-top: 15vh;
+  padding-top: 12vh;
 }
 
 .search-section.has-results {
@@ -1272,10 +1283,88 @@ onUnmounted(() => {
 }
 
 .search-box {
-  padding: 18px;
-  border-radius: 16px;
-  border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
-  background: rgba(var(--app-surface-rgb) / 0.95);
-  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb) / 0.08);
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 44px 44px 32px;
+  background: linear-gradient(180deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.92));
+  backdrop-filter: blur(18px);
+  border-radius: 28px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.78);
+  box-shadow: 0 24px 60px rgba(var(--app-shadow-rgb) / 0.12);
+  max-width: 680px;
+  width: min(100%, 680px);
+  margin: 0 auto;
+}
+
+.search-header {
+  margin-bottom: 34px;
+}
+
+.logo-icon {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 22px;
+  background: linear-gradient(135deg, rgb(var(--primary-color-rgb)), rgb(var(--app-accent-soft-rgb)));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42px;
+  color: rgb(var(--utility-white-rgb));
+  box-shadow: 0 18px 34px rgba(var(--primary-color-rgb) / 0.28);
+}
+
+.search-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: rgb(var(--app-text-strong-rgb));
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+
+.search-subtitle {
+  font-size: 15px;
+  color: rgb(var(--app-text-muted-rgb));
+  line-height: 1.7;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.search-type-selector {
+  display: flex;
+  justify-content: center;
+}
+
+.search-input-wrapper {
+  display: flex;
+  gap: 12px;
+}
+
+.search-input-wrapper .el-input {
+  flex: 1;
+}
+
+.search-filters {
+  display: flex;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(var(--app-border-rgb) / 0.4);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: rgb(var(--app-text-muted-rgb));
+  white-space: nowrap;
 }
 </style>
