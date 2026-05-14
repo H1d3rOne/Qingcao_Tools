@@ -302,54 +302,56 @@ function formatNumber(num: number | undefined): string {
 
 <template>
   <div class="user-page">
-    <div class="page-header">
-      <div class="header-top">
-        <el-button
-          v-if="isFromOtherPage"
-          text
-          @click="goBack"
-          class="back-btn"
-        >
-          <el-icon class="mr-1"><ArrowLeft /></el-icon>
-          返回
-        </el-button>
-        <h2 class="page-title">
-          用户查询
-        </h2>
+    <div class="search-section" :class="{ 'has-results': userInfo }">
+      <div class="page-header">
+        <div class="header-top">
+          <el-button
+            v-if="isFromOtherPage"
+            text
+            @click="goBack"
+            class="back-btn"
+          >
+            <el-icon class="mr-1"><ArrowLeft /></el-icon>
+            返回
+          </el-button>
+          <h2 class="page-title">
+            用户查询
+          </h2>
+        </div>
+        <p class="page-desc">
+          输入抖音用户主页链接，获取用户详细信息和作品列表
+        </p>
       </div>
-      <p class="page-desc">
-        输入抖音用户主页链接，获取用户详细信息和作品列表
-      </p>
-    </div>
 
-    <!-- 搜索框 -->
-    <div class="search-box">
-      <div class="search-input-group">
-        <el-input
-          v-model="inputUrl"
-          placeholder="请输入用户主页链接"
-          size="large"
-          clearable
-          @keyup.enter="handleSearch"
-        >
-          <template #prefix>
-            <el-icon><User /></el-icon>
-          </template>
-        </el-input>
-        <el-button
-          type="primary"
-          size="large"
-          :loading="loading"
-          @click="handleSearch"
-        >
-          查询
-        </el-button>
-        <el-button
-          size="large"
-          @click="handlePaste"
-        >
-          <el-icon><DocumentCopy /></el-icon>
-        </el-button>
+      <!-- 搜索框 -->
+      <div class="search-box">
+        <div class="search-input-group">
+          <el-input
+            v-model="inputUrl"
+            placeholder="请输入用户主页链接"
+            size="large"
+            clearable
+            @keyup.enter="handleSearch"
+          >
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
+          <el-button
+            type="primary"
+            size="large"
+            :loading="loading"
+            @click="handleSearch"
+          >
+            查询
+          </el-button>
+          <el-button
+            size="large"
+            @click="handlePaste"
+          >
+            <el-icon><DocumentCopy /></el-icon>
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -804,6 +806,20 @@ function formatNumber(num: number | undefined): string {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 100%;
+}
+
+.search-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  justify-content: center;
+}
+
+.search-section.has-results {
+  flex: none;
+  justify-content: flex-start;
 }
 
 .page-header {

@@ -524,6 +524,7 @@ function formatTime(timestamp: number) {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  min-height: 100%;
 }
 
 .search-bar {
@@ -893,6 +894,7 @@ function formatTime(timestamp: number) {
   justify-content: center;
   padding: 80px 20px;
   color: rgb(var(--app-text-muted-rgb));
+  margin: auto 0;
 }
 
 .empty-icon {

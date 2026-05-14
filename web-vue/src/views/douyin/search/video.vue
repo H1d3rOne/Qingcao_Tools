@@ -617,100 +617,101 @@ onUnmounted(() => {
 
 <template>
   <div class="search-page">
-    <!-- 搜索框 -->
-    <div class="search-box mb-6">
-      <div class="flex gap-4 mb-4">
-        <el-radio-group
-          v-model="activeType"
-          size="large"
-        >
-          <el-radio-button value="video">
-            作品
-          </el-radio-button>
-          <el-radio-button value="user">
-            用户
-          </el-radio-button>
-          <el-radio-button value="live">
-            直播
-          </el-radio-button>
-        </el-radio-group>
-      </div>
-      <div class="flex gap-4">
-        <el-input
-          v-model="keyword"
-          placeholder="请输入搜索关键词"
-          size="large"
-          clearable
-          @keyup.enter="handleSearch"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <el-button
-          type="primary"
-          size="large"
-          :loading="loading"
-          @click="handleSearch"
-        >
-          搜索
-        </el-button>
+    <div class="search-section" :class="{ 'has-results': keyword }">
+      <!-- 搜索框 -->
+      <div class="search-box mb-6">
+        <div class="flex gap-4 mb-4">
+          <el-radio-group
+            v-model="activeType"
+            size="large"
+          >
+            <el-radio-button value="video">
+              作品
+            </el-radio-button>
+            <el-radio-button value="user">
+              用户
+            </el-radio-button>
+            <el-radio-button value="live">
+              直播
+            </el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="flex gap-4">
+          <el-input
+            v-model="keyword"
+            placeholder="请输入搜索关键词"
+            size="large"
+            clearable
+            @keyup.enter="handleSearch"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          <el-button
+            type="primary"
+            size="large"
+            :loading="loading"
+            @click="handleSearch"
+          >
+            搜索
+          </el-button>
+        </div>
+
+        <!-- 搜索条件筛选（仅视频搜索时显示） -->
+        <div v-if="activeType === 'video'" class="flex gap-4 mt-4 flex-wrap items-center">
+          <div class="flex items-center gap-2">
+            <span class="text-gray-400 text-sm whitespace-nowrap">排序:</span>
+            <el-select v-model="searchFilters.sortType" placeholder="选择排序" size="default" style="width: 120px">
+              <el-option
+                v-for="item in sortOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-400 text-sm whitespace-nowrap">发布时间:</span>
+            <el-select v-model="searchFilters.publishTime" placeholder="选择时间" size="default" style="width: 120px">
+              <el-option
+                v-for="item in publishTimeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-400 text-sm whitespace-nowrap">视频时长:</span>
+            <el-select v-model="searchFilters.filterDuration" placeholder="选择时长" size="default" style="width: 120px" clearable>
+              <el-option
+                v-for="item in durationOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-400 text-sm whitespace-nowrap">内容形式:</span>
+            <el-select v-model="searchFilters.contentType" placeholder="选择类型" size="default" style="width: 120px" clearable>
+              <el-option
+                v-for="item in contentTypeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
+        </div>
       </div>
 
-      <!-- 搜索条件筛选（仅视频搜索时显示） -->
-      <div v-if="activeType === 'video'" class="flex gap-4 mt-4 flex-wrap items-center">
-        <div class="flex items-center gap-2">
-          <span class="text-gray-400 text-sm whitespace-nowrap">排序:</span>
-          <el-select v-model="searchFilters.sortType" placeholder="选择排序" size="default" style="width: 120px">
-            <el-option
-              v-for="item in sortOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-gray-400 text-sm whitespace-nowrap">发布时间:</span>
-          <el-select v-model="searchFilters.publishTime" placeholder="选择时间" size="default" style="width: 120px">
-            <el-option
-              v-for="item in publishTimeOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-gray-400 text-sm whitespace-nowrap">视频时长:</span>
-          <el-select v-model="searchFilters.filterDuration" placeholder="选择时长" size="default" style="width: 120px" clearable>
-            <el-option
-              v-for="item in durationOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-gray-400 text-sm whitespace-nowrap">内容形式:</span>
-          <el-select v-model="searchFilters.contentType" placeholder="选择类型" size="default" style="width: 120px" clearable>
-            <el-option
-              v-for="item in contentTypeOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </div>
-      </div>
-    </div>
-
-    <!-- 搜索历史 -->
-    <div
-      v-if="!keyword && searchStore.history.length > 0"
-      class="mb-6"
-    >
+      <!-- 搜索历史 -->
+      <div
+        v-if="!keyword && searchStore.history.length > 0"
+        class="mb-6"
+      >
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-white font-medium">
           搜索历史
@@ -736,6 +737,7 @@ onUnmounted(() => {
           {{ word }}
         </el-tag>
       </div>
+    </div>
     </div>
 
     <!-- 搜索结果 -->
@@ -1246,3 +1248,36 @@ onUnmounted(() => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.search-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 100%;
+}
+
+.search-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  justify-content: center;
+}
+
+.search-section.has-results {
+  flex: none;
+  justify-content: flex-start;
+}
+
+.search-box {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1.5px solid rgba(var(--app-border-rgb) / 0.7);
+  background: rgba(var(--app-surface-rgb) / 0.95);
+  box-shadow: 0 8px 20px rgba(var(--app-shadow-rgb) / 0.08);
+}
+</style>
