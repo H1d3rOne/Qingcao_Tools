@@ -760,7 +760,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="wechat-page max-w-6xl mx-auto space-y-4">
+  <div class="wechat-page max-w-6xl mx-auto space-y-2">
     <el-tabs
       v-model="activeTab"
       class="page-tabs"
@@ -1724,9 +1724,13 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
+:deep(.page-tabs > .el-tabs__content) {
+  padding: 0;
+}
+
 :deep(.page-tabs > .el-tabs__header) {
-  margin: 0 0 18px;
-  padding: 12px 16px 0;
+  margin: 0;
+  padding: 10px 16px 0;
   border-radius: 16px;
   border: 1px solid rgba(var(--app-border-rgb) / 0.4);
   background: rgba(var(--app-surface-rgb) / 0.96);
@@ -1894,7 +1898,7 @@ onBeforeUnmount(() => {
 }
 
 .wechat-panel {
-  padding: 24px;
+  padding: 16px 20px;
   border-radius: 14px;
   background: rgba(var(--app-surface-rgb) / 0.92);
   border: 1px solid rgba(var(--app-border-rgb) / 0.7);
