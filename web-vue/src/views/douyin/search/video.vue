@@ -2,7 +2,7 @@
 import { ref, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Star, VideoPlay, ChatDotRound, Share, Collection, View, Picture, ArrowLeft, ArrowRight, Mute, Bell, Download, Check, Finished } from '@element-plus/icons-vue'
-import { searchVideos, searchUsers, searchLive, downloadUserWork } from '@/api'
+import { searchVideos, searchVideoSearch, searchUsers, searchLive, downloadUserWork } from '@/api'
 import type { SearchVideo, SearchUser, SearchLive } from '@/api/modules/search'
 import { useNotification } from '@/composables'
 import { useSearchStore } from '@/stores'
@@ -19,7 +19,7 @@ const { error, success } = useNotification()
 const searchStore = useSearchStore()
 
 const keyword = ref('')
-const activeType = ref('video')
+const activeType = ref('general')
 const loading = ref(false)
 
 // 搜索条件
@@ -574,7 +574,7 @@ async function handleSearch() {
   loading.value = true
 
   try {
-    if (activeType.value === 'video') {
+    if (activeType.value === 'general') {
       const res = await searchVideos({
         keyword: keyword.value,
         count: 50,
@@ -582,6 +582,15 @@ async function handleSearch() {
         publish_time: searchFilters.value.publishTime,
         filter_duration: searchFilters.value.filterDuration,
         content_type: searchFilters.value.contentType
+      })
+      videoResults.value = res.data.data || []
+    } else if (activeType.value === 'video') {
+      const res = await searchVideoSearch({
+        keyword: keyword.value,
+        count: 50,
+        sort_type: searchFilters.value.sortType,
+        publish_time: searchFilters.value.publishTime,
+        filter_duration: searchFilters.value.filterDuration
       })
       videoResults.value = res.data.data || []
     } else if (activeType.value === 'user') {
@@ -636,8 +645,11 @@ onUnmounted(() => {
             v-model="activeType"
             size="large"
           >
+            <el-radio-button value="general">
+              综合
+            </el-radio-button>
             <el-radio-button value="video">
-              作品
+              视频
             </el-radio-button>
             <el-radio-button value="user">
               用户
@@ -669,8 +681,8 @@ onUnmounted(() => {
           </el-button>
         </div>
 
-        <!-- 搜索条件筛选（仅视频搜索时显示） -->
-        <div v-if="activeType === 'video'" class="search-filters">
+        <!-- 搜索条件筛选（综合和视频搜索时显示） -->
+        <div v-if="activeType === 'general' || activeType === 'video'" class="search-filters">
           <div class="filter-item">
             <span class="filter-label">排序</span>
             <el-select v-model="searchFilters.sortType" placeholder="选择排序" size="default">
@@ -753,9 +765,9 @@ onUnmounted(() => {
 
     <!-- 搜索结果 -->
     <template v-if="keyword">
-      <!-- 视频结果 -->
+      <!-- 视频结果（综合和视频共用） -->
       <div
-        v-if="activeType === 'video'"
+        v-if="activeType === 'general' || activeType === 'video'"
         class="video-results"
       >
         <!-- 批量操作工具栏 -->
