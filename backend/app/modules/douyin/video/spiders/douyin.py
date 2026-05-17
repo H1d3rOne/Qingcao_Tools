@@ -2,11 +2,14 @@
 抖音爬虫模块 - 视频相关
 """
 import json
+import asyncio
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlencode
 
 from loguru import logger
 import httpx
+import requests as req_lib
+req_lib.packages.urllib3.disable_warnings()
 
 from app.modules.douyin.common.base import BaseSpider
 from app.modules.douyin.common.auth import DouyinAuth
@@ -32,6 +35,19 @@ class DouyinSpider(BaseSpider):
             header.set_referer(referer)
         return header.get()
     
+    async def _search_get(self, url: str, params: dict, headers: dict) -> dict:
+        """使用 requests 库发送搜索请求（与 DouYin_Spider 一致），避免 httpx TLS 指纹差异"""
+        def _do_request():
+            resp = req_lib.get(
+                url,
+                headers=headers,
+                cookies=self.auth.cookie,
+                params=params,
+                verify=False
+            )
+            return json.loads(resp.text)
+        return await asyncio.to_thread(_do_request)
+
     def _safe_json_parse(self, response: httpx.Response) -> dict:
         """安全解析 JSON 响应"""
         try:
@@ -442,14 +458,10 @@ class DouyinSpider(BaseSpider):
         while len(works) < limit:
             refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
             
-            # 构建 filter_selected JSON
-            filter_selected = {
-                "sort_type": sort_type,
-                "publish_time": publish_time,
-                "filter_duration": filter_duration,
-                "search_range": "",
-                "content_type": content_type
-            }
+            # 构建 filter_selected - 使用原脚本的字符串格式（无空格）
+            filter_selected = ('{"sort_type":"%s","publish_time":"%s","filter_duration":"%s",'
+                               '"search_range":"%s","content_type":"%s"}') % (
+                               sort_type, publish_time, filter_duration, "", content_type)
             
             # 构建参数 - 严格按照原脚本顺序
             params = Params()
@@ -458,7 +470,7 @@ class DouyinSpider(BaseSpider):
             params.add_param("channel", "channel_pc_web")
             params.add_param("search_channel", "aweme_general")
             params.add_param("enable_history", "1")
-            params.add_param("filter_selected", json.dumps(filter_selected, ensure_ascii=False))
+            params.add_param("filter_selected", filter_selected)
             params.add_param("keyword", keyword)
             params.add_param("search_source", "tab_search")
             params.add_param("query_correct_type", "1")
@@ -497,11 +509,10 @@ class DouyinSpider(BaseSpider):
             # 构建请求头
             headers = HeaderBuilder.build(HeaderType.GET)
             headers.set_referer(refer)
-            
-            logger.info(f"搜索作品请求: keyword={keyword}, offset={offset}, filters={filter_selected}")
-            
-            response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
-            data = self._safe_json_parse(response)
+
+            logger.info(f"搜索作品请求: keyword={keyword}, offset={offset}")
+
+            data = await self._search_get(f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get())
             
             logger.info(f"搜索响应: status_code={data.get('status_code')}, has_more={data.get('has_more')}")
             
