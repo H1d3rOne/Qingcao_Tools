@@ -543,7 +543,104 @@ class DouyinSpider(BaseSpider):
                 break
         
         return works[:limit]
-    
+
+    async def search_videos(
+        self,
+        keyword: str,
+        limit: int = 20,
+        sort_type: str = "0",
+        publish_time: str = "0",
+        filter_duration: str = "",
+        search_range: str = "0"
+    ) -> List[dict]:
+        """搜索视频频道 - /aweme/v1/web/search/item/"""
+        import uuid
+        import urllib.parse
+
+        api = "/aweme/v1/web/search/item/"
+
+        works = []
+        offset = "0"
+        search_id = ""
+
+        while len(works) < limit:
+            refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=video"
+
+            params = Params()
+            params.add_param("device_platform", "webapp")
+            params.add_param("aid", "6383")
+            params.add_param("channel", "channel_pc_web")
+            params.add_param("search_channel", "aweme_video_web")
+            params.add_param("enable_history", "1")
+            params.add_param("sort_type", sort_type)
+            params.add_param("publish_time", publish_time)
+            params.add_param("filter_duration", filter_duration)
+            params.add_param("search_range", search_range)
+            params.add_param("keyword", keyword)
+            params.add_param("search_source", "normal_search")
+            params.add_param("query_correct_type", "1")
+            params.add_param("is_filter_search", "1")
+            params.add_param("from_group_id", "")
+            params.add_param("offset", offset)
+            params.add_param("count", "25")
+            params.add_param("need_filter_settings", "1" if offset == "0" else "0")
+            if search_id:
+                params.add_param("search_id", search_id)
+            params.add_param("list_type", "single")
+            params.add_param("update_version_code", "170400")
+            params.add_param("pc_client_type", "1")
+            params.add_param("version_code", "170400")
+            params.add_param("version_name", "17.4.0")
+            params.add_param("cookie_enabled", "true")
+            params.add_param("screen_width", "1707")
+            params.add_param("screen_height", "960")
+            params.add_param("browser_language", "zh-CN")
+            params.add_param("browser_platform", "Win32")
+            params.add_param("browser_name", "Edge")
+            params.add_param("browser_version", "125.0.0.0")
+            params.add_param("browser_online", "true")
+            params.add_param("engine_name", "Blink")
+            params.add_param("engine_version", "125.0.0.0")
+            params.add_param("os_name", "Windows")
+            params.add_param("os_version", "10")
+            params.add_param("cpu_core_num", "32")
+            params.add_param("device_memory", "8")
+            params.add_param("platform", "PC")
+            params.add_param("downlink", "10")
+            params.add_param("effective_type", "4g")
+            params.add_param("round_trip_time", "50")
+            params.with_web_id(self.auth, refer)
+            params.add_param("msToken", self.auth.msToken)
+            params.with_a_bogus()
+
+            headers = HeaderBuilder.build(HeaderType.GET)
+            headers.set_referer(refer)
+
+            logger.info(f"搜索视频请求: keyword={keyword}, offset={offset}")
+
+            data = await self._search_get(f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get())
+
+            search_nil_info = data.get("search_nil_info", {})
+            if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
+                raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+
+            search_id = data.get("log_pb", {}).get("impr_id", search_id)
+
+            items = data.get("data", [])
+            if not items:
+                break
+
+            for item in items:
+                aweme_info = item.get("aweme_info", item)
+                if aweme_info:
+                    works.append(self._parse_work_info(aweme_info))
+
+            offset = str(int(offset) + len(items))
+            if data.get("has_more") != 1:
+                break
+
+        return works[:limit]
+
     async def search_users(self, keyword: str, limit: int = 20) -> List[dict]:
         """搜索用户 - 参照原脚本API"""
         import uuid

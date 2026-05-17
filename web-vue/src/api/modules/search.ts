@@ -113,6 +113,31 @@ export function searchVideos(params: {
   }))
 }
 
+// 视频搜索
+export function searchVideoSearch(params: {
+  keyword: string
+  limit?: number
+  sort_type?: string
+  publish_time?: string
+  filter_duration?: string
+  search_range?: string
+  cursor?: number
+  count?: number
+}) {
+  const { keyword, cursor, count, ...rest } = params
+  return request.post<ApiResponse<SearchResult<SearchVideo>>>('/douyin/search/video', {
+    keyword,
+    limit: count || 20,
+    ...rest
+  }).then(res => ({
+    data: {
+      data: res.data?.items || [],
+      has_more: false,
+      cursor: 0
+    }
+  }))
+}
+
 // 搜索用户
 export function searchUsers(params: { keyword: string; limit?: number; cursor?: number; count?: number }) {
   const { keyword, cursor, count } = params
