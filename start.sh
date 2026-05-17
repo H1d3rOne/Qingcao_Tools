@@ -13,7 +13,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 # 停止已有服务
 echo "停止已有服务..."
-lsof -ti:5000 | xargs kill -9 2>/dev/null || true
+lsof -ti:3121 | xargs kill -9 2>/dev/null || true
 lsof -ti:3120 | xargs kill -9 2>/dev/null || true
 sleep 1
 
@@ -96,7 +96,7 @@ fi
 
 # 后台启动后端
 : > /tmp/qingcao-backend.log
-nohup "$PYTHON_BIN" -m uvicorn app.main:app --host 0.0.0.0 --port 5000 > /tmp/qingcao-backend.log 2>&1 &
+nohup "$PYTHON_BIN" -m uvicorn app.main:app --host 0.0.0.0 --port 3121 > /tmp/qingcao-backend.log 2>&1 &
 BACKEND_PID=$!
 
 # 启动前端
@@ -140,7 +140,7 @@ import sys
 from urllib.request import urlopen
 
 try:
-    with urlopen("http://127.0.0.1:5000/health", timeout=1) as resp:
+    with urlopen("http://127.0.0.1:3121/health", timeout=1) as resp:
         sys.exit(0 if resp.status == 200 else 1)
 except Exception:
     sys.exit(1)
@@ -166,9 +166,9 @@ echo "  ✅ 服务启动完成"
 echo "========================================"
 echo ""
 echo "  🌐 前端地址: http://localhost:3120"
-echo "  🔧 后端API:  http://localhost:5000"
-echo "  📚 API文档:  http://localhost:5000/docs"
-echo "  📖 ReDoc:    http://localhost:5000/redoc"
+echo "  🔧 后端API:  http://localhost:3121"
+echo "  📚 API文档:  http://localhost:3121/docs"
+echo "  📖 ReDoc:    http://localhost:3121/redoc"
 echo ""
 echo "========================================"
 echo "  📝 日志文件"
