@@ -4,7 +4,7 @@
 import asyncio
 import contextlib
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from app.api.deps import get_xianyu_service
@@ -17,7 +17,9 @@ from app.modules.xianyu import (
     XianyuAuthLogoutResponse,
     XianyuAuthStatusResponse,
     XianyuChatAiConfig,
-    XianyuChatAiConfigUpdateRequest,
+    XianyuChatAiProvider,
+    XianyuChatAiProviderCreateRequest,
+    XianyuChatAiProviderUpdateRequest,
     XianyuChatAiSessionState,
     XianyuChatAiSessionUpdateRequest,
     XianyuChatAiTestRequest,
@@ -448,12 +450,115 @@ async def get_xianyu_chat_ai_config(
     return ApiResponse(data=service.get_chat_ai_config())
 
 
-@router.post("/chat/ai/config", response_model=ApiResponse[XianyuChatAiConfig])
-async def update_xianyu_chat_ai_config(
-    request: XianyuChatAiConfigUpdateRequest,
+@router.post("/chat/ai/enabled", response_model=ApiResponse[XianyuChatAiConfig])
+async def set_xianyu_chat_ai_enabled(
+    enabled: bool = Query(..., description="是否启用 AI 总开关"),
     service: XianyuService = Depends(get_xianyu_service),
 ):
-    return ApiResponse(data=service.update_chat_ai_config(request))
+    return ApiResponse(data=service.set_chat_ai_enabled(enabled))
+
+
+@router.post("/chat/ai/keepalive-interval", response_model=ApiResponse[XianyuChatAiConfig])
+async def set_xianyu_chat_keepalive_interval(
+    seconds: int = Query(..., ge=30, le=3600, description="聊天保活间隔秒数"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    return ApiResponse(data=service.set_chat_keepalive_interval(seconds))
+
+
+@router.post("/chat/ai/providers/test", response_model=ApiResponse[XianyuChatAiTestResponse])
+async def test_xianyu_chat_ai_provider(
+    request: XianyuChatAiProviderCreateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """测试 AI 供应商连通性"""
+    try:
+        api_key = request.api_key
+        if not api_key and request.provider_id:
+            saved_key = service.chat_ai_store.load_secret_api_key(request.provider_id)
+            if saved_key:
+                api_key = saved_key
+        reply = await service.test_chat_ai_provider(
+            base_url=request.base_url,
+            api_key=api_key,
+            model=request.get_model(),
+            system_prompt=request.system_prompt,
+        )
+        return ApiResponse(data=XianyuChatAiTestResponse(reply=reply))
+    except Exception as exc:
+        logger.error(f"测试 AI 供应商失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/chat/ai/providers", response_model=ApiResponse[XianyuChatAiProvider])
+async def create_xianyu_chat_ai_provider(
+    request: XianyuChatAiProviderCreateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """创建 AI 供应商"""
+    try:
+        return ApiResponse(data=service.create_chat_ai_provider(request))
+    except Exception as exc:
+        logger.error(f"创建 AI 供应商失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.patch("/chat/ai/providers/{provider_id}", response_model=ApiResponse[XianyuChatAiProvider])
+async def update_xianyu_chat_ai_provider(
+    provider_id: str,
+    request: XianyuChatAiProviderUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """更新 AI 供应商"""
+    result = service.update_chat_ai_provider(provider_id, request)
+    if not result:
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data=result)
+
+
+@router.delete("/chat/ai/providers/{provider_id}", response_model=ApiResponse[dict])
+async def delete_xianyu_chat_ai_provider(
+    provider_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """删除 AI 供应商"""
+    if not service.delete_chat_ai_provider(provider_id):
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data={"deleted": True})
+
+
+@router.post("/chat/ai/providers/{provider_id}/active", response_model=ApiResponse[dict])
+async def set_active_xianyu_chat_ai_provider(
+    provider_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """切换激活的 AI 供应商"""
+    if not service.set_active_chat_ai_provider(provider_id):
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data={"active": provider_id})
+
+
+@router.get("/chat/ai/providers/{provider_id}/api-key", response_model=ApiResponse[dict])
+async def get_xianyu_chat_ai_provider_api_key(
+    provider_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """读取 AI 供应商的 API Key（用于编辑回填）"""
+    api_key = service.chat_ai_store.load_secret_api_key(provider_id)
+    return ApiResponse(data={"api_key": api_key})
+
+
+@router.post("/chat/ai/providers/{provider_id}/active-model", response_model=ApiResponse[XianyuChatAiProvider])
+async def set_xianyu_chat_ai_provider_active_model(
+    provider_id: str,
+    model: str = Query(..., description="模型名称"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """更新 AI 供应商当前激活模型"""
+    result = service.update_chat_ai_provider(provider_id, XianyuChatAiProviderUpdateRequest(active_model=model))
+    if not result:
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data=result)
 
 
 @router.get("/chat/ai/sessions", response_model=ApiResponse[list[XianyuChatAiSessionState]])

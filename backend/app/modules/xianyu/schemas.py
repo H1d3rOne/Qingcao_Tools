@@ -392,25 +392,55 @@ class XianyuPublishSubmitResult(BaseModel):
     message: str = Field("", description="结果消息")
 
 
+class XianyuChatAiProvider(BaseModel):
+    """闲鱼聊天 AI 供应商配置"""
+    id: str = Field(..., description="供应商 ID")
+    name: str = Field(..., description="供应商名称")
+    base_url: str = Field(..., description="OpenAI 兼容接口根地址")
+    models: List[str] = Field(default_factory=list, description="模型列表")
+    active_model: str = Field("", description="当前使用的模型")
+    system_prompt: str = Field("", description="系统提示词")
+    api_key_configured: bool = Field(False, description="是否已配置 API Key")
+    api_key_masked: str = Field("", description="脱敏后的 API Key")
+    is_active: bool = Field(False, description="是否为当前激活供应商")
+
+    @property
+    def model(self) -> str:
+        return self.active_model or (self.models[0] if self.models else "")
+
+
+class XianyuChatAiProviderCreateRequest(BaseModel):
+    """闲鱼聊天 AI 供应商创建请求"""
+    model_config = {"populate_by_name": True}
+
+    name: str = Field(..., min_length=1, max_length=50, description="供应商名称")
+    base_url: str = Field(..., min_length=1, description="OpenAI 兼容接口根地址")
+    api_key: str = Field("", description="API Key")
+    models: List[str] = Field(default_factory=list, description="模型列表")
+    active_model: str = Field("", description="当前使用的模型")
+    system_prompt: str = Field("", description="系统提示词")
+    provider_id: str = Field("", description="供应商 ID，编辑时传入用于回查已保存的 API Key")
+
+    def get_model(self) -> str:
+        return self.active_model or (self.models[0] if self.models else "")
+
+
+class XianyuChatAiProviderUpdateRequest(BaseModel):
+    """闲鱼聊天 AI 供应商更新请求"""
+    name: Optional[str] = Field(None, min_length=1, max_length=50, description="供应商名称")
+    base_url: Optional[str] = Field(None, min_length=1, description="OpenAI 兼容接口根地址")
+    api_key: Optional[str] = Field(None, description="新的 API Key，None 表示保留旧值")
+    models: Optional[List[str]] = Field(None, description="模型列表")
+    active_model: Optional[str] = Field(None, description="当前使用的模型")
+    system_prompt: Optional[str] = Field(None, description="系统提示词")
+
+
 class XianyuChatAiConfig(BaseModel):
     """闲鱼聊天 AI 配置"""
     enabled: bool = Field(False, description="是否启用 AI 总开关")
-    base_url: str = Field("https://api.openai.com/v1", description="OpenAI 兼容接口根地址")
-    model: str = Field("gpt-4.1-mini", description="模型名称")
-    system_prompt: str = Field("你是闲鱼客服助手，回复要简洁、礼貌、像真人卖家。", description="系统提示词")
-    temperature: float = Field(0.3, ge=0, le=2, description="采样温度")
-    api_key_configured: bool = Field(False, description="是否已配置 API Key")
-    api_key_masked: str = Field("", description="脱敏后的 API Key")
-
-
-class XianyuChatAiConfigUpdateRequest(BaseModel):
-    """闲鱼聊天 AI 配置更新请求"""
-    enabled: bool = Field(False, description="是否启用 AI 总开关")
-    base_url: str = Field(..., min_length=1, description="OpenAI 兼容接口根地址")
-    api_key: str = Field("", description="新的 API Key，可为空表示保留旧值")
-    model: str = Field(..., min_length=1, description="模型名称")
-    system_prompt: str = Field(..., min_length=1, description="系统提示词")
-    temperature: float = Field(0.3, ge=0, le=2, description="采样温度")
+    chat_keepalive_interval_seconds: int = Field(180, ge=30, le=3600, description="聊天保活间隔秒数")
+    providers: List[XianyuChatAiProvider] = Field(default_factory=list, description="供应商列表")
+    active_provider_id: str = Field("", description="当前激活的供应商 ID")
 
 
 class XianyuChatAiSessionState(BaseModel):

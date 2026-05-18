@@ -32,7 +32,9 @@ from app.modules.xianyu.item_store import XianyuItemStore
 from app.modules.xianyu.monitor_store import XianyuMonitorStore
 from app.modules.xianyu.schemas import (
     XianyuChatAiConfig,
-    XianyuChatAiConfigUpdateRequest,
+    XianyuChatAiProvider,
+    XianyuChatAiProviderCreateRequest,
+    XianyuChatAiProviderUpdateRequest,
     XianyuChatClearResult,
     XianyuChatConversation,
     XianyuChatConversationPage,
@@ -346,6 +348,7 @@ class XianyuService:
         self._delivery_store: XianyuDeliveryStore | None = None
         self._delivery_runtime: XianyuDeliveryRuntime | None = None
         self._delivery_runtime_running_state: bool = False
+        self._temp_provider_api_key: str | None = None
         self._monitor_runner_task: asyncio.Task | None = None
         self._auth_login: XianyuAPILogin | None = None
         self._current_qr_payload: dict[str, str] | None = None
@@ -411,12 +414,41 @@ class XianyuService:
     def get_chat_ai_config(self) -> XianyuChatAiConfig:
         return self.chat_ai_store.load_config()
 
-    def update_chat_ai_config(self, request: XianyuChatAiConfigUpdateRequest) -> XianyuChatAiConfig:
-        return self.chat_ai_store.save_config(request)
+    def set_chat_ai_enabled(self, enabled: bool) -> XianyuChatAiConfig:
+        config = self.chat_ai_store.set_enabled(enabled)
+        self._sync_chat_ai_listener_state()
+        return config
+
+    def set_chat_keepalive_interval(self, seconds: int) -> XianyuChatAiConfig:
+        config = self.chat_ai_store.set_chat_keepalive_interval_seconds(seconds)
+        self._sync_chat_ai_listener_state()
+        return config
+
+    def create_chat_ai_provider(self, request: XianyuChatAiProviderCreateRequest) -> XianyuChatAiProvider:
+        provider = self.chat_ai_store.create_provider(request)
+        self._sync_chat_ai_listener_state()
+        return provider
+
+    def update_chat_ai_provider(self, provider_id: str, request: XianyuChatAiProviderUpdateRequest) -> XianyuChatAiProvider | None:
+        provider = self.chat_ai_store.update_provider(provider_id, request)
+        self._sync_chat_ai_listener_state()
+        return provider
+
+    def delete_chat_ai_provider(self, provider_id: str) -> bool:
+        deleted = self.chat_ai_store.delete_provider(provider_id)
+        self._sync_chat_ai_listener_state()
+        return deleted
+
+    def set_active_chat_ai_provider(self, provider_id: str) -> bool:
+        activated = self.chat_ai_store.set_active_provider(provider_id)
+        self._sync_chat_ai_listener_state()
+        return activated
 
     def _load_secret_chat_ai_api_key(self) -> str:
-        return self.chat_ai_store.load_secret_api_key().strip()
-
+        provider = self.chat_ai_store.get_active_provider()
+        if not provider:
+            return ""
+        return self.chat_ai_store.load_secret_api_key(provider.id).strip()
 
     def list_chat_ai_session_states(self, cids: list[str]) -> list[Any]:
         return self.chat_ai_store.list_session_states(cids)
@@ -425,9 +457,44 @@ class XianyuService:
         return self.chat_ai_store.set_session_enabled(cid, enabled)
 
     async def test_chat_ai_reply(self, text: str, cid: str = "") -> str:
-        config = self.get_chat_ai_config()
-        messages = self._build_chat_ai_messages(config=config, text=text, cid=cid)
-        return await self._request_chat_ai_reply(config=config, messages=messages)
+        provider = self.chat_ai_store.get_active_provider()
+        if not provider:
+            raise ValueError("尚未配置 AI 供应商")
+        messages = self._build_chat_ai_messages(provider=provider, text=text, cid=cid)
+        return await self._request_chat_ai_reply(provider=provider, messages=messages)
+
+    async def test_chat_ai_provider(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str,
+        system_prompt: str,
+        text: str = "你好，请简单介绍一下你自己。",
+    ) -> str:
+        if not api_key:
+            raise ValueError("API Key 不能为空")
+        if not base_url:
+            raise ValueError("Base URL 不能为空")
+        if not model:
+            raise ValueError("模型名称不能为空")
+
+        temp_provider = XianyuChatAiProvider(
+            id="test",
+            name="测试供应商",
+            base_url=base_url.rstrip("/"),
+            models=[model],
+            active_model=model,
+            system_prompt=system_prompt or "你是闲鱼客服助手，回复要简洁、礼貌、像真人卖家。",
+            api_key_configured=True,
+            api_key_masked="",
+            is_active=True,
+        )
+        self._temp_provider_api_key = api_key
+        try:
+            messages = self._build_chat_ai_messages(provider=temp_provider, text=text, cid="")
+            return await self._request_chat_ai_reply(provider=temp_provider, messages=messages)
+        finally:
+            self._temp_provider_api_key = None
 
     def _build_qrcode_data_url(self, content: str) -> str | None:
         try:
@@ -1274,18 +1341,21 @@ class XianyuService:
     async def _request_chat_ai_reply(
         self,
         *,
-        config: XianyuChatAiConfig,
+        provider: XianyuChatAiProvider,
         messages: list[dict[str, str]],
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> str:
-        api_key = self._load_secret_chat_ai_api_key()
+        # 测试场景：使用临时 api_key（不持久化）
+        if self._temp_provider_api_key:
+            api_key = self._temp_provider_api_key
+        else:
+            api_key = self.chat_ai_store.load_secret_api_key(provider.id).strip()
         if not api_key:
             raise ValueError("AI API Key 未配置")
 
-        base_url = config.base_url.rstrip("/")
+        base_url = provider.base_url.rstrip("/")
         payload = {
-            "model": config.model,
-            "temperature": config.temperature,
+            "model": provider.model,
             "messages": messages,
         }
         headers = {
@@ -1339,10 +1409,11 @@ class XianyuService:
         self._processed_ai_message_set.add(key)
         return True
 
-    def _build_chat_ai_messages(self, *, config: XianyuChatAiConfig, text: str, cid: str = "") -> list[dict[str, str]]:
+    def _build_chat_ai_messages(self, *, provider: XianyuChatAiProvider, text: str, cid: str = "") -> list[dict[str, str]]:
         content = text if not cid else f"会话 CID：{cid}\n买家消息：{text}"
+        system_prompt = provider.system_prompt or "你是闲鱼客服助手，回复要简洁、礼貌、像真人卖家。"
         return [
-            {"role": "system", "content": config.system_prompt},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": content},
         ]
 
@@ -1352,6 +1423,10 @@ class XianyuService:
 
         config = self.get_chat_ai_config()
         if not config.enabled:
+            return None
+
+        provider = self.chat_ai_store.get_active_provider()
+        if not provider:
             return None
 
         current_user_id = profile.main_user_id or profile.user_id
@@ -1366,8 +1441,8 @@ class XianyuService:
             if not self._remember_ai_message_key(candidate["message_key"]):
                 continue
 
-            messages = self._build_chat_ai_messages(config=config, text=candidate["text"], cid=candidate["cid"])
-            reply = await self._request_chat_ai_reply(config=config, messages=messages)
+            messages = self._build_chat_ai_messages(provider=provider, text=candidate["text"], cid=candidate["cid"])
+            reply = await self._request_chat_ai_reply(provider=provider, messages=messages)
             await self.send_chat_text(cid=candidate["cid"], text=reply)
             return reply
 
