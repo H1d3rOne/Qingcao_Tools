@@ -41,8 +41,10 @@ class WorkService:
         work = await self.repo.create_or_update(db_data)
         
         # 返回完整数据（包含 video_qualities）
+        response_data = {k: v for k, v in work_data.items() if k in db_fields}
+        response_data['video_qualities'] = work_data.get('video_qualities')
         return WorkResponse(
-            **{k: v for k, v in work_data.items() if k in db_fields},
+            **response_data,
             id=work.id,
             created_at=work.created_at,
             updated_at=work.updated_at,

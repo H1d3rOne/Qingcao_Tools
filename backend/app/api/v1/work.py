@@ -12,6 +12,7 @@ from app.modules.douyin.video.schemas.work import (
     WorkDownloadRequest, WorkResponse, DownloadResult
 )
 from app.modules.douyin.video.services.work_service import WorkService
+from app.modules.douyin.video.services.stats_service import stats_tracker
 from app.api.deps import get_work_service
 
 router = APIRouter(prefix="/work", tags=["作品"])
@@ -33,8 +34,10 @@ async def get_work_info(
             work = await service.get_work_info(url)
         else:
             return ApiResponse(success=False, error="请提供 url 或 aweme_id 参数")
+        stats_tracker.record_success()
         return ApiResponse(data=work)
     except Exception as e:
+        stats_tracker.record_fail()
         return ApiResponse(success=False, error=str(e))
 
 
@@ -76,8 +79,10 @@ async def download_work(
             return ApiResponse(success=False, error="请提供 url 或 aweme_id 参数")
         
         result = await service.download_work(url, request.save_type, request.quality)
+        stats_tracker.record_success()
         return ApiResponse(data=result, message="获取下载链接成功")
     except Exception as e:
+        stats_tracker.record_fail()
         return ApiResponse(success=False, error=str(e))
 
 

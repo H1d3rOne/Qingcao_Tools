@@ -2,6 +2,7 @@
 设置相关 API
 """
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.base.schemas import ApiResponse
 from app.modules.settings import (
@@ -11,6 +12,8 @@ from app.modules.settings import (
 )
 from app.modules.settings import SettingsService
 from app.api.deps import get_settings_service
+from app.db.database import get_db
+from app.modules.douyin.video.services.stats_service import StatsService
 
 router = APIRouter(prefix="/settings", tags=["设置"])
 
@@ -87,3 +90,13 @@ async def update_xianyu_cookie(
     if success:
         return ApiResponse(message="闲鱼Cookie更新成功")
     return ApiResponse(success=False, error="更新失败")
+
+
+@router.get("/stats", response_model=ApiResponse)
+async def get_usage_stats(
+    db: AsyncSession = Depends(get_db)
+):
+    """获取使用统计"""
+    service = StatsService(db)
+    stats = await service.get_stats()
+    return ApiResponse(data=stats)
