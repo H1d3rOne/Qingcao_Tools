@@ -29,6 +29,10 @@ const searchError = ref('')
 const searchResult = ref<XianyuSearchResult | null>(null)
 const searchItems = ref<XianyuSearchItem[]>([])
 const searchFilters = ref<XianyuFilterGroup[]>([])
+// 基准筛选项（首次搜索拿到的完整筛选维度，后续翻页/加筛选不覆盖）
+const baselineFilters = ref<XianyuFilterGroup[]>([])
+// 记录基准对应的关键词，关键词变化时重置基准
+const baselineKeyword = ref('')
 const selectedPropValues = ref<Record<string, string>>({})
 const selectedSortKey = ref('default')
 const minPriceInput = ref('')
@@ -206,6 +210,19 @@ function normalizePriceInput(value: string) {
   return value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
 }
 
+// 价格区间变化后，自动刷新搜索结果（防抖 500ms，重置到第 1 页）
+let priceFilterTimer: number | null = null
+watch([minPriceInput, maxPriceInput], () => {
+  if (!hasSearched.value || !searchKeyword.value.trim()) return
+  if (priceFilterTimer) {
+    clearTimeout(priceFilterTimer)
+  }
+  priceFilterTimer = window.setTimeout(() => {
+    currentPage.value = 1
+    void runSearch(1)
+  }, 500)
+})
+
 function formatCompactCount(value: number) {
   if (value >= 10000) {
     return `${(value / 10000).toFixed(value >= 100000 ? 0 : 1)}万`
@@ -320,6 +337,24 @@ function handlePaste() {
     })
 }
 
+// 合并基准筛选项与最新返回：以基准为骨架（保证所有筛选维度始终在 UI 上），
+// 同名 pid 的 options 优先用最新返回（保证选项随上下文动态更新），
+// 最新返回中存在但基准没有的新 pid 也追加到末尾
+function mergeFilters(baseline: XianyuFilterGroup[], latest: XianyuFilterGroup[]): XianyuFilterGroup[] {
+  const latestMap = new Map(latest.map((g) => [g.pid, g]))
+  const merged = baseline.map((g) => {
+    const fresh = latestMap.get(g.pid)
+    return fresh ? { ...g, options: fresh.options } : g
+  })
+  const baselinePids = new Set(baseline.map((g) => g.pid))
+  for (const g of latest) {
+    if (!baselinePids.has(g.pid)) {
+      merged.push(g)
+    }
+  }
+  return merged
+}
+
 async function runSearch(page: number) {
   const keyword = searchKeyword.value.trim()
   if (!keyword) return
@@ -342,7 +377,15 @@ async function runSearch(page: number) {
     searchResult.value = data
     currentPage.value = data.page || page
     currentPageSize.value = data.page_size || currentPageSize.value
-    searchFilters.value = data.filters || []
+    // 关键词变化时重置基准筛选项
+    if (baselineKeyword.value !== keyword) {
+      baselineKeyword.value = keyword
+      baselineFilters.value = data.filters || []
+      searchFilters.value = data.filters || []
+    } else {
+      // 同一关键词的后续搜索：以基准为准，合并 API 返回的最新 options
+      searchFilters.value = mergeFilters(baselineFilters.value, data.filters || [])
+    }
     searchItems.value = data.items || []
     searchError.value = ''
   } catch (err: any) {
@@ -368,6 +411,8 @@ function resetSearch() {
   searchResult.value = null
   searchItems.value = []
   searchFilters.value = []
+  baselineFilters.value = []
+  baselineKeyword.value = ''
   selectedPropValues.value = {}
   selectedSortKey.value = 'default'
   minPriceInput.value = ''

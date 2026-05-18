@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onUnmounted, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Star, VideoPlay, ChatDotRound, Share, Collection, View, Picture, ArrowLeft, ArrowRight, Mute, Bell, Download, Check, Finished } from '@element-plus/icons-vue'
-import { searchVideos, searchUsers, searchLive, downloadUserWork } from '@/api'
+import { Search, Star, VideoPlay, ChatDotRound, Share, Collection, View, Picture, ArrowLeft, ArrowRight, Download, Check, Finished } from '@element-plus/icons-vue'
+import { searchVideos, searchVideoSearch, searchUsers, searchLive, downloadUserWork } from '@/api'
 import type { SearchVideo, SearchUser, SearchLive } from '@/api/modules/search'
 import { useNotification } from '@/composables'
 import { useSearchStore } from '@/stores'
@@ -19,15 +19,16 @@ const { error, success } = useNotification()
 const searchStore = useSearchStore()
 
 const keyword = ref('')
-const activeType = ref('video')
+const activeType = ref('general')
 const loading = ref(false)
 
 // 搜索条件
 const searchFilters = ref({
-  sortType: '0',           // 排序: 0综合, 1最多点赞, 2最新
-  publishTime: '0',        // 发布时间: 0不限, 1一天内, 7一周内, 180半年内
-  filterDuration: '',      // 视频时长: 空/不限, 0-60一分钟以下, 60-300一分钟到五分钟, 300-五分钟以上
-  contentType: ''          // 内容形式: 空/不限, 0视频, 1图文
+  sortType: '0',
+  publishTime: '0',
+  filterDuration: '',
+  contentType: '',
+  searchRange: '0'
 })
 
 // 筛选选项
@@ -46,20 +47,37 @@ const publishTimeOptions = [
 
 const durationOptions = [
   { label: '不限', value: '' },
-  { label: '一分钟以下', value: '0-60' },
-  { label: '1-5分钟', value: '60-300' },
-  { label: '5分钟以上', value: '300-' }
+  { label: '一分钟内', value: '0-1' },
+  { label: '1-5分钟', value: '1-5' },
+  { label: '5分钟以上', value: '5-10000' }
 ]
 
 const contentTypeOptions = [
   { label: '不限', value: '' },
-  { label: '视频', value: '0' },
-  { label: '图文', value: '1' }
+  { label: '视频', value: '1' },
+  { label: '图文', value: '2' }
+]
+
+const searchRangeOptions = [
+  { label: '不限', value: '0' },
+  { label: '最近看过', value: '1' },
+  { label: '还未看过', value: '2' },
+  { label: '关注的人', value: '3' }
 ]
 
 const videoResults = ref<SearchVideo[]>([])
 const userResults = ref<SearchUser[]>([])
 const liveResults = ref<SearchLive[]>([])
+
+// 分页状态
+const pagination = ref({
+  offset: '0',
+  hasMore: false,
+  searchId: '',
+  loadingMore: false
+})
+const sentinelRef = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
 
 // 当前悬停的作品ID
 const hoveredVideoId = ref<string | null>(null)
@@ -98,11 +116,6 @@ const selectedVideos = computed(() => {
 
 const isAllSelected = computed(() => {
   return videoResults.value.length > 0 && selectedVideoIds.value.size === videoResults.value.length
-})
-
-const isIndeterminate = computed(() => {
-  const size = selectedVideoIds.value.size
-  return size > 0 && size < videoResults.value.length
 })
 
 // 切换选择模式
@@ -386,13 +399,12 @@ function handleMouseEnter(video: SearchVideo) {
       playMusic(video)
     }
   } else if (video.video_url) {
-    // 视频作品：播放视频（始终静音预览）
     const videoEl = videoRefs.value.get(video.aweme_id)
-    // console.log('悬停视频:', video.aweme_id, 'videoEl:', videoEl, 'video_url:', video.video_url)
     if (videoEl) {
-      videoEl.play().catch((err) => {
-        // console.error('视频播放失败:', err)
-      })
+      videoEl.muted = true
+      videoEl.play().then(() => {
+        videoEl.muted = isMuted.value
+      }).catch(() => {})
     }
   }
 }
@@ -547,16 +559,22 @@ function closePreview() {
   previewVideo.value = null
 }
 
-// 切换静音状态
 function toggleMute() {
   isMuted.value = !isMuted.value
-  // 更新所有视频和音频的静音状态
-  videoRefs.value.forEach(v => {
-    v.muted = isMuted.value
-  })
-  audioRefs.value.forEach(a => {
-    a.muted = isMuted.value
-  })
+  if (!hoveredVideoId.value) return
+  const videoEl = videoRefs.value.get(hoveredVideoId.value)
+  if (videoEl) videoEl.muted = isMuted.value
+  const audioEl = audioRefs.value.get(hoveredVideoId.value)
+  if (audioEl) {
+    audioEl.muted = isMuted.value
+    if (!isMuted.value && hoveredVideoId.value) {
+      audioEl.play().catch(() => {})
+    }
+  }
+}
+
+function resetPagination() {
+  pagination.value = { offset: '0', hasMore: false, searchId: '', loadingMore: false }
 }
 
 async function handleSearch() {
@@ -564,38 +582,94 @@ async function handleSearch() {
     error('请输入搜索关键词')
     return
   }
-
-  // 防止重复搜索
-  if (loading.value) {
-    return
-  }
+  if (loading.value) return
 
   searchStore.addHistory(keyword.value)
   loading.value = true
+  resetPagination()
+  videoResults.value = []
+  userResults.value = []
+  liveResults.value = []
 
   try {
-    if (activeType.value === 'video') {
-      const res = await searchVideos({
-        keyword: keyword.value,
-        count: 50,
-        sort_type: searchFilters.value.sortType,
-        publish_time: searchFilters.value.publishTime,
-        filter_duration: searchFilters.value.filterDuration,
-        content_type: searchFilters.value.contentType
-      })
-      videoResults.value = res.data.data || []
-    } else if (activeType.value === 'user') {
-      const res = await searchUsers({ keyword: keyword.value, count: 30 })
-      userResults.value = res.data.data || []
-    } else if (activeType.value === 'live') {
-      const res = await searchLive({ keyword: keyword.value, count: 20 })
-      liveResults.value = res.data.data || []
-    }
-  } catch (err) {
-    // console.error('搜索失败:', err)
+    await fetchPage()
   } finally {
     loading.value = false
+    await nextTick()
+    setupObserver()
   }
+}
+
+async function fetchPage() {
+  const { offset, searchId } = pagination.value
+
+  if (activeType.value === 'general') {
+    const res = await searchVideos({
+      keyword: keyword.value,
+      offset,
+      count: 25,
+      sort_type: searchFilters.value.sortType,
+      publish_time: searchFilters.value.publishTime,
+      filter_duration: searchFilters.value.filterDuration,
+      search_range: searchFilters.value.searchRange,
+      content_type: searchFilters.value.contentType
+    })
+    const data = res.data
+    videoResults.value.push(...(data?.items || []))
+    pagination.value.hasMore = data?.has_more ?? false
+    pagination.value.offset = data?.next_offset ?? '0'
+  } else if (activeType.value === 'video') {
+    const res = await searchVideoSearch({
+      keyword: keyword.value,
+      offset,
+      count: 25,
+      search_id: searchId,
+      sort_type: searchFilters.value.sortType,
+      publish_time: searchFilters.value.publishTime,
+      filter_duration: searchFilters.value.filterDuration,
+      search_range: searchFilters.value.searchRange
+    })
+    const data = res.data
+    videoResults.value.push(...(data?.items || []))
+    pagination.value.hasMore = data?.has_more ?? false
+    pagination.value.offset = data?.next_offset ?? '0'
+    pagination.value.searchId = data?.search_id ?? ''
+  } else if (activeType.value === 'user') {
+    const res = await searchUsers({ keyword: keyword.value, offset, count: 25 })
+    const data = res.data
+    userResults.value.push(...(data?.items || []))
+    pagination.value.hasMore = data?.has_more ?? false
+    pagination.value.offset = data?.next_offset ?? '0'
+  } else if (activeType.value === 'live') {
+    const res = await searchLive({ keyword: keyword.value, offset, count: 25 })
+    const data = res.data
+    liveResults.value.push(...(data?.items || []))
+    pagination.value.hasMore = data?.has_more ?? false
+    pagination.value.offset = data?.next_offset ?? '0'
+  }
+}
+
+async function loadMore() {
+  if (pagination.value.loadingMore || !pagination.value.hasMore) return
+  pagination.value.loadingMore = true
+  try {
+    await fetchPage()
+  } finally {
+    pagination.value.loadingMore = false
+  }
+}
+
+function setupObserver() {
+  if (observer) observer.disconnect()
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0]?.isIntersecting && pagination.value.hasMore && !pagination.value.loadingMore) {
+        loadMore()
+      }
+    },
+    { rootMargin: '200px' }
+  )
+  if (sentinelRef.value) observer.observe(sentinelRef.value)
 }
 
 function handleHistoryClick(word: string) {
@@ -607,8 +681,18 @@ function removeHistory(word: string) {
   searchStore.removeHistory(word)
 }
 
+// 切换 tab 时重置分页并断开 observer
+watch(activeType, () => {
+  if (observer) observer.disconnect()
+  resetPagination()
+  videoResults.value = []
+  userResults.value = []
+  liveResults.value = []
+})
+
 // 清理
 onUnmounted(() => {
+  if (observer) observer.disconnect()
   videoRefs.value.clear()
   audioRefs.value.clear()
   carouselIntervals.value.forEach(interval => clearInterval(interval))
@@ -636,8 +720,11 @@ onUnmounted(() => {
             v-model="activeType"
             size="large"
           >
+            <el-radio-button value="general">
+              综合
+            </el-radio-button>
             <el-radio-button value="video">
-              作品
+              视频
             </el-radio-button>
             <el-radio-button value="user">
               用户
@@ -669,8 +756,8 @@ onUnmounted(() => {
           </el-button>
         </div>
 
-        <!-- 搜索条件筛选（仅视频搜索时显示） -->
-        <div v-if="activeType === 'video'" class="search-filters">
+        <!-- 搜索条件筛选（综合和视频搜索时显示） -->
+        <div v-if="activeType === 'general' || activeType === 'video'" class="search-filters">
           <div class="filter-item">
             <span class="filter-label">排序</span>
             <el-select v-model="searchFilters.sortType" placeholder="选择排序" size="default">
@@ -705,6 +792,17 @@ onUnmounted(() => {
             </el-select>
           </div>
           <div class="filter-item">
+            <span class="filter-label">搜索范围</span>
+            <el-select v-model="searchFilters.searchRange" placeholder="选择范围" size="default">
+              <el-option
+                v-for="item in searchRangeOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
+          <div v-if="activeType === 'general'" class="filter-item">
             <span class="filter-label">内容形式</span>
             <el-select v-model="searchFilters.contentType" placeholder="选择类型" size="default" clearable>
               <el-option
@@ -724,7 +822,7 @@ onUnmounted(() => {
         class="mb-6"
       >
       <div class="flex items-center justify-between mb-3">
-        <h3 class="text-white font-medium">
+        <h3 class="theme-text-strong font-medium">
           搜索历史
         </h3>
         <el-button
@@ -753,14 +851,14 @@ onUnmounted(() => {
 
     <!-- 搜索结果 -->
     <template v-if="keyword">
-      <!-- 视频结果 -->
+      <!-- 视频结果（综合和视频共用） -->
       <div
-        v-if="activeType === 'video'"
+        v-if="activeType === 'general' || activeType === 'video'"
         class="video-results"
       >
         <!-- 批量操作工具栏 -->
         <div v-if="videoResults.length > 0" class="flex items-center justify-between mb-4">
-          <h3 class="text-white font-medium">
+          <h3 class="theme-text-strong font-medium">
             搜索结果 ({{ videoResults.length }})
           </h3>
           <div class="flex items-center gap-3">
@@ -805,7 +903,7 @@ onUnmounted(() => {
               </template>
               
               <div class="py-2">
-                <div class="text-sm text-gray-300 mb-3">
+                <div class="text-sm theme-text-muted mb-3">
                   选择视频质量
                 </div>
                 <div class="flex flex-col gap-2">
@@ -813,12 +911,12 @@ onUnmounted(() => {
                     v-for="option in qualityOptions"
                     :key="option.value"
                     class="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors"
-                    :class="selectedQuality === option.value ? 'bg-primary/20 text-primary' : 'hover:bg-gray-700'"
+                    :class="selectedQuality === option.value ? 'bg-primary/20 text-primary' : 'hover:bg-gray-100'"
                     @click="selectedQuality = option.value"
                   >
                     <div
                       class="w-4 h-4 rounded-full border-2 flex items-center justify-center"
-                      :class="selectedQuality === option.value ? 'border-primary' : 'border-gray-500'"
+                      :class="selectedQuality === option.value ? 'border-primary' : 'border-gray-400'"
                     >
                       <div
                         v-if="selectedQuality === option.value"
@@ -826,10 +924,10 @@ onUnmounted(() => {
                       />
                     </div>
                     <div class="flex-1">
-                      <div class="text-sm font-medium text-white">
+                      <div class="text-sm font-medium" style="color: rgb(var(--app-text-strong-rgb))">
                         {{ option.label }}
                       </div>
-                      <div class="text-xs text-gray-400">
+                      <div class="text-xs theme-text-muted">
                         {{ option.desc }}
                       </div>
                     </div>
@@ -910,7 +1008,7 @@ onUnmounted(() => {
                 :poster="video.cover_url"
                 class="absolute inset-0 w-full h-full object-cover"
                 :class="{ 'opacity-100': hoveredVideoId === video.aweme_id, 'opacity-0': hoveredVideoId !== video.aweme_id }"
-                :muted="isMuted"
+                muted
                 loop
                 playsinline
                 preload="metadata"
@@ -1001,8 +1099,9 @@ onUnmounted(() => {
                   {{ formatNumber(video.comment_count) }}
                 </span>
               </div>
-              <!-- 声音开关按钮 -->
+              <!-- 声音开关按钮 - 仅在悬停当前卡片时显示 -->
               <button
+                v-if="hoveredVideoId === video.aweme_id && !isSelectMode"
                 class="absolute bottom-14 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
                 @click.stop="toggleMute"
                 :title="isMuted ? '开启声音' : '关闭声音'"
@@ -1018,7 +1117,7 @@ onUnmounted(() => {
               </button>
             </div>
             <div class="p-3">
-              <p class="text-white text-sm line-clamp-2 mb-2">
+              <p class="text-sm line-clamp-2 mb-2" style="color: rgb(var(--app-text-rgb))">
                 <template v-for="(part, idx) in parseHashtags(video.desc || video.title)" :key="idx">
                   <span
                     v-if="part.isHashtag"
@@ -1074,7 +1173,7 @@ onUnmounted(() => {
               class="w-14 h-14 rounded-full object-cover"
             >
             <div class="flex-1 min-w-0">
-              <div class="text-white font-medium">
+              <div class="font-medium" style="color: rgb(var(--app-text-strong-rgb))">
                 {{ user.nickname }}
               </div>
               <p
@@ -1124,7 +1223,7 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="p-3">
-              <p class="text-white text-sm font-medium mb-1 truncate">
+              <p class="text-sm font-medium mb-1 truncate" style="color: rgb(var(--app-text-strong-rgb))">
                 {{ live.title }}
               </p>
               <span 
@@ -1146,6 +1245,18 @@ onUnmounted(() => {
         v-if="loading"
         size="small"
       />
+
+      <!-- 无限滚动哨兵 -->
+      <div ref="sentinelRef" class="h-1" />
+      <div v-if="pagination.loadingMore" class="flex justify-center py-6">
+        <LoadingSpinner size="small" />
+      </div>
+      <div
+        v-if="!pagination.hasMore && !loading && (videoResults.length > 0 || userResults.length > 0 || liveResults.length > 0)"
+        class="text-center py-6 text-gray-400 text-sm"
+      >
+        没有更多了
+      </div>
     </template>
 
     <!-- 视频预览对话框 -->
@@ -1198,7 +1309,7 @@ onUnmounted(() => {
 
         <!-- 视频信息 -->
         <div class="video-info">
-          <p class="text-white mb-4">{{ previewVideo.desc }}</p>
+          <p class="mb-4" style="color: rgb(var(--app-text-rgb))">{{ previewVideo.desc }}</p>
 
           <!-- 统计信息 -->
           <div class="flex items-center gap-6 text-gray-400 text-sm mb-4">
@@ -1231,7 +1342,7 @@ onUnmounted(() => {
               class="w-10 h-10 rounded-full"
             >
             <div>
-              <div class="text-white font-medium">{{ previewVideo.author_nickname }}</div>
+              <div class="font-medium" style="color: rgb(var(--app-text-strong-rgb))">{{ previewVideo.author_nickname }}</div>
               <a
                 :href="previewVideo.work_url"
                 target="_blank"

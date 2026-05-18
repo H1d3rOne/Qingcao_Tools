@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { VideoPlay, User, Search, VideoCamera } from '@element-plus/icons-vue'
-import { getStatus } from '@/api'
+import { getStatus, getUsageStats } from '@/api'
 
 const router = useRouter()
 
@@ -10,8 +10,14 @@ const status = ref<{ cookie_configured: boolean; live_cookie_configured?: boolea
   cookie_configured: false
 })
 
+const quickStats = ref([
+  { label: '已解析', value: '0', suffix: '个视频' },
+  { label: '已下载', value: '0', suffix: '个文件' },
+  { label: '成功率', value: '100', suffix: '%' }
+])
+
 onMounted(async () => {
-  await loadStatus()
+  await Promise.all([loadStatus(), loadStats()])
 })
 
 async function loadStatus() {
@@ -25,10 +31,25 @@ async function loadStatus() {
   }
 }
 
+async function loadStats() {
+  try {
+    const res = await getUsageStats()
+    if (res && res.data) {
+      quickStats.value = [
+        { label: '已解析', value: String(res.data.parsed_count), suffix: '个视频' },
+        { label: '已下载', value: String(res.data.downloaded_count), suffix: '个文件' },
+        { label: '成功率', value: String(res.data.success_rate), suffix: '%' }
+      ]
+    }
+  } catch (err) {
+    // ignore
+  }
+}
+
 const features = [
   {
     icon: VideoPlay,
-    title: '作品解析',
+    title: '视频解析',
     desc: '解析视频详情，获取评论，无水印下载',
     path: '/douyin/video',
     accent: 'emerald'
@@ -56,11 +77,6 @@ const features = [
   }
 ]
 
-const quickStats = [
-  { label: '已解析', value: '1,234', suffix: '个视频' },
-  { label: '已下载', value: '567', suffix: '个文件' },
-  { label: '成功率', value: '99.2', suffix: '%' }
-]
 </script>
 
 <template>

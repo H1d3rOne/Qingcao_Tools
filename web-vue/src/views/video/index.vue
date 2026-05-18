@@ -81,7 +81,7 @@ function formatTime(timestamp: number) {
   <div class="video-page max-w-6xl mx-auto">
     <div class="mb-8">
       <h2 class="text-2xl font-bold text-white mb-2">
-        作品查询
+        视频查询
       </h2>
       <p class="text-gray-400">
         输入抖音视频链接，获取视频详细信息、评论和下载

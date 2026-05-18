@@ -5,6 +5,9 @@ import { User, DocumentCopy, Grid, Download, Star, VideoPlay, Close, Check, Fini
 import { getUserInfo, getUserWorks, downloadUserWork, getUserInfoBySecUid, getUserVideos } from '@/api'
 import type { UserInfo, UserWork } from '@/api/modules/user'
 import { useNotification } from '@/composables'
+import { extractUrl } from '@/utils'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 
@@ -41,6 +44,38 @@ const qualityOptions = [
   { value: 'super', label: '超清', desc: '高清画质，推荐使用' },
   { value: 'hd2k', label: '2K', desc: '最高画质，文件较大' },
 ]
+
+// 清晰度降级优先级（高到低）
+const qualityPriority = ['hd2k', 'super', 'high', 'standard']
+
+// 选中的视频作品（图文除外）
+const selectedVideoWorks = computed(() => {
+  return downloadingWorks.value.filter(w => w.is_video)
+})
+
+// 检查某清晰度是否在选中视频中至少有一个支持
+function isQualityAvailable(quality: string): boolean {
+  if (selectedVideoWorks.value.length === 0) return true
+  return selectedVideoWorks.value.some(w => w.video_qualities?.[quality])
+}
+
+// 为单个作品按优先级降级解析清晰度
+function resolveQualityForWork(work: UserWork, preferred: string): string {
+  if (!work.video_qualities || Object.keys(work.video_qualities).length === 0) {
+    return preferred
+  }
+  const startIdx = qualityPriority.indexOf(preferred)
+  if (startIdx === -1) return preferred
+  // 优先尝试目标清晰度，然后向下降级
+  for (let i = startIdx; i < qualityPriority.length; i++) {
+    if (work.video_qualities[qualityPriority[i]]) return qualityPriority[i]
+  }
+  // 都没有时，向上找一个存在的（极少见，仅作为兜底）
+  for (let i = startIdx - 1; i >= 0; i--) {
+    if (work.video_qualities[qualityPriority[i]]) return qualityPriority[i]
+  }
+  return preferred
+}
 
 // 计算属性
 const selectedWorks = computed(() => {
@@ -90,6 +125,11 @@ function openDownloadPopover() {
     return
   }
   downloadingWorks.value = selectedWorks.value
+  // 如果当前选中的清晰度在选中视频中都不支持，自动切到最高可用清晰度
+  if (!isQualityAvailable(selectedQuality.value)) {
+    const fallback = qualityPriority.find(q => isQualityAvailable(q))
+    if (fallback) selectedQuality.value = fallback
+  }
   showDownloadPopover.value = true
 }
 
@@ -105,19 +145,39 @@ async function executeDownload() {
     downloadProgress.value.current = i + 1
     
     try {
-      const res = await downloadUserWork({
-        aweme_id: work.aweme_id,
-        quality: selectedQuality.value,
-        save_type: work.is_video ? 'video' : 'image'
-      })
-      
-      if (res.data?.video_url) {
-        // 通过代理下载
-        await triggerDownload(res.data.video_url, work.desc || work.aweme_id)
-      } else if (res.data?.images && res.data.images.length > 0) {
-        // 下载图片
-        for (let j = 0; j < res.data.images.length; j++) {
-          await triggerDownload(res.data.images[j], `${work.desc || work.aweme_id}_${j + 1}`)
+      if (!work.is_video) {
+        // 图文：先取作品列表里的 images，没有再调接口兜底
+        let imgs = work.images || []
+        if (imgs.length === 0) {
+          const res = await downloadUserWork({
+            aweme_id: work.aweme_id,
+            save_type: 'image'
+          })
+          imgs = res.data?.images || []
+          if (imgs.length === 0) {
+            throw new Error('未获取到图片链接')
+          }
+        }
+        const baseName = (work.desc || work.aweme_id).slice(0, 50)
+        if (imgs.length === 1) {
+          // 单图：直接下载
+          await triggerDownload(imgs[0], baseName, 'auto')
+        } else {
+          // 多图：打包成 zip 下载
+          await downloadImagesAsZip(imgs, baseName)
+        }
+      } else {
+        // 视频：按降级后的清晰度请求下载链接
+        const workQuality = resolveQualityForWork(work, selectedQuality.value)
+        const res = await downloadUserWork({
+          aweme_id: work.aweme_id,
+          quality: workQuality,
+          save_type: 'video'
+        })
+        if (res.data?.video_url) {
+          await triggerDownload(res.data.video_url, work.desc || work.aweme_id, 'mp4')
+        } else {
+          throw new Error('未获取到视频链接')
         }
       }
     } catch (err) {
@@ -141,18 +201,55 @@ async function executeDownload() {
   selectedWorkIds.value.clear()
 }
 
+// 多图打包成 zip 下载
+async function downloadImagesAsZip(urls: string[], baseName: string) {
+  const zip = new JSZip()
+  const safeName = baseName.replace(/[\\/:*?"<>|]/g, '_')
+
+  // 并发拉取所有图片
+  const fetches = urls.map(async (url, i) => {
+    const proxyUrl = `/api/v1/douyin/work/proxy?url=${encodeURIComponent(url)}`
+    const response = await fetch(proxyUrl)
+    if (!response.ok) throw new Error(`图片 ${i + 1} 下载失败`)
+    const blob = await response.blob()
+    // 按 MIME 推断扩展名
+    const mime = blob.type || ''
+    let ext = 'jpg'
+    if (mime.includes('png')) ext = 'png'
+    else if (mime.includes('webp')) ext = 'webp'
+    else if (mime.includes('gif')) ext = 'gif'
+    const idx = String(i + 1).padStart(2, '0')
+    zip.file(`${safeName}_${idx}.${ext}`, blob)
+  })
+
+  await Promise.all(fetches)
+  const zipBlob = await zip.generateAsync({ type: 'blob' })
+  saveAs(zipBlob, `${safeName}.zip`)
+}
+
 // 触发下载
-async function triggerDownload(url: string, filename: string) {
+async function triggerDownload(url: string, filename: string, ext: string = 'mp4') {
   try {
     // 使用代理URL
     const proxyUrl = `/api/v1/douyin/work/proxy?url=${encodeURIComponent(url)}`
     const response = await fetch(proxyUrl)
     const blob = await response.blob()
     const downloadUrl = URL.createObjectURL(blob)
-    
+
+    // 从 blob 的 MIME 类型推断扩展名（图片场景）
+    let finalExt = ext
+    if (ext === 'auto') {
+      const mime = blob.type || ''
+      if (mime.includes('jpeg') || mime.includes('jpg')) finalExt = 'jpg'
+      else if (mime.includes('png')) finalExt = 'png'
+      else if (mime.includes('webp')) finalExt = 'webp'
+      else if (mime.includes('gif')) finalExt = 'gif'
+      else finalExt = 'jpg'
+    }
+
     const a = document.createElement('a')
     a.href = downloadUrl
-    a.download = `${filename.replace(/[\\/:*?"<>|]/g, '_')}.mp4`
+    a.download = `${filename.replace(/[\\/:*?"<>|]/g, '_')}.${finalExt}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -169,10 +266,12 @@ async function handleSearch() {
     return
   }
 
+  inputUrl.value = extractUrl(inputUrl.value)
+
   loading.value = true
   userInfo.value = null
   userWorks.value = []
-  
+
   try {
     const res = await getUserInfo(inputUrl.value.trim())
     userInfo.value = res.data
@@ -254,7 +353,7 @@ function goBack() {
 
 function handlePaste() {
   navigator.clipboard.readText().then(text => {
-    inputUrl.value = text
+    inputUrl.value = extractUrl(text)
   })
 }
 
@@ -503,8 +602,11 @@ function formatNumber(num: number | undefined): string {
                   v-for="option in qualityOptions"
                   :key="option.value"
                   class="quality-option"
-                  :class="{ active: selectedQuality === option.value }"
-                  @click="selectedQuality = option.value"
+                  :class="{
+                    active: selectedQuality === option.value,
+                    disabled: !isQualityAvailable(option.value)
+                  }"
+                  @click="isQualityAvailable(option.value) && (selectedQuality = option.value)"
                 >
                   <div
                     class="quality-radio"
@@ -518,6 +620,7 @@ function formatNumber(num: number | undefined): string {
                   <div class="quality-info">
                     <div class="quality-label">
                       {{ option.label }}
+                      <span v-if="!isQualityAvailable(option.value)" class="quality-unavailable">（不可用）</span>
                     </div>
                     <div class="quality-desc">
                       {{ option.desc }}
@@ -635,6 +738,12 @@ function formatNumber(num: number | undefined): string {
                 <el-icon><Star /></el-icon>
                 {{ work.digg_count }}
               </span>
+            </div>
+            <!-- 类型标识 -->
+            <div class="work-type-badge" :class="work.is_video ? 'badge-video' : 'badge-image'">
+              <el-icon v-if="work.is_video"><VideoPlay /></el-icon>
+              <el-icon v-else><Grid /></el-icon>
+              <span>{{ work.is_video ? '视频' : '图文' }}</span>
             </div>
           </div>
           <div class="video-card-info">
@@ -1063,12 +1172,24 @@ function formatNumber(num: number | undefined): string {
   transition: all 0.2s;
 }
 
-.quality-option:hover {
+.quality-option:hover:not(.disabled) {
   background: rgba(var(--app-surface-alt-rgb) / 0.8);
 }
 
 .quality-option.active {
   background: rgba(var(--primary-color-rgb) / 0.12);
+}
+
+.quality-option.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.quality-unavailable {
+  font-size: 12px;
+  color: rgb(var(--app-text-subtle-rgb));
+  font-weight: normal;
+  margin-left: 4px;
 }
 
 .quality-radio {
@@ -1278,6 +1399,35 @@ function formatNumber(num: number | undefined): string {
   overflow: hidden;
 }
 
+/* 作品类型标识 */
+.work-type-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.work-type-badge .el-icon {
+  font-size: 12px;
+}
+
+.badge-video {
+  background: rgba(16, 185, 129, 0.85);
+}
+
+.badge-image {
+  background: rgba(59, 130, 246, 0.85);
+}
+
 /* 播放弹窗 */
 .player-overlay {
   position: fixed;
@@ -1293,11 +1443,14 @@ function formatNumber(num: number | undefined): string {
   position: relative;
   width: 100%;
   max-width: 900px;
+  max-height: 90vh;
   margin: 0 16px;
   background: rgba(var(--app-surface-rgb) / 0.98);
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
 }
 
 .player-close {
@@ -1329,6 +1482,8 @@ function formatNumber(num: number | undefined): string {
 .player-content {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 @media (min-width: 768px) {
@@ -1338,22 +1493,32 @@ function formatNumber(num: number | undefined): string {
 }
 
 .player-video {
-  flex: 2;
-  aspect-ratio: 9/16;
+  flex: 0 0 auto;
+  width: 100%;
   background: black;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 50vh;
 }
 
 @media (min-width: 768px) {
   .player-video {
-    aspect-ratio: auto;
+    flex: 1 1 auto;
+    width: auto;
+    max-height: 90vh;
+    min-height: 0;
   }
 }
 
 .video-element {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
+  display: block;
 }
 
 .image-gallery {
@@ -1371,13 +1536,20 @@ function formatNumber(num: number | undefined): string {
 }
 
 .player-info {
-  flex: 1;
+  flex: 1 1 auto;
   padding: 20px;
-  max-height: 80vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+}
+
+@media (min-width: 768px) {
+  .player-info {
+    flex: 0 0 320px;
+    max-width: 360px;
+  }
 }
 
 .player-author {

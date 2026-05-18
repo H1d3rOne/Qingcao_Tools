@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Qingcao_Tools</title>
+    <style>
+      :root {
+        --el-popper-bg-color-light: rgba(14, 16, 20, 0.98) !important;
+        --el-bg-color-overlay: rgba(14, 16, 20, 0.98) !important;
+      }
+      .el-popper.is-light {
+        background: rgba(14, 16, 20, 0.98) !important;
+        border: 1px solid rgba(60, 70, 80, 0.6) !important;
+      }
+      .el-popper.is-light .el-popper__arrow::before {
+        background: rgba(14, 16, 20, 0.98) !important;
+        border: 1px solid rgba(60, 70, 80, 0.6) !important;
+      }
+      .el-select-dropdown__item {
+        color: rgba(240, 250, 255, 0.85) !important;
+      }
+      .el-select-dropdown__item.is-hovering,
+      .el-select-dropdown__item:hover {
+        background-color: rgba(99, 102, 241, 0.15) !important;
+      }
+      .el-select-dropdown__item.is-selected {
+        color: rgb(99, 102, 241) !important;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body class="bg-dark text-white">
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

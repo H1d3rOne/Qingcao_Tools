@@ -29,6 +29,14 @@ export interface UserInfo {
   unique_id: string
 }
 
+// 视频质量选项
+export interface VideoQuality {
+  quality_type: number  // 质量类型: 24=标清, 10=高清, 1=超清, 7=2K
+  url: string
+  width?: number
+  height?: number
+}
+
 // 用户作品
 export interface UserWork {
   aweme_id: string
@@ -40,6 +48,7 @@ export interface UserWork {
   play_count: number
   cover_url: string  // 封面URL
   video_url?: string // 视频URL
+  video_qualities?: Record<string, VideoQuality>  // 不同清晰度的视频链接
   images?: string[]  // 图集
   is_video: boolean
   duration?: number
@@ -75,14 +84,6 @@ export function getUserVideos(params: { sec_uid: string; cursor?: number; count?
 // 获取用户喜欢列表 - store 使用
 export function getUserLikes(params: { sec_uid: string; cursor?: number; count?: number }) {
   return request.post<ApiResponse<UserWorksResponse>>('/douyin/user/likes', params)
-}
-
-// 视频质量选项
-export interface VideoQuality {
-  quality_type: number  // 质量类型: 24=标清, 10=高清, 1=超清, 7=2K
-  url: string
-  width?: number
-  height?: number
 }
 
 // 下载结果

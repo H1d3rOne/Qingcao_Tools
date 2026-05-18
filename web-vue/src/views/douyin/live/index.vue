@@ -31,6 +31,7 @@ import {
   type BadgeImage
 } from '@/api/modules/live'
 import { useNotification } from '@/composables'
+import { extractUrl } from '@/utils'
 import { createDanmakuEngine, DanmakuEngine, DanmakuItem } from '@/composables/useDanmaku'
 import flvjs from 'flv.js'
 
@@ -344,6 +345,7 @@ async function handleSearch() {
     return
   }
 
+  inputUrl.value = extractUrl(inputUrl.value)
   const liveUrl = inputUrl.value.trim()
   
   // 验证是否为有效的直播链接
@@ -859,7 +861,7 @@ onUnmounted(() => {
 <style scoped>
 .live-container {
   width: 100%;
-  min-height: calc(100vh - 48px);
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: linear-gradient(135deg, rgb(var(--app-bg-rgb)) 0%, rgb(var(--app-bg-deep-rgb)) 100%);
@@ -1175,16 +1177,19 @@ onUnmounted(() => {
 
 .video-section {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 20px;
   gap: 12px;
   background: rgba(var(--app-bg-rgb) / 1);
+  overflow: hidden;
 }
 
 .video-container {
   position: relative;
   flex: 1;
+  min-height: 0;
   background: #000;
   border-radius: 14px;
   overflow: hidden;

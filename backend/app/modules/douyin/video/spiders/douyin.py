@@ -2,11 +2,14 @@
 抖音爬虫模块 - 视频相关
 """
 import json
+import asyncio
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlencode
 
 from loguru import logger
 import httpx
+import requests as req_lib
+req_lib.packages.urllib3.disable_warnings()
 
 from app.modules.douyin.common.base import BaseSpider
 from app.modules.douyin.common.auth import DouyinAuth
@@ -32,6 +35,19 @@ class DouyinSpider(BaseSpider):
             header.set_referer(referer)
         return header.get()
     
+    async def _search_get(self, url: str, params: dict, headers: dict) -> dict:
+        """使用 requests 库发送搜索请求（与 DouYin_Spider 一致），避免 httpx TLS 指纹差异"""
+        def _do_request():
+            resp = req_lib.get(
+                url,
+                headers=headers,
+                cookies=self.auth.cookie,
+                params=params,
+                verify=False
+            )
+            return json.loads(resp.text)
+        return await asyncio.to_thread(_do_request)
+
     def _safe_json_parse(self, response: httpx.Response) -> dict:
         """安全解析 JSON 响应"""
         try:
@@ -160,7 +176,7 @@ class DouyinSpider(BaseSpider):
                 quality_type = bit_rate.get("quality_type")
                 bit_rate_play_addr = bit_rate.get("play_addr", {})
                 bit_rate_url_list = bit_rate_play_addr.get("url_list", [])
-                
+
                 # 优先选择 https://v11 开头的
                 quality_url = None
                 for url in bit_rate_url_list:
@@ -169,24 +185,50 @@ class DouyinSpider(BaseSpider):
                         break
                 if not quality_url and bit_rate_url_list:
                     quality_url = bit_rate_url_list[0]
-                
+
                 if not quality_url:
                     continue
-                
-                # 质量映射
-                quality_name = {
-                    24: "standard",   # 标清
-                    10: "high",       # 高清
-                    1: "super",       # 超清
-                    7: "hd2k"         # 2K
-                }.get(quality_type, f"unknown_{quality_type}")
-                
+
+                quality_name_map = {
+                    7: "hd2k",
+                    1: "super",
+                    10: "high",
+                    24: "standard",
+                }
+                quality_name = quality_name_map.get(quality_type)
+
+                if not quality_name:
+                    w = bit_rate_play_addr.get("width", 0)
+                    h = bit_rate_play_addr.get("height", 0)
+                    short_side = min(w, h) if w and h else max(w, h)
+                    if short_side >= 1440:
+                        quality_name = "hd2k"
+                    elif short_side >= 1080:
+                        quality_name = "super"
+                    elif short_side >= 720:
+                        quality_name = "high"
+                    else:
+                        quality_name = "standard"
+
+                # 同名质量只保留第一个（通常码率最高）
+                if quality_name in video_qualities:
+                    continue
+
                 video_qualities[quality_name] = {
                     "quality_type": quality_type,
                     "url": quality_url,
                     "width": bit_rate_play_addr.get("width"),
                     "height": bit_rate_play_addr.get("height"),
                 }
+
+        # 如果没有解析到任何质量但有默认视频URL，用默认URL作为 super 质量
+        if not video_qualities and default_video_url:
+            video_qualities["super"] = {
+                "quality_type": 1,
+                "url": default_video_url,
+                "width": play_addr.get("width"),
+                "height": play_addr.get("height"),
+            }
         
         # 图文作品不返回视频URL
         if not is_video_work:
@@ -366,10 +408,10 @@ class DouyinSpider(BaseSpider):
         """通过 sec_uid 获取用户作品列表"""
         api_url = f"{self.BASE_URL}/aweme/v1/web/aweme/post/"
         headers = self._get_headers(f"{self.BASE_URL}/user/{sec_uid}")
-        
+
         works = []
         max_cursor = str(cursor)
-        
+
         while len(works) < limit:
             # 构建完整参数
             params_builder = Params()
@@ -378,355 +420,381 @@ class DouyinSpider(BaseSpider):
             params_builder.update_params({
                 "sec_user_id": sec_uid,
                 "max_cursor": max_cursor,
-                "count": min(20, limit - len(works)),
+                "count": min(18, limit - len(works)),
+                "publish_video_strategy_type": "2",
+                "locate_query": "false",
+                "show_live_replay_strategy": "1",
+                "need_time_list": "1" if max_cursor == "0" else "0",
+                "time_list_query": "0",
+                "whale_cut_token": "",
+                "cut_version": "1",
             })
             params_builder.with_a_bogus()
             params = params_builder.get()
-            
+
             response = await self.request("GET", api_url, params=params, headers=headers)
             data = self._safe_json_parse(response)
-            
+
             # 检查API错误状态码
             status_code = data.get("status_code") if data else None
             if status_code and status_code != 0:
                 error_msg = data.get("status_msg", f"抖音API错误: {status_code}")
-                self.logger.error(f"获取用户作品失败: {error_msg}")
+                logger.error(f"获取用户作品失败: {error_msg}")
                 break
-            
+
             # 检查数据格式
             if not data or "aweme_list" not in data:
-                self.logger.error(f"获取用户作品失败: API返回数据格式错误 - {data}")
+                logger.error(f"获取用户作品失败: API返回数据格式错误 - keys={list(data.keys()) if data else None}")
                 break
-            
+
             aweme_list = data.get("aweme_list", [])
+            logger.info(f"获取到 {len(aweme_list)} 个作品, has_more={data.get('has_more')}, max_cursor={data.get('max_cursor')}")
             if not aweme_list:
                 break
-            
+
             for item in aweme_list:
                 works.append(self._parse_work_info(item))
-            
+
             max_cursor = str(data.get("max_cursor", "0"))
             if data.get("has_more") != 1:
                 break
-        
+
         return works[:limit]
     
     async def search_works(
-        self, 
-        keyword: str, 
-        limit: int = 20, 
-        sort_type: str = "0", 
+        self,
+        keyword: str,
+        offset: str = "0",
+        count: int = 25,
+        sort_type: str = "0",
         publish_time: str = "0",
         filter_duration: str = "",
+        search_range: str = "",
         content_type: str = ""
-    ) -> List[dict]:
-        """搜索作品 - 参照原脚本API
-        
-        Args:
-            keyword: 搜索关键词
-            limit: 获取数量
-            sort_type: 排序 0综合 1最多点赞 2最新
-            publish_time: 发布时间 0不限 1一天内 7一周内 180半年内
-            filter_duration: 视频时长 空/不限, 0-60一分钟以下, 60-300一分钟到五分钟, 300-五分钟以上
-            content_type: 内容形式 空/不限, 0视频, 1图文
-        """
+    ) -> dict:
+        """搜索作品（单页模式）"""
         import uuid
         import urllib.parse
-        import json
-        
+
         api = "/aweme/v1/web/general/search/single/"
-        
+        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
+
+        filter_selected = ('{"sort_type":"%s","publish_time":"%s","filter_duration":"%s",'
+                           '"search_range":"%s","content_type":"%s"}') % (
+                           sort_type, publish_time, filter_duration, search_range, content_type)
+
+        params = Params()
+        params.add_param("device_platform", "webapp")
+        params.add_param("aid", "6383")
+        params.add_param("channel", "channel_pc_web")
+        params.add_param("search_channel", "aweme_general")
+        params.add_param("enable_history", "1")
+        params.add_param("filter_selected", filter_selected)
+        params.add_param("keyword", keyword)
+        params.add_param("search_source", "tab_search")
+        params.add_param("query_correct_type", "1")
+        params.add_param("is_filter_search", "1")
+        params.add_param("from_group_id", "")
+        params.add_param("offset", offset)
+        params.add_param("count", str(count))
+        params.add_param("need_filter_settings", "1" if offset == "0" else "0")
+        params.add_param("list_type", "single")
+        params.add_param("update_version_code", "170400")
+        params.add_param("pc_client_type", "1")
+        params.add_param("version_code", "190600")
+        params.add_param("version_name", "19.6.0")
+        params.add_param("cookie_enabled", "true")
+        params.add_param("screen_width", "1707")
+        params.add_param("screen_height", "960")
+        params.add_param("browser_language", "zh-CN")
+        params.add_param("browser_platform", "Win32")
+        params.add_param("browser_name", "Edge")
+        params.add_param("browser_version", "125.0.0.0")
+        params.add_param("browser_online", "true")
+        params.add_param("engine_name", "Blink")
+        params.add_param("engine_version", "125.0.0.0")
+        params.add_param("os_name", "Windows")
+        params.add_param("os_version", "10")
+        params.add_param("cpu_core_num", "32")
+        params.add_param("device_memory", "8")
+        params.add_param("platform", "PC")
+        params.add_param("downlink", "10")
+        params.add_param("effective_type", "4g")
+        params.add_param("round_trip_time", "50")
+        params.with_web_id(self.auth, refer)
+        params.add_param("msToken", self.auth.msToken)
+        params.with_a_bogus()
+
+        headers = HeaderBuilder.build(HeaderType.GET)
+        headers.set_referer(refer)
+
+        logger.info(f"搜索作品请求: keyword={keyword}, offset={offset}")
+        data = await self._search_get(f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get())
+        logger.info(f"搜索响应: status_code={data.get('status_code')}, has_more={data.get('has_more')}")
+
+        search_nil_info = data.get("search_nil_info", {})
+        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
+            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+
+        items = data.get("data", [])
         works = []
-        offset = "0"
-        
-        while len(works) < limit:
-            refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
-            
-            # 构建 filter_selected JSON
-            filter_selected = {
-                "sort_type": sort_type,
-                "publish_time": publish_time,
-                "filter_duration": filter_duration,
-                "search_range": "",
-                "content_type": content_type
-            }
-            
-            # 构建参数 - 严格按照原脚本顺序
-            params = Params()
-            params.add_param("device_platform", "webapp")
-            params.add_param("aid", "6383")
-            params.add_param("channel", "channel_pc_web")
-            params.add_param("search_channel", "aweme_general")
-            params.add_param("enable_history", "1")
-            params.add_param("filter_selected", json.dumps(filter_selected, ensure_ascii=False))
-            params.add_param("keyword", keyword)
-            params.add_param("search_source", "tab_search")
-            params.add_param("query_correct_type", "1")
-            params.add_param("is_filter_search", "1")
-            params.add_param("from_group_id", "")
-            params.add_param("offset", offset)
-            params.add_param("count", "25")
-            params.add_param("need_filter_settings", "1" if offset == "0" else "0")
-            params.add_param("list_type", "single")
-            params.add_param("update_version_code", "170400")
-            params.add_param("pc_client_type", "1")
-            params.add_param("version_code", "190600")
-            params.add_param("version_name", "19.6.0")
-            params.add_param("cookie_enabled", "true")
-            params.add_param("screen_width", "1707")
-            params.add_param("screen_height", "960")
-            params.add_param("browser_language", "zh-CN")
-            params.add_param("browser_platform", "Win32")
-            params.add_param("browser_name", "Edge")
-            params.add_param("browser_version", "125.0.0.0")
-            params.add_param("browser_online", "true")
-            params.add_param("engine_name", "Blink")
-            params.add_param("engine_version", "125.0.0.0")
-            params.add_param("os_name", "Windows")
-            params.add_param("os_version", "10")
-            params.add_param("cpu_core_num", "32")
-            params.add_param("device_memory", "8")
-            params.add_param("platform", "PC")
-            params.add_param("downlink", "10")
-            params.add_param("effective_type", "4g")
-            params.add_param("round_trip_time", "50")
-            params.with_web_id(self.auth, refer)
-            params.add_param("msToken", self.auth.msToken)
-            params.with_a_bogus()
-            
-            # 构建请求头
-            headers = HeaderBuilder.build(HeaderType.GET)
-            headers.set_referer(refer)
-            
-            logger.info(f"搜索作品请求: keyword={keyword}, offset={offset}, filters={filter_selected}")
-            
-            response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
-            data = self._safe_json_parse(response)
-            
-            logger.info(f"搜索响应: status_code={data.get('status_code')}, has_more={data.get('has_more')}")
-            
-            # 检查是否需要验证码
-            search_nil_info = data.get("search_nil_info", {})
-            if search_nil_info:
-                nil_type = search_nil_info.get("search_nil_type")
-                logger.warning(f"搜索为空原因: {search_nil_info}")
-                if nil_type == "verify_check":
-                    raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
-            
-            if data.get("status_code") != 0:
-                logger.warning(f"搜索API返回错误: status_code={data.get('status_code')}, message={data.get('status_msg', 'unknown')}")
-            
-            # 原脚本使用 data 字段
-            items = data.get("data", [])
-            if not items:
-                logger.warning(f"搜索结果为空: keyword={keyword}, offset={offset}, response_keys={list(data.keys())}")
-                break
-            
-            for item in items:
-                aweme_info = item.get("aweme_info", item)
-                if aweme_info:
-                    works.append(self._parse_work_info(aweme_info))
-            
-            offset = str(int(offset) + len(items))
-            if data.get("has_more") != 1:
-                break
-        
-        return works[:limit]
-    
-    async def search_users(self, keyword: str, limit: int = 20) -> List[dict]:
-        """搜索用户 - 参照原脚本API"""
+        for item in items:
+            aweme_info = item.get("aweme_info", item)
+            if aweme_info:
+                works.append(self._parse_work_info(aweme_info))
+
+        has_more = data.get("has_more") == 1
+        next_offset = str(int(offset) + len(items))
+
+        return {"items": works, "has_more": has_more, "next_offset": next_offset}
+
+    async def search_videos(
+        self,
+        keyword: str,
+        offset: str = "0",
+        count: int = 25,
+        search_id: str = "",
+        sort_type: str = "0",
+        publish_time: str = "0",
+        filter_duration: str = "",
+        search_range: str = "0"
+    ) -> dict:
+        """搜索视频频道（单页模式）"""
         import uuid
         import urllib.parse
-        
+
+        api = "/aweme/v1/web/search/item/"
+        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=video"
+
+        params = Params()
+        params.add_param("device_platform", "webapp")
+        params.add_param("aid", "6383")
+        params.add_param("channel", "channel_pc_web")
+        params.add_param("search_channel", "aweme_video_web")
+        params.add_param("enable_history", "1")
+        params.add_param("sort_type", sort_type)
+        params.add_param("publish_time", publish_time)
+        params.add_param("filter_duration", filter_duration)
+        params.add_param("search_range", search_range)
+        params.add_param("keyword", keyword)
+        params.add_param("search_source", "normal_search")
+        params.add_param("query_correct_type", "1")
+        params.add_param("is_filter_search", "1")
+        params.add_param("from_group_id", "")
+        params.add_param("offset", offset)
+        params.add_param("count", str(count))
+        params.add_param("need_filter_settings", "1" if offset == "0" else "0")
+        if search_id:
+            params.add_param("search_id", search_id)
+        params.add_param("list_type", "single")
+        params.add_param("update_version_code", "170400")
+        params.add_param("pc_client_type", "1")
+        params.add_param("version_code", "170400")
+        params.add_param("version_name", "17.4.0")
+        params.add_param("cookie_enabled", "true")
+        params.add_param("screen_width", "1707")
+        params.add_param("screen_height", "960")
+        params.add_param("browser_language", "zh-CN")
+        params.add_param("browser_platform", "Win32")
+        params.add_param("browser_name", "Edge")
+        params.add_param("browser_version", "125.0.0.0")
+        params.add_param("browser_online", "true")
+        params.add_param("engine_name", "Blink")
+        params.add_param("engine_version", "125.0.0.0")
+        params.add_param("os_name", "Windows")
+        params.add_param("os_version", "10")
+        params.add_param("cpu_core_num", "32")
+        params.add_param("device_memory", "8")
+        params.add_param("platform", "PC")
+        params.add_param("downlink", "10")
+        params.add_param("effective_type", "4g")
+        params.add_param("round_trip_time", "50")
+        params.with_web_id(self.auth, refer)
+        params.add_param("msToken", self.auth.msToken)
+        params.with_a_bogus()
+
+        headers = HeaderBuilder.build(HeaderType.GET)
+        headers.set_referer(refer)
+
+        logger.info(f"搜索视频请求: keyword={keyword}, offset={offset}")
+        data = await self._search_get(f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get())
+
+        search_nil_info = data.get("search_nil_info", {})
+        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
+            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+
+        new_search_id = data.get("log_pb", {}).get("impr_id", search_id)
+
+        items = data.get("data", [])
+        works = []
+        for item in items:
+            aweme_info = item.get("aweme_info", item)
+            if aweme_info:
+                works.append(self._parse_work_info(aweme_info))
+
+        has_more = data.get("has_more") == 1
+        next_offset = str(int(offset) + len(items))
+
+        return {"items": works, "has_more": has_more, "next_offset": next_offset, "search_id": new_search_id}
+
+    async def search_users(self, keyword: str, offset: str = "0", count: int = 25) -> dict:
+        """搜索用户（单页模式）"""
+        import uuid
+        import urllib.parse
+
         api = "/aweme/v1/web/discover/search"
-        
+        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
+
+        params = Params()
+        params.add_param("device_platform", "webapp")
+        params.add_param("aid", "6383")
+        params.add_param("channel", "channel_pc_web")
+        params.add_param("search_channel", "aweme_user_web")
+        params.add_param("search_filter_value", '{"douyin_user_fans":[""],"douyin_user_type":[""]}')
+        params.add_param("keyword", keyword)
+        params.add_param("search_source", "switch_tab")
+        params.add_param("query_correct_type", "1")
+        params.add_param("is_filter_search", "1")
+        params.add_param("offset", offset)
+        params.add_param("count", str(count))
+        params.add_param("need_filter_settings", "1" if offset == "0" else "0")
+        params.add_param("list_type", "single")
+        params.add_param("update_version_code", "170400")
+        params.add_param("pc_client_type", "1")
+        params.add_param("version_code", "190600")
+        params.add_param("version_name", "19.6.0")
+        params.add_param("cookie_enabled", "true")
+        params.add_param("screen_width", "1707")
+        params.add_param("screen_height", "960")
+        params.add_param("browser_language", "zh-CN")
+        params.add_param("browser_platform", "Win32")
+        params.add_param("browser_name", "Edge")
+        params.add_param("browser_version", "125.0.0.0")
+        params.add_param("browser_online", "true")
+        params.add_param("engine_name", "Blink")
+        params.add_param("engine_version", "125.0.0.0")
+        params.add_param("os_name", "Windows")
+        params.add_param("os_version", "10")
+        params.add_param("cpu_core_num", "32")
+        params.add_param("device_memory", "8")
+        params.add_param("platform", "PC")
+        params.add_param("downlink", "10")
+        params.add_param("effective_type", "4g")
+        params.add_param("round_trip_time", "50")
+        params.with_web_id(self.auth, refer)
+        params.add_param("msToken", self.auth.msToken)
+        params.with_a_bogus()
+
+        headers = HeaderBuilder.build(HeaderType.GET)
+        headers.set_referer(refer)
+
+        logger.info(f"搜索用户请求: keyword={keyword}, offset={offset}")
+        response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
+        data = self._safe_json_parse(response)
+
+        search_nil_info = data.get("search_nil_info", {})
+        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
+            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+
+        user_list = data.get("user_list", [])
         users = []
-        offset = "0"
-        
-        while len(users) < limit:
-            refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
-            
-            # 构建参数 - 严格按照原脚本顺序
-            params = Params()
-            params.add_param("device_platform", "webapp")
-            params.add_param("aid", "6383")
-            params.add_param("channel", "channel_pc_web")
-            params.add_param("search_channel", "aweme_user_web")
-            params.add_param("search_filter_value", '{"douyin_user_fans":[""],"douyin_user_type":[""]}')
-            params.add_param("keyword", keyword)
-            params.add_param("search_source", "switch_tab")
-            params.add_param("query_correct_type", "1")
-            params.add_param("is_filter_search", "1")
-            params.add_param("offset", offset)
-            params.add_param("count", "25")
-            params.add_param("need_filter_settings", "1" if offset == "0" else "0")
-            params.add_param("list_type", "single")
-            params.add_param("update_version_code", "170400")
-            params.add_param("pc_client_type", "1")
-            params.add_param("version_code", "190600")
-            params.add_param("version_name", "19.6.0")
-            params.add_param("cookie_enabled", "true")
-            params.add_param("screen_width", "1707")
-            params.add_param("screen_height", "960")
-            params.add_param("browser_language", "zh-CN")
-            params.add_param("browser_platform", "Win32")
-            params.add_param("browser_name", "Edge")
-            params.add_param("browser_version", "125.0.0.0")
-            params.add_param("browser_online", "true")
-            params.add_param("engine_name", "Blink")
-            params.add_param("engine_version", "125.0.0.0")
-            params.add_param("os_name", "Windows")
-            params.add_param("os_version", "10")
-            params.add_param("cpu_core_num", "32")
-            params.add_param("device_memory", "8")
-            params.add_param("platform", "PC")
-            params.add_param("downlink", "10")
-            params.add_param("effective_type", "4g")
-            params.add_param("round_trip_time", "50")
-            params.with_web_id(self.auth, refer)
-            params.add_param("msToken", self.auth.msToken)
-            params.with_a_bogus()
-            
-            headers = HeaderBuilder.build(HeaderType.GET)
-            headers.set_referer(refer)
-            
-            logger.info(f"搜索用户请求: keyword={keyword}, offset={offset}")
-            
-            response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
-            data = self._safe_json_parse(response)
-            
-            # 检查是否需要验证码
-            search_nil_info = data.get("search_nil_info", {})
-            if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
-                raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
-            
-            user_list = data.get("user_list", [])
-            if not user_list:
-                logger.warning(f"搜索用户结果为空: keyword={keyword}, offset={offset}")
-                break
-            
-            for item in user_list:
-                user_info = item.get("user_info", {})
-                users.append(self._parse_user_info(user_info))
-            
-            offset = str(int(offset) + len(user_list))
-            if data.get("has_more") != 1:
-                break
-        
-        return users[:limit]
+        for item in user_list:
+            user_info = item.get("user_info", {})
+            users.append(self._parse_user_info(user_info))
+
+        has_more = data.get("has_more") == 1
+        next_offset = str(int(offset) + len(user_list))
+
+        return {"items": users, "has_more": has_more, "next_offset": next_offset}
     
-    async def search_live(self, keyword: str, limit: int = 20) -> List[dict]:
-        """搜索直播 - 参照原脚本API"""
+    async def search_live(self, keyword: str, offset: str = "0", count: int = 25) -> dict:
+        """搜索直播（单页模式）"""
         import uuid
         import urllib.parse
-        
+
         api = "/aweme/v1/web/live/search/"
-        
+        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=live"
+
+        params = Params()
+        params.add_param("device_platform", "webapp")
+        params.add_param("aid", "6383")
+        params.add_param("channel", "channel_pc_web")
+        params.add_param("search_channel", "aweme_live")
+        params.add_param("keyword", keyword)
+        params.add_param("search_source", "normal_search")
+        params.add_param("query_correct_type", "1")
+        params.add_param("is_filter_search", "0")
+        params.add_param("from_group_id", "")
+        params.add_param("offset", offset)
+        params.add_param("count", str(count))
+        params.add_param("need_filter_settings", "1" if offset == "0" else "0")
+        params.add_param("list_type", "single")
+        params.add_param("update_version_code", "170400")
+        params.add_param("pc_client_type", "1")
+        params.add_param("version_code", "190600")
+        params.add_param("version_name", "19.6.0")
+        params.add_param("cookie_enabled", "true")
+        params.add_param("screen_width", "1707")
+        params.add_param("screen_height", "960")
+        params.add_param("browser_language", "zh-CN")
+        params.add_param("browser_platform", "Win32")
+        params.add_param("browser_name", "Edge")
+        params.add_param("browser_version", "125.0.0.0")
+        params.add_param("browser_online", "true")
+        params.add_param("engine_name", "Blink")
+        params.add_param("engine_version", "125.0.0.0")
+        params.add_param("os_name", "Windows")
+        params.add_param("os_version", "10")
+        params.add_param("cpu_core_num", "32")
+        params.add_param("device_memory", "8")
+        params.add_param("platform", "PC")
+        params.add_param("downlink", "10")
+        params.add_param("effective_type", "4g")
+        params.add_param("round_trip_time", "50")
+        params.with_web_id(self.auth, refer)
+        params.add_param("msToken", self.auth.msToken)
+        params.with_a_bogus()
+
+        headers = HeaderBuilder.build(HeaderType.GET)
+        headers.set_referer(refer)
+
+        logger.info(f"搜索直播请求: keyword={keyword}, offset={offset}")
+        response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
+        data = self._safe_json_parse(response)
+
+        search_nil_info = data.get("search_nil_info", {})
+        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
+            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+
+        live_list = data.get("data", [])
+        if not live_list:
+            if "live_list" in data:
+                live_list = data.get("live_list", [])
+            elif "lives" in data:
+                live_list = data.get("lives", [])
+
         lives = []
-        offset = "0"
-        
-        while len(lives) < limit:
-            refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=live"
-            
-            # 构建参数 - 严格按照原脚本顺序
-            params = Params()
-            params.add_param("device_platform", "webapp")
-            params.add_param("aid", "6383")
-            params.add_param("channel", "channel_pc_web")
-            params.add_param("search_channel", "aweme_live")
-            params.add_param("keyword", keyword)
-            params.add_param("search_source", "normal_search")
-            params.add_param("query_correct_type", "1")
-            params.add_param("is_filter_search", "0")
-            params.add_param("from_group_id", "")
-            params.add_param("offset", offset)
-            params.add_param("count", "25")
-            params.add_param("need_filter_settings", "1" if offset == "0" else "0")
-            params.add_param("list_type", "single")
-            params.add_param("update_version_code", "170400")
-            params.add_param("pc_client_type", "1")
-            params.add_param("version_code", "190600")
-            params.add_param("version_name", "19.6.0")
-            params.add_param("cookie_enabled", "true")
-            params.add_param("screen_width", "1707")
-            params.add_param("screen_height", "960")
-            params.add_param("browser_language", "zh-CN")
-            params.add_param("browser_platform", "Win32")
-            params.add_param("browser_name", "Edge")
-            params.add_param("browser_version", "125.0.0.0")
-            params.add_param("browser_online", "true")
-            params.add_param("engine_name", "Blink")
-            params.add_param("engine_version", "125.0.0.0")
-            params.add_param("os_name", "Windows")
-            params.add_param("os_version", "10")
-            params.add_param("cpu_core_num", "32")
-            params.add_param("device_memory", "8")
-            params.add_param("platform", "PC")
-            params.add_param("downlink", "10")
-            params.add_param("effective_type", "4g")
-            params.add_param("round_trip_time", "50")
-            params.with_web_id(self.auth, refer)
-            params.add_param("msToken", self.auth.msToken)
-            params.with_a_bogus()
-            
-            headers = HeaderBuilder.build(HeaderType.GET)
-            headers.set_referer(refer)
-            
-            logger.info(f"搜索直播请求: keyword={keyword}, offset={offset}")
-            
-            response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
-            data = self._safe_json_parse(response)
-            
-            # 检查是否需要验证码
-            search_nil_info = data.get("search_nil_info", {})
-            if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
-                raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
-            
-            live_list = data.get("data", [])
-            
-            if not live_list:
-                # 尝试其他可能的数据字段
-                if "live_list" in data:
-                    live_list = data.get("live_list", [])
-                elif "lives" in data:
-                    live_list = data.get("lives", [])
-            
-            if not live_list:
-                logger.warning(f"搜索直播结果为空: keyword={keyword}, offset={offset}")
-                break
-            
-            for item in live_list:
-                # 数据结构: item['lives']['rawdata'] 包含直播间详细信息
-                lives_data = item.get("lives", {})
-                if not lives_data or not isinstance(lives_data, dict):
-                    continue
-                
-                # 获取 author 信息
-                author = lives_data.get("author", {})
-                
-                # 获取 rawdata 信息 - 直播间详细数据
-                rawdata = lives_data.get("rawdata", {})
-                
-                # 如果 rawdata 是字符串，需要解析为 JSON
-                if isinstance(rawdata, str):
-                    try:
-                        rawdata = json.loads(rawdata)
-                    except:
-                        rawdata = {}
-                
-                if not rawdata or not isinstance(rawdata, dict):
-                    continue
-                
-                # 解析直播间信息
-                live_info = self._parse_live_info_v3(rawdata, author)
-                if live_info:
-                    lives.append(live_info)
-            
-            offset = str(int(offset) + len(live_list))
-            if data.get("has_more") != 1:
-                break
-        
-        return lives[:limit]
+        for item in live_list:
+            lives_data = item.get("lives", {})
+            if not lives_data or not isinstance(lives_data, dict):
+                continue
+            author = lives_data.get("author", {})
+            rawdata = lives_data.get("rawdata", {})
+            if isinstance(rawdata, str):
+                try:
+                    rawdata = json.loads(rawdata)
+                except:
+                    rawdata = {}
+            if not rawdata or not isinstance(rawdata, dict):
+                continue
+            live_info = self._parse_live_info_v3(rawdata, author)
+            if live_info:
+                lives.append(live_info)
+
+        has_more = data.get("has_more") == 1
+        next_offset = str(int(offset) + len(live_list))
+
+        return {"items": lives, "has_more": has_more, "next_offset": next_offset}
     
     def _parse_live_info(self, data: dict) -> dict:
         """解析直播信息 - 旧格式"""

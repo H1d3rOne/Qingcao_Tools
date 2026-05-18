@@ -4,11 +4,38 @@
       <template #header>
         <div class="card-header">
           <h2>登录闲鱼</h2>
-          <p>优先使用 Cookie 登录，扫码登录作为备用方式。</p>
+          <p>优先使用设置中保存的 Cookie 自动登录，失败后请粘贴 Cookie 手动登录。</p>
         </div>
       </template>
 
-      <div class="cookie-login">
+      <!-- 自动登录中 -->
+      <div
+        v-if="autoLoginStatus === 'pending'"
+        class="auto-login-status"
+      >
+        <el-icon
+          class="is-loading"
+          :size="32"
+        >
+          <Loading />
+        </el-icon>
+        <p>正在使用已保存的 Cookie 自动登录...</p>
+      </div>
+
+      <!-- 自动登录失败提示 -->
+      <el-alert
+        v-if="autoLoginStatus === 'failed' && autoLoginMessage"
+        :title="autoLoginMessage"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="auto-login-alert"
+      />
+
+      <div
+        v-if="autoLoginStatus !== 'pending'"
+        class="cookie-login"
+      >
         <div class="login-section-title">
           <h3>Cookie 登录</h3>
           <p>支持直接粘贴 Cookie 字符串或浏览器导出的 JSON 内容。</p>
@@ -44,6 +71,7 @@
       </div>
 
       <el-collapse
+        v-if="autoLoginStatus !== 'pending'"
         v-model="expandedPanels"
         class="login-secondary-collapse"
       >
@@ -158,6 +186,10 @@ const checkingLogin = ref(false)
 const checkingText = ref('等待扫码中...')
 const cookieSubmitting = ref(false)
 const fillCookieLoading = ref(false)
+
+// 自动登录状态：idle=未开始，pending=进行中，failed=失败，success=成功
+const autoLoginStatus = ref<'idle' | 'pending' | 'failed' | 'success'>('idle')
+const autoLoginMessage = ref('')
 
 let pollTimer: number | null = null
 let expireTimer: number | null = null
@@ -311,8 +343,45 @@ onMounted(async () => {
   }
   if (userStore.isLoggedIn) {
     router.push(getRedirectTarget())
+    return
   }
+  // 尝试用设置中保存的 Cookie 自动登录
+  await tryAutoLogin()
 })
+
+const tryAutoLogin = async () => {
+  autoLoginStatus.value = 'pending'
+  autoLoginMessage.value = ''
+  try {
+    const response = await getFullXianyuCookie()
+    const savedCookie = response.data?.cookie?.trim() || ''
+    if (!savedCookie) {
+      autoLoginStatus.value = 'failed'
+      autoLoginMessage.value = '设置中未配置闲鱼 Cookie，请粘贴 Cookie 手动登录'
+      return
+    }
+    const loginRes = await loginXianyu({
+      method: 'cookie',
+      cookies: savedCookie,
+    })
+    if (!loginRes.success) {
+      autoLoginStatus.value = 'failed'
+      autoLoginMessage.value = `已保存的 Cookie 登录失败：${loginRes.message || 'Cookie 可能已失效'}，请重新粘贴 Cookie 登录`
+      cookieForm.cookie = savedCookie
+      return
+    }
+    await userStore.checkAuthStatus()
+    userStore.loginSuccess((await getXianyuAuthStatus()).user_info as Record<string, unknown> | null)
+    autoLoginStatus.value = 'success'
+    ElMessage.success('已使用保存的 Cookie 自动登录')
+    router.push(getRedirectTarget())
+  } catch (err: unknown) {
+    autoLoginStatus.value = 'failed'
+    autoLoginMessage.value = err instanceof Error
+      ? `自动登录失败：${err.message}，请重新粘贴 Cookie 登录`
+      : '自动登录失败，请重新粘贴 Cookie 登录'
+  }
+}
 
 onUnmounted(() => {
   clearPollingTimers()
@@ -418,6 +487,23 @@ onUnmounted(() => {
 
 .cookie-login {
   padding-top: 8px;
+}
+
+.auto-login-status {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  padding: 32px 0;
+  color: #6b7280;
+}
+
+.auto-login-status p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.auto-login-alert {
+  margin-bottom: 16px;
 }
 
 .login-secondary-collapse {
