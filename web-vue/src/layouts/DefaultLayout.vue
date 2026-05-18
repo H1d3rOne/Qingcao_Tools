@@ -69,7 +69,7 @@ const activeModule = computed(() => {
 
 const douyinSubMenus = [
   { path: '/douyin', title: '首页', exact: true },
-  { path: '/douyin/video', title: '作品' },
+  { path: '/douyin/video', title: '视频' },
   { path: '/douyin/user', title: '用户' },
   { path: '/douyin/search', title: '搜索' },
   { path: '/douyin/live', title: '直播' }

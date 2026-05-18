@@ -81,7 +81,7 @@ function goToUser() {
           <VideoPlay />
         </el-icon>
         <h3 class="text-white text-lg font-medium mb-2">
-          作品查询
+          视频查询
         </h3>
         <p class="text-gray-400 text-sm">
           输入视频链接获取详情、评论、下载
@@ -129,7 +129,7 @@ function goToUser() {
           </el-icon>
           <div>
             <h3 class="text-white font-medium mb-1">
-              作品查询
+              视频查询
             </h3>
             <p class="text-sm">
               粘贴抖音视频分享链接，获取视频详情、评论列表，支持无水印下载

@@ -19,13 +19,13 @@ export const routes: RouteRecordRaw[] = [
         path: 'video',
         name: 'DouyinVideo',
         component: () => import('@/views/douyin/video/index.vue'),
-        meta: { title: '作品查询' }
+        meta: { title: '视频查询' }
       },
       {
         path: 'video/:id',
         name: 'DouyinVideoDetail',
         component: () => import('@/views/douyin/video/detail.vue'),
-        meta: { title: '作品详情' }
+        meta: { title: '视频详情' }
       },
       {
         path: 'user',

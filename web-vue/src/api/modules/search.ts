@@ -6,14 +6,6 @@ interface ApiResponse<T = any> {
   data: T
   error?: string
   message?: string
-  total?: number
-}
-
-// 搜索结果
-interface SearchResult<T> {
-  keyword: string
-  total: number
-  items: T[]
 }
 
 // 搜索视频项 - 匹配后端 _parse_work_info 返回的完整字段
@@ -47,7 +39,7 @@ export interface SearchVideo {
   work_url: string
 }
 
-// 搜索用户项 - 匹配后端 _parse_user_info 返回的完整字段
+// 搜索用户项
 export interface SearchUser {
   uid: string
   sec_uid: string
@@ -65,7 +57,7 @@ export interface SearchUser {
   favoriting_count: number
 }
 
-// 搜索直播项 - 匹配后端 _parse_live_info_v3 返回的完整字段
+// 搜索直播项
 export interface SearchLive {
   room_id: string
   title: string
@@ -81,89 +73,49 @@ export interface SearchLive {
   }
 }
 
-// 分页响应适配器
-interface PaginatedResponse<T> {
-  data: T[]
+// 分页搜索结果
+interface SearchPageResult<T> {
+  keyword: string
+  items: T[]
   has_more: boolean
-  cursor: number
+  next_offset: string
+  search_id?: string
 }
 
-// 搜索作品
-export function searchVideos(params: { 
+// 搜索作品（综合）
+export function searchVideos(params: {
   keyword: string
-  limit?: number
+  offset?: string
+  count?: number
   sort_type?: string
   publish_time?: string
   filter_duration?: string
+  search_range?: string
   content_type?: string
-  cursor?: number
-  count?: number
 }) {
-  const { keyword, cursor, count, ...rest } = params
-  return request.post<ApiResponse<SearchResult<SearchVideo>>>('/douyin/search/work', { 
-    keyword, 
-    limit: count || 20,
-    ...rest
-  }).then(res => ({
-    data: {
-      data: res.data?.items || [],
-      has_more: false,
-      cursor: 0
-    }
-  }))
+  return request.post<ApiResponse<SearchPageResult<SearchVideo>>>('/douyin/search/work', params)
 }
 
 // 视频搜索
 export function searchVideoSearch(params: {
   keyword: string
-  limit?: number
+  offset?: string
+  count?: number
+  search_id?: string
   sort_type?: string
   publish_time?: string
   filter_duration?: string
   search_range?: string
-  cursor?: number
-  count?: number
 }) {
-  const { keyword, cursor, count, ...rest } = params
-  return request.post<ApiResponse<SearchResult<SearchVideo>>>('/douyin/search/video', {
-    keyword,
-    limit: count || 20,
-    ...rest
-  }).then(res => ({
-    data: {
-      data: res.data?.items || [],
-      has_more: false,
-      cursor: 0
-    }
-  }))
+  return request.post<ApiResponse<SearchPageResult<SearchVideo>>>('/douyin/search/video', params)
 }
 
 // 搜索用户
-export function searchUsers(params: { keyword: string; limit?: number; cursor?: number; count?: number }) {
-  const { keyword, cursor, count } = params
-  return request.post<ApiResponse<SearchResult<SearchUser>>>('/douyin/search/user', { 
-    keyword, 
-    limit: count || 20 
-  }).then(res => ({
-    data: {
-      data: res.data?.items || [],
-      has_more: false,
-      cursor: 0
-    }
-  }))
+export function searchUsers(params: { keyword: string; offset?: string; count?: number }) {
+  return request.post<ApiResponse<SearchPageResult<SearchUser>>>('/douyin/search/user', params)
 }
 
 // 搜索直播
-export function searchLive(params: { keyword: string; limit?: number; cursor?: number; count?: number }) {
-  const { keyword, cursor, count } = params
-  return request.post<ApiResponse<SearchResult<SearchLive>>>('/douyin/search/live', { 
-    keyword, 
-    limit: count || 20 
-  }).then(res => ({
-    data: {
-      data: res.data?.items || [],
-      has_more: false,
-      cursor: 0
-    }
-  }))
+export function searchLive(params: { keyword: string; offset?: string; count?: number }) {
+  return request.post<ApiResponse<SearchPageResult<SearchLive>>>('/douyin/search/live', params)
 }

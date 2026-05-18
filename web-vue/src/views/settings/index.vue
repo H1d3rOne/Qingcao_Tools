@@ -434,7 +434,7 @@ async function handleTestAi() {
             <div class="section-card__head">
               <div>
                 <h3>抖音 Cookie</h3>
-                <p>用于作品查询、用户查询、全能搜索等功能。</p>
+                <p>用于视频查询、用户查询、全能搜索等功能。</p>
               </div>
             </div>
 
@@ -446,7 +446,7 @@ async function handleTestAi() {
                     {{ dyConfigured ? '已配置' : '未配置' }}
                   </el-tag>
                 </div>
-                <p class="config-item__desc">用于作品查询、用户查询、全能搜索等功能。</p>
+                <p class="config-item__desc">用于视频查询、用户查询、全能搜索等功能。</p>
                 <el-input
                   v-model="dyCookieInput"
                   type="textarea"

@@ -5,6 +5,7 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 import { getWorkInfo, getWorkComments } from '@/api'
 import type { WorkInfo, Comment } from '@/api/modules/video'
 import { useNotification } from '@/composables'
+import { extractUrl } from '@/utils'
 
 const router = useRouter()
 const { error, success } = useNotification()
@@ -90,12 +91,15 @@ async function handleSearch() {
     return
   }
 
+  const url = extractUrl(inputUrl.value)
+  inputUrl.value = url
+
   loading.value = true
   workInfo.value = null
   comments.value = []
-  
+
   try {
-    const res = await getWorkInfo(inputUrl.value.trim())
+    const res = await getWorkInfo(url)
     workInfo.value = res.data
     
     if (res.data.video_qualities) {
@@ -129,7 +133,7 @@ async function loadComments() {
 
 function handlePaste() {
   navigator.clipboard.readText().then(text => {
-    inputUrl.value = text
+    inputUrl.value = extractUrl(text)
   })
 }
 

@@ -28,3 +28,14 @@ export function getFeed() {
 export function getStatus() {
   return request.get<ApiResponse<{ cookie_configured: boolean }>>('/settings/status')
 }
+
+// 使用统计
+export interface UsageStats {
+  parsed_count: number
+  downloaded_count: number
+  success_rate: number
+}
+
+export function getUsageStats() {
+  return request.get<ApiResponse<UsageStats>>('/settings/stats')
+}
