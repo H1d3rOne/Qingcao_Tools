@@ -1,1 +1,79 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git worktree
 .worktrees/
+
+# 工具/AI 助手生成
+.codebuddy/
+.playwright-cli/
+.superpowers/
+.trae/
+
+# 依赖目录
+node_modules/
+**/node_modules/
+
+# 构建输出
+output/
+dist/
+build/
+*.tsbuildinfo
+
+# 临时/调试文件
+*.tmp
+*.log
+fix_sign.py
+backend/test_sign.js
+backend/test_user_works.py
+backend/test_ws.py
+backend/pydantic_core-*.whl
+
+# 根目录无关 lock（项目使用 web-vue/pnpm-lock.yaml）
+/package.json
+/package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+backend/.venv/
+backend/venv/
+
+# 后端运行时数据/日志/凭证（含敏感信息）
+backend/datas/
+backend/logs/
+backend/config/
+backend/app/datas/
+backend/app/config/
+backend/app/modules/quark/config/
+backend/xianyu_client/
+
+# 抖音/闲鱼/夸克 cookie 与浏览器档案（敏感）
+**/xianyu_cookies.json
+**/quark_cookies.json
+**/xianyu_browser_profile/
+**/douyin_cookies.json
+
+# 前端环境变量（本地配置，可能含密钥）
+web-vue/.env.local
+web-vue/.env.*.local
+
+# 其他
+VideoDownload/
