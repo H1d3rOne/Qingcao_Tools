@@ -923,7 +923,7 @@ class XianyuService:
         return bootstrap["profile"]
 
     async def diagnose_chat_runtime(self) -> XianyuChatHealthStatus:
-        """诊断闲鱼聊天链路状态"""
+        """轻量级诊断闲鱼聊天链路状态（不开 WebSocket，避免每次诊断都重建连接）"""
         cookie_configured = bool(self._get_xianyu_cookie_value())
         if not cookie_configured:
             return XianyuChatHealthStatus(
@@ -934,14 +934,16 @@ class XianyuService:
                 cookie_configured=False,
             )
 
+        # 只用一次廉价的 HTTP 调用验证 Cookie 是否有效，避免每次诊断都重建 ws 连接
         try:
-            chat_client = await self.open_chat_ws_client()
-            connected = bool(chat_client and getattr(chat_client, "_ws", None) is not None)
+            cookie = self._get_xianyu_cookie_value()
+            async with self._create_http_client(cookie) as client:
+                await self._refresh_login_state(client)
             return XianyuChatHealthStatus(
-                ok=connected,
-                status="ok" if connected else "error",
-                message="闲鱼聊天链路正常。" if connected else "聊天 WebSocket 未连接。",
-                shared_ws_connected=connected,
+                ok=True,
+                status="ok",
+                message="闲鱼聊天链路就绪。",
+                shared_ws_connected=False,
                 cookie_configured=True,
             )
         except Exception as exc:
@@ -949,14 +951,18 @@ class XianyuService:
             status = "error"
             captcha_url = ""
             lowered = error_text.lower()
-            if "captcha" in lowered or "风控" in error_text or "verify" in lowered:
+            if "captcha" in lowered or "风控" in error_text or "verify" in lowered or "validate" in lowered:
                 status = "risk_blocked"
-            elif "auth" in lowered or "登录" in error_text or "token" in lowered:
+                message = f"闲鱼请求被风控拦截：{error_text}"
+            elif "session_expired" in lowered or "auth" in lowered or "token" in lowered or "登录" in error_text:
                 status = "auth_invalid"
+                message = "闲鱼登录态可能已失效，请尝试更新设置页中的 Cookie。"
+            else:
+                message = f"聊天链路诊断失败：{error_text}"
             return XianyuChatHealthStatus(
                 ok=False,
                 status=status,
-                message=f"聊天链路诊断失败：{error_text}",
+                message=message,
                 captcha_url=captcha_url,
                 shared_ws_connected=False,
                 cookie_configured=True,
