@@ -433,3 +433,124 @@ class XianyuChatAiTestRequest(BaseModel):
 class XianyuChatAiTestResponse(BaseModel):
     """闲鱼聊天 AI 测试响应"""
     reply: str = Field("", description="模型回复")
+
+
+class XianyuManageItem(BaseModel):
+    """闲鱼管理商品"""
+    item_id: str = Field(..., description="商品 ID")
+    item_title: str = Field("", description="商品标题")
+    item_price: str = Field("", description="商品价格")
+    item_image: str = Field("", description="商品主图")
+    item_status: str = Field("", description="商品状态")
+    item_detail: str = Field("", description="商品详情文本")
+    multi_quantity_delivery: bool = Field(False, description="是否启用多数量发货")
+    synced_at: int = Field(0, description="最近同步时间")
+    updated_at: int = Field(0, description="最近更新时间")
+
+
+class XianyuManageItemPage(BaseModel):
+    """闲鱼管理商品分页列表"""
+    items: List[XianyuManageItem] = Field(default_factory=list, description="商品列表")
+    total: int = Field(0, description="总数")
+    page: int = Field(1, description="当前页")
+    page_size: int = Field(20, description="每页数量")
+    has_more: bool = Field(False, description="是否还有更多")
+
+
+class XianyuManageItemPolishRequest(BaseModel):
+    """闲鱼管理商品擦亮请求"""
+    item_id: str = Field(..., description="商品 ID")
+    enable_notification: bool = Field(False, description="是否输出日志")
+
+
+class XianyuManageItemPolishResponse(BaseModel):
+    """闲鱼管理商品擦亮响应"""
+    success: bool = Field(True, description="是否成功")
+    item_id: str = Field(..., description="商品 ID")
+    message: str = Field("", description="提示信息")
+
+
+class XianyuManageItemPolishAllResponse(BaseModel):
+    """闲鱼管理商品批量擦亮响应"""
+    total: int = Field(..., description="商品总数")
+    polished: int = Field(..., description="擦亮成功数量")
+
+
+class XianyuManageItemSyncPageRequest(BaseModel):
+    """闲鱼管理商品单页同步请求"""
+    page: int = Field(1, ge=1, description="页码")
+    page_size: int = Field(20, ge=1, le=100, description="每页数量")
+
+
+class XianyuManageItemUpdateRequest(BaseModel):
+    """闲鱼管理商品更新请求"""
+    item_detail: str = Field("", description="商品详情文本")
+
+
+class XianyuManageItemMultiQuantityUpdateRequest(BaseModel):
+    """闲鱼管理商品多数量发货开关请求"""
+    enabled: bool = Field(False, description="是否启用多数量发货")
+
+
+class XianyuDeliveryRule(BaseModel):
+    """闲鱼自动发货规则"""
+    id: str = Field(..., description="规则 ID")
+    name: str = Field(..., description="规则名称")
+    enabled: bool = Field(True, description="是否启用")
+    item_id: str = Field("", description="关联商品 ID")
+    keyword: str = Field("", description="关键字")
+    match_mode: str = Field("item_id", description="匹配模式")
+    delivery_text: str = Field("", description="发货文本")
+    send_chat_text: bool = Field(True, description="是否发送聊天文本")
+    send_dummy_ship: bool = Field(True, description="是否调用虚拟发货")
+    created_at: int = Field(0, description="创建时间")
+    updated_at: int = Field(0, description="更新时间")
+
+
+class XianyuDeliveryRuleCreateRequest(BaseModel):
+    """闲鱼自动发货规则创建请求"""
+    name: str = Field(..., min_length=1, max_length=50, description="规则名称")
+    enabled: bool = Field(True, description="是否启用")
+    item_id: str = Field("", description="关联商品 ID")
+    keyword: str = Field("", description="关键字")
+    match_mode: str = Field("item_id", description="匹配模式")
+    delivery_text: str = Field("", max_length=5000, description="发货文本")
+    send_chat_text: bool = Field(True, description="是否发送聊天文本")
+    send_dummy_ship: bool = Field(True, description="是否调用虚拟发货")
+
+
+class XianyuDeliveryRuleUpdateRequest(BaseModel):
+    """闲鱼自动发货规则更新请求"""
+    name: Optional[str] = Field(None, min_length=1, max_length=50, description="规则名称")
+    enabled: Optional[bool] = Field(None, description="是否启用")
+    item_id: Optional[str] = Field(None, description="关联商品 ID")
+    keyword: Optional[str] = Field(None, description="关键字")
+    match_mode: Optional[str] = Field(None, description="匹配模式")
+    delivery_text: Optional[str] = Field(None, max_length=5000, description="发货文本")
+    send_chat_text: Optional[bool] = Field(None, description="是否发送聊天文本")
+    send_dummy_ship: Optional[bool] = Field(None, description="是否调用虚拟发货")
+
+
+class XianyuDeliveryExecutionRecord(BaseModel):
+    """闲鱼自动发货执行记录"""
+    id: str = Field(..., description="执行记录 ID")
+    rule_id: str = Field("", description="规则 ID")
+    rule_name: str = Field("", description="规则名称")
+    order_id: str = Field("", description="订单 ID")
+    item_id: str = Field("", description="商品 ID")
+    buyer_id: str = Field("", description="买家 ID")
+    status: str = Field("skipped", description="执行状态")
+    message: str = Field("", description="结果说明")
+    created_at: int = Field(0, description="创建时间")
+
+
+class XianyuDeliveryRuntimeStatus(BaseModel):
+    """闲鱼自动发货运行状态"""
+    running: bool = Field(False, description="是否运行中")
+    last_event_at: int = Field(0, description="最近事件时间")
+    last_success_at: int = Field(0, description="最近成功时间")
+    last_failure_at: int = Field(0, description="最近失败时间")
+    last_error: str = Field("", description="最近错误")
+    enabled_rule_count: int = Field(0, description="启用规则数量")
+    recent_success_count: int = Field(0, description="最近成功数")
+    recent_failure_count: int = Field(0, description="最近失败数")

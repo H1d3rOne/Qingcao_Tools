@@ -26,6 +26,9 @@ import websockets
 
 from app.core.config import settings as app_settings
 from app.modules.xianyu.ai_store import XianyuChatAiStore
+from app.modules.xianyu.delivery_runtime import XianyuDeliveryRuntime
+from app.modules.xianyu.delivery_store import XianyuDeliveryStore
+from app.modules.xianyu.item_store import XianyuItemStore
 from app.modules.xianyu.monitor_store import XianyuMonitorStore
 from app.modules.xianyu.schemas import (
     XianyuChatAiConfig,
@@ -37,10 +40,17 @@ from app.modules.xianyu.schemas import (
     XianyuChatMessagePage,
     XianyuChatProfile,
     XianyuChatSendResult,
+    XianyuDeliveryExecutionRecord,
+    XianyuDeliveryRule,
+    XianyuDeliveryRuleCreateRequest,
+    XianyuDeliveryRuleUpdateRequest,
+    XianyuDeliveryRuntimeStatus,
     XianyuDetailAttribute,
     XianyuFilterGroup,
     XianyuFilterOption,
     XianyuItemDetail,
+    XianyuManageItem,
+    XianyuManageItemPage,
     XianyuMonitorTask,
     XianyuMonitorTaskCreate,
     XianyuMonitorTaskUpdate,
@@ -285,6 +295,10 @@ class XianyuService:
     user_nav_api_url = "https://h5api.m.goofish.com/h5/mtop.idle.web.user.page.nav/1.0/"
     page_head_api_name = "mtop.idle.web.user.page.head"
     page_head_api_url = "https://h5api.m.goofish.com/h5/mtop.idle.web.user.page.head/1.0/"
+    manage_item_list_api_name = "mtop.idle.web.xyh.item.list"
+    manage_item_list_api_url = "https://h5api.m.goofish.com/h5/mtop.idle.web.xyh.item.list/1.0/"
+    item_polish_api_name = "mtop.taobao.idle.item.polish"
+    item_polish_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idle.item.polish/1.0/"
     chat_login_user_api_name = "mtop.taobao.idlemessage.pc.loginuser.get"
     chat_login_user_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idlemessage.pc.loginuser.get/1.0/"
     chat_login_token_api_name = "mtop.taobao.idlemessage.pc.login.token"
@@ -322,8 +336,15 @@ class XianyuService:
         self._xianyu_cookie_path = Path.cwd() / "config" / "xianyu_cookies.json"
         self._chat_ai_config_path = Path.cwd() / "config" / "xianyu_ai_config.json"
         self._chat_ai_sessions_path = Path.cwd() / "config" / "xianyu_ai_sessions.json"
+        self._item_store_path = Path.cwd() / "config" / "xianyu_manage_items.json"
+        self._delivery_rules_path = Path.cwd() / "config" / "xianyu_delivery_rules.json"
+        self._delivery_runtime_path = Path.cwd() / "config" / "xianyu_delivery_runtime.json"
         self._monitor_store: XianyuMonitorStore | None = None
         self._chat_ai_store: XianyuChatAiStore | None = None
+        self._item_store: XianyuItemStore | None = None
+        self._delivery_store: XianyuDeliveryStore | None = None
+        self._delivery_runtime: XianyuDeliveryRuntime | None = None
+        self._delivery_runtime_running_state: bool = False
         self._monitor_runner_task: asyncio.Task | None = None
         self._auth_login: XianyuAPILogin | None = None
         self._current_qr_payload: dict[str, str] | None = None
@@ -357,6 +378,34 @@ class XianyuService:
                 sessions_path=self._chat_ai_sessions_path,
             )
         return self._chat_ai_store
+
+    @property
+    def item_store(self) -> XianyuItemStore:
+        if self._item_store is None:
+            self._item_store = XianyuItemStore(self._item_store_path)
+        return self._item_store
+
+    @property
+    def delivery_store(self) -> XianyuDeliveryStore:
+        if self._delivery_store is None:
+            self._delivery_store = XianyuDeliveryStore(
+                rules_path=self._delivery_rules_path,
+                runtime_path=self._delivery_runtime_path,
+            )
+        return self._delivery_store
+
+    @property
+    def delivery_runtime(self) -> XianyuDeliveryRuntime:
+        if self._delivery_runtime is None:
+            self._delivery_runtime = XianyuDeliveryRuntime(
+                item_store=self.item_store,
+                delivery_store=self.delivery_store,
+            )
+        return self._delivery_runtime
+
+    def _sync_chat_ai_listener_state(self) -> None:
+        """Listener state sync hook (no-op: chat AI listener wiring not yet ported)."""
+        pass
 
     def get_chat_ai_config(self) -> XianyuChatAiConfig:
         return self.chat_ai_store.load_config()
@@ -2593,3 +2642,247 @@ class XianyuService:
                     break
             except Exception:
                 self._log.debug("Token 刷新尝试失败: %s", attempt_url)
+
+    # ============================================================
+    # 闲鱼商品管理 / 自动发货模块
+    # ============================================================
+
+    def _map_manage_item(self, raw: Dict[str, Any]) -> dict[str, Any]:
+        """从远程 cardData 映射到本地存储格式"""
+        price_info = raw.get("priceInfo") if isinstance(raw.get("priceInfo"), dict) else {}
+        pic_info = raw.get("picInfo") if isinstance(raw.get("picInfo"), dict) else {}
+        item_id = str(raw.get("id") or raw.get("itemId") or "").strip()
+        return {
+            "item_id": item_id,
+            "item_title": str(raw.get("title") or "").strip(),
+            "item_price": str(price_info.get("price") or raw.get("price") or "").strip(),
+            "item_image": self._normalize_image_url(str(pic_info.get("picUrl") or raw.get("picUrl") or "")),
+            "item_status": str(raw.get("itemStatus") or raw.get("itemStatusStr") or "").strip(),
+            "item_detail": str(raw.get("item_detail") or ""),
+            "multi_quantity_delivery": bool(raw.get("multi_quantity_delivery") or False),
+        }
+
+    def list_manage_items(self, page: int = 1, page_size: int = 20) -> XianyuManageItemPage:
+        return self.item_store.list_items(page=page, page_size=page_size)
+
+    async def sync_manage_items_page(self, page: int = 1, page_size: int = 20) -> XianyuManageItemPage:
+        page = max(int(page or 1), 1)
+        page_size = max(min(int(page_size or 20), 100), 1)
+        cookie = self._get_xianyu_cookie_value()
+        if not cookie:
+            raise ValueError("请先在设置页配置闲鱼 Cookie")
+
+        async with self._create_http_client(cookie) as client:
+            if not self._get_cookie_value(client, "_m_h5_tk"):
+                await self._warmup_token(client)
+            await self._refresh_login_state(client)
+            user_id = str(self._get_cookie_value(client, "unb") or "").strip()
+            if not user_id:
+                profile = await self.get_chat_profile()
+                user_id = str(profile.main_user_id or profile.user_id or "").strip()
+            payload = {
+                "needGroupInfo": False,
+                "pageNumber": page,
+                "pageSize": page_size,
+                "groupName": "在售",
+                "groupId": "58877261",
+                "defaultGroup": True,
+                "userId": user_id,
+            }
+            response_data = await self._execute_api(
+                client,
+                api_name=self.manage_item_list_api_name,
+                api_url=self.manage_item_list_api_url,
+                payload=payload,
+                extra_params={
+                    "spm_cnt": "a21ybx.im.0.0",
+                    "spm_pre": "a21ybx.collection.menu.1.272b5141NafCNK",
+                },
+            )
+
+        data = response_data.get("data") or {}
+        card_list = data.get("cardList") or []
+        if not isinstance(card_list, list):
+            card_list = []
+        mapped_items = [
+            self._map_manage_item((card or {}).get("cardData") or {})
+            for card in card_list
+            if isinstance((card or {}).get("cardData"), dict)
+        ]
+        mapped_items = [item for item in mapped_items if item.get("item_id")]
+        self.item_store.upsert_items(mapped_items)
+        synced_items = [
+            stored_item
+            for stored_item in (
+                self.item_store.get_item(str(item.get("item_id") or "").strip())
+                for item in mapped_items
+            )
+            if stored_item is not None
+        ]
+        store_total = self.item_store.list_items(page=1, page_size=1).total
+        module = data.get("module") if isinstance(data.get("module"), dict) else {}
+        raw_next_page = (
+            data.get("nextPage")
+            if "nextPage" in data
+            else module.get("nextPage")
+        )
+        remote_has_more = bool(raw_next_page) if isinstance(raw_next_page, bool) else str(raw_next_page or "").lower() == "true"
+        total_text = str(data.get("totalCount") or module.get("totalCount") or "").strip()
+        try:
+            remote_total = int(total_text) if total_text.isdigit() else store_total
+        except (TypeError, ValueError):
+            remote_total = store_total
+        if not raw_next_page and remote_total > page * page_size:
+            remote_has_more = True
+        return XianyuManageItemPage(
+            items=synced_items,
+            total=max(remote_total, store_total, ((page - 1) * page_size) + len(mapped_items)),
+            page=page,
+            page_size=page_size,
+            has_more=remote_has_more,
+        )
+
+    async def sync_manage_items_all(self) -> dict[str, int]:
+        page = 1
+        pages = 0
+        synced = 0
+        while True:
+            before_total = self.item_store.list_items(page=1, page_size=1).total
+            current = await self.sync_manage_items_page(page=page, page_size=20)
+            after_total = self.item_store.list_items(page=1, page_size=1).total
+            pages += 1
+            synced += max(after_total - before_total, 0)
+            if not current.has_more:
+                break
+            if not current.items and after_total == before_total:
+                break
+            page += 1
+        return {"synced": synced, "pages": pages}
+
+    def get_manage_item(self, item_id: str) -> XianyuManageItem:
+        item = self.item_store.get_item(item_id)
+        if item is None:
+            raise ValueError("商品不存在")
+        return item
+
+    def update_manage_item(self, item_id: str, item_detail: str) -> XianyuManageItem:
+        item = self.item_store.update_item(item_id, item_detail=item_detail)
+        if item is None:
+            raise ValueError("商品不存在")
+        return item
+
+    def set_manage_item_multi_quantity_delivery(self, item_id: str, enabled: bool) -> XianyuManageItem:
+        item = self.item_store.set_multi_quantity_delivery(item_id, enabled)
+        if item is None:
+            raise ValueError("商品不存在")
+        return item
+
+    def delete_manage_item(self, item_id: str) -> bool:
+        return self.item_store.delete_item(item_id)
+
+    async def polish_manage_item(self, item_id: str, enable_notification: bool = False) -> dict[str, Any]:
+        """擦亮单个商品（调用 mtop.taobao.idle.item.polish）"""
+        item_id = (item_id or "").strip()
+        if not item_id:
+            raise ValueError("商品 ID 不能为空")
+
+        cookie = self._get_xianyu_cookie_value()
+        if not cookie:
+            raise ValueError("请先在设置页配置闲鱼 Cookie")
+
+        async with httpx.AsyncClient(
+            headers=self.default_headers,
+            timeout=30.0,
+            follow_redirects=True,
+        ) as client:
+            for name, value in self._parse_cookie_string(cookie).items():
+                client.cookies.set(name, value, domain=".goofish.com")
+
+            if not self._get_cookie_value(client, "_m_h5_tk"):
+                await self._warmup_token(client)
+            await self._refresh_login_state(client)
+
+            params = {
+                "jsv": "2.7.2",
+                "appKey": self.app_key,
+                "t": str(int(time.time()) * 1000),
+                "sign": "",
+                "v": "1.0",
+                "type": "originaljson",
+                "accountSite": "xianyu",
+                "dataType": "json",
+                "timeout": "20000",
+                "api": self.item_polish_api_name,
+                "sessionOption": "AutoLoginOnly",
+                "spm_cnt": "a21ybx.im.0.0",
+                "spm_pre": "a21ybx.collection.menu.1.272b5141NafCNK",
+            }
+            data_val = json.dumps({"itemId": item_id}, separators=(",", ":"))
+            sign = self._build_sign(str(params["t"]), self._get_sign_token(client), data_val)
+            params["sign"] = sign
+
+            try:
+                response = await client.post(
+                    self.item_polish_api_url,
+                    params=params,
+                    data={"data": data_val},
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                if self._is_success(result):
+                    if enable_notification:
+                        self._log.info("商品擦亮成功：item_id=%s", item_id)
+                    self.item_store.polish_item(item_id)
+                    return {"success": True, "item_id": item_id, "message": "商品擦亮成功"}
+                else:
+                    error_msg = self._extract_error(result)
+                    raise ValueError(f"商品擦亮失败: {error_msg}")
+
+            except httpx.HTTPStatusError as e:
+                raise ValueError(f"商品擦亮请求失败: {e.response.status_code} - {e.response.text[:200]}")
+            except Exception as e:
+                raise ValueError(f"商品擦亮异常: {str(e)}")
+
+    async def polish_all_manage_items(self) -> dict[str, int]:
+        """擦亮所有本地缓存的商品"""
+        try:
+            await self.sync_manage_items_all()
+        except Exception as e:
+            self._log.warning("擦亮全部商品时同步列表失败，继续执行: %s", e)
+
+        result = self.item_store.polish_all_items()
+        return {"total": result.get("total", 0), "polished": result.get("polished", 0)}
+
+    def list_delivery_rules(self) -> list[XianyuDeliveryRule]:
+        return self.delivery_store.list_rules()
+
+    def create_delivery_rule(self, request: XianyuDeliveryRuleCreateRequest) -> XianyuDeliveryRule:
+        rule = self.delivery_store.create_rule(request)
+        self._sync_chat_ai_listener_state()
+        return rule
+
+    def update_delivery_rule(self, rule_id: str, request: XianyuDeliveryRuleUpdateRequest) -> XianyuDeliveryRule:
+        rule = self.delivery_store.update_rule(rule_id, request.model_dump(exclude_none=True))
+        if rule is None:
+            raise ValueError("规则不存在")
+        self._sync_chat_ai_listener_state()
+        return rule
+
+    def delete_delivery_rule(self, rule_id: str) -> bool:
+        deleted = self.delivery_store.delete_rule(rule_id)
+        self._sync_chat_ai_listener_state()
+        return deleted
+
+    def toggle_delivery_rule(self, rule_id: str) -> XianyuDeliveryRule:
+        rule = self.delivery_store.toggle_rule(rule_id)
+        if rule is None:
+            raise ValueError("规则不存在")
+        self._sync_chat_ai_listener_state()
+        return rule
+
+    def get_delivery_runtime_status(self) -> XianyuDeliveryRuntimeStatus:
+        return self.delivery_store.get_runtime_status()
+
+    def list_delivery_executions(self, limit: int = 20) -> list[XianyuDeliveryExecutionRecord]:
+        return self.delivery_store.list_executions(limit=limit)
