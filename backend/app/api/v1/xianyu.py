@@ -26,6 +26,7 @@ from app.modules.xianyu import (
     XianyuChatClearResult,
     XianyuChatConversationPage,
     XianyuChatCreateSessionRequest,
+    XianyuChatHealthStatus,
     XianyuChatImageSendRequest,
     XianyuChatMarkReadRequest,
     XianyuChatMessagePage,
@@ -479,6 +480,14 @@ async def test_xianyu_chat_ai(
 ):
     reply = await service.test_chat_ai_reply(text=request.text, cid=request.cid)
     return ApiResponse(data=XianyuChatAiTestResponse(reply=reply))
+
+
+@router.get("/chat/health", response_model=ApiResponse[XianyuChatHealthStatus])
+async def get_xianyu_chat_health(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """诊断闲鱼聊天链路状态"""
+    return ApiResponse(data=await service.diagnose_chat_runtime())
 
 
 @router.websocket("/chat/ws")

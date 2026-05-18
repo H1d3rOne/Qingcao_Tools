@@ -435,6 +435,16 @@ class XianyuChatAiTestResponse(BaseModel):
     reply: str = Field("", description="模型回复")
 
 
+class XianyuChatHealthStatus(BaseModel):
+    """闲鱼聊天链路诊断结果"""
+    ok: bool = Field(False, description="聊天链路是否可用")
+    status: str = Field("unknown", description="状态标记：ok/risk_blocked/auth_invalid/cookie_missing/error")
+    message: str = Field("", description="诊断消息")
+    captcha_url: str = Field("", description="风控验证链接")
+    shared_ws_connected: bool = Field(False, description="当前共享 WebSocket 是否已连接")
+    cookie_configured: bool = Field(False, description="是否已配置闲鱼 Cookie")
+
+
 class XianyuManageItem(BaseModel):
     """闲鱼管理商品"""
     item_id: str = Field(..., description="商品 ID")

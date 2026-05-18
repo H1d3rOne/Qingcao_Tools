@@ -38,6 +38,7 @@ from app.modules.xianyu.schemas import (
     XianyuChatConversationPage,
     XianyuChatMessage,
     XianyuChatMessagePage,
+    XianyuChatHealthStatus,
     XianyuChatProfile,
     XianyuChatSendResult,
     XianyuDeliveryExecutionRecord,
@@ -853,6 +854,46 @@ class XianyuService:
         async with self._create_http_client(cookie) as client:
             bootstrap = await self._build_chat_bootstrap(client, include_token=False)
         return bootstrap["profile"]
+
+    async def diagnose_chat_runtime(self) -> XianyuChatHealthStatus:
+        """诊断闲鱼聊天链路状态"""
+        cookie_configured = bool(self._get_xianyu_cookie_value())
+        if not cookie_configured:
+            return XianyuChatHealthStatus(
+                ok=False,
+                status="cookie_missing",
+                message="未配置闲鱼 Cookie，请先登录后更新 Cookie。",
+                shared_ws_connected=False,
+                cookie_configured=False,
+            )
+
+        try:
+            chat_client = await self.open_chat_ws_client()
+            connected = bool(chat_client and getattr(chat_client, "_ws", None) is not None)
+            return XianyuChatHealthStatus(
+                ok=connected,
+                status="ok" if connected else "error",
+                message="闲鱼聊天链路正常。" if connected else "聊天 WebSocket 未连接。",
+                shared_ws_connected=connected,
+                cookie_configured=True,
+            )
+        except Exception as exc:
+            error_text = str(exc)
+            status = "error"
+            captcha_url = ""
+            lowered = error_text.lower()
+            if "captcha" in lowered or "风控" in error_text or "verify" in lowered:
+                status = "risk_blocked"
+            elif "auth" in lowered or "登录" in error_text or "token" in lowered:
+                status = "auth_invalid"
+            return XianyuChatHealthStatus(
+                ok=False,
+                status=status,
+                message=f"聊天链路诊断失败：{error_text}",
+                captcha_url=captcha_url,
+                shared_ws_connected=False,
+                cookie_configured=True,
+            )
 
     async def list_chat_conversations(self, offset: int = 0, limit: int = 20) -> XianyuChatConversationPage:
         """获取聊天会话列表"""
