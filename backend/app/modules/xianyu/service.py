@@ -388,6 +388,11 @@ class XianyuService:
         self._chat_keepalive_task: asyncio.Task | None = None
         self._chat_keepalive_lock = asyncio.Lock()
         self.chat_keepalive_interval_seconds: int = 180
+        # 买家信息缓存（避免每次拉会话列表都并发请求 mtop.idle.web.user.page.head 触发风控）
+        self._peer_info_cache: dict[str, dict] = {}
+        self._peer_info_cache_ts: dict[str, float] = {}
+        self._peer_info_cache_ttl: float = 300.0  # 5 分钟
+        self._peer_info_semaphore = asyncio.Semaphore(3)  # 同时最多 3 个并发
 
     @property
     def monitor_store(self) -> XianyuMonitorStore:
@@ -2307,16 +2312,49 @@ class XianyuService:
         return bootstrap
 
     async def get_peer_user_info(self, user_id: str) -> Dict[str, Any]:
-        cookie = self._require_xianyu_cookie()
-        async with self._create_http_client(cookie) as client:
-            payload = {"self": False, "userId": user_id}
-            result = await self._execute_api(
-                client,
-                api_name=self.page_head_api_name,
-                api_url=self.page_head_api_url,
-                payload=payload,
-            )
-            return result.get("data") or {}
+        """获取买家公开信息，带 TTL 缓存 + 并发限流，避免触发风控。"""
+        normalized = str(user_id or "").strip()
+        if not normalized:
+            return {}
+
+        # 缓存命中（5 分钟内）
+        now = time.monotonic()
+        cached_ts = self._peer_info_cache_ts.get(normalized, 0.0)
+        if now - cached_ts < self._peer_info_cache_ttl:
+            cached = self._peer_info_cache.get(normalized)
+            if cached is not None:
+                return cached
+
+        # 限流：同时最多 3 个并发请求
+        async with self._peer_info_semaphore:
+            # 二次检查（被并发的另一个 task 抢先填了缓存）
+            cached_ts = self._peer_info_cache_ts.get(normalized, 0.0)
+            if time.monotonic() - cached_ts < self._peer_info_cache_ttl:
+                cached = self._peer_info_cache.get(normalized)
+                if cached is not None:
+                    return cached
+
+            cookie = self._require_xianyu_cookie()
+            try:
+                async with self._create_http_client(cookie) as client:
+                    payload = {"self": False, "userId": normalized}
+                    result = await self._execute_api(
+                        client,
+                        api_name=self.page_head_api_name,
+                        api_url=self.page_head_api_url,
+                        payload=payload,
+                    )
+                    data = result.get("data") or {}
+            except Exception as exc:
+                # 失败也记缓存（短期过期），避免风控时被狂打
+                self._peer_info_cache[normalized] = {}
+                self._peer_info_cache_ts[normalized] = now
+                logger.debug(f"get_peer_user_info({normalized}) failed: {exc}")
+                return {}
+
+            self._peer_info_cache[normalized] = data
+            self._peer_info_cache_ts[normalized] = time.monotonic()
+            return data
 
     def _map_chat_conversation(
         self,
