@@ -911,10 +911,10 @@ function formatNumber(num: number | undefined): string {
 .user-page {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 16px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   min-height: 100%;
 }
 
@@ -927,8 +927,8 @@ function formatNumber(num: number | undefined): string {
 .search-section {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding-top: 15vh;
+  gap: 16px;
+  padding-top: 0;
 }
 
 .search-section.has-results {
@@ -939,48 +939,48 @@ function formatNumber(num: number | undefined): string {
   position: relative;
   z-index: 1;
   text-align: center;
-  padding: 44px 44px 32px;
+  padding: 28px 36px 24px;
   background: linear-gradient(180deg, rgba(var(--app-surface-rgb) / 0.96), rgba(var(--app-surface-alt-rgb) / 0.92));
   backdrop-filter: blur(18px);
-  border-radius: 28px;
+  border-radius: 24px;
   border: 1px solid rgba(var(--app-border-rgb) / 0.78);
-  box-shadow: 0 24px 60px rgba(var(--app-shadow-rgb) / 0.12);
+  box-shadow: 0 18px 44px rgba(var(--app-shadow-rgb) / 0.10);
   max-width: 680px;
   width: min(100%, 680px);
   margin: 0 auto;
 }
 
 .search-header {
-  margin-bottom: 34px;
+  margin-bottom: 22px;
 }
 
 .logo-icon {
-  width: 88px;
-  height: 88px;
-  margin: 0 auto 22px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
   background: linear-gradient(135deg, rgb(var(--primary-color-rgb)), rgb(var(--app-accent-soft-rgb)));
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 42px;
+  font-size: 30px;
   color: rgb(var(--utility-white-rgb));
-  box-shadow: 0 18px 34px rgba(var(--primary-color-rgb) / 0.28);
+  box-shadow: 0 14px 28px rgba(var(--primary-color-rgb) / 0.28);
 }
 
 .search-title {
-  font-size: 36px;
+  font-size: 26px;
   font-weight: 700;
   color: rgb(var(--app-text-strong-rgb));
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-  margin: 0 0 12px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
 }
 
 .search-subtitle {
-  font-size: 15px;
+  font-size: 13px;
   color: rgb(var(--app-text-muted-rgb));
-  line-height: 1.7;
+  line-height: 1.6;
   max-width: 420px;
   margin: 0 auto;
 }
