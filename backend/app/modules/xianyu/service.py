@@ -2254,7 +2254,7 @@ class XianyuService:
         if not include_token:
             return bootstrap
 
-        device_id = self._build_chat_device_id("")
+        device_id = self._resolve_chat_device_id(client, "")
         try:
             token_payload = await self._execute_api(
                 client,
@@ -2487,19 +2487,39 @@ class XianyuService:
         raise ValueError(fallback)
 
     def _build_chat_device_id(self, user_id: str) -> str:
+        """为给定账号派生稳定的 deviceId，避免同账号每次上报都不同触发风控。"""
         normalized = str(user_id or "0").strip() or "0"
         chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        digest = hashlib.sha256(f"xianyu-device:{normalized}".encode("utf-8")).digest()
         parts = []
         for i in range(36):
             if i in (8, 13, 18, 23):
                 parts.append("-")
             elif i == 14:
                 parts.append("4")
-            elif i == 19:
-                parts.append(chars[3 & (ord(chars[random.randint(0, len(chars) - 1)]) & 0xFF) | 8])
             else:
-                parts.append(chars[random.randint(0, len(chars) - 1)])
+                value = digest[i % len(digest)] & 0x0F
+                if i == 19:
+                    value = (value & 0x03) | 0x08
+                parts.append(chars[value])
         return "".join(parts) + "-" + normalized
+
+    def _resolve_chat_device_id(self, client: httpx.AsyncClient, user_id: str) -> str:
+        """优先用 xianyu_fingerprint.json 里的 deviceId，再回落到 cookie 派生，最后才走确定性 hash。"""
+        fingerprint = getattr(self.auth_login, "fingerprint", {}) or {}
+        device_id = str(fingerprint.get("deviceId") or "").strip()
+        if device_id:
+            return device_id
+
+        cookie_user_id = str(self._get_cookie_value(client, "unb") or "").strip()
+        if cookie_user_id:
+            return self._build_chat_device_id(cookie_user_id)
+
+        cookie_device_id = str(self._get_cookie_value(client, "cna") or "").strip()
+        if cookie_device_id:
+            return cookie_device_id
+
+        return self._build_chat_device_id(user_id)
 
     def _generate_message_uuid(self) -> str:
         return f"-{int(time.time() * 1000)}{uuid.uuid4().hex[:10]}"
