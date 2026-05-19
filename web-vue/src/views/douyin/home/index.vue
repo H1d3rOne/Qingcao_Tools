@@ -161,10 +161,10 @@ const features = [
 .douyin-home {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 16px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
   animation: homeFadeIn 0.4s ease;
 }
 
@@ -186,8 +186,8 @@ const features = [
 }
 
 .card-header {
-  padding: 0 0 16px 0;
-  margin-bottom: 16px;
+  padding: 0 0 10px 0;
+  margin-bottom: 10px;
   border-bottom: 1px solid rgba(var(--app-border-strong-rgb) / 0.3);
 }
 
@@ -201,7 +201,7 @@ const features = [
 /* 欢迎卡片 */
 .welcome-card {
   position: relative;
-  padding: 32px 36px;
+  padding: 20px 28px;
 }
 
 .welcome-glow {
@@ -221,18 +221,18 @@ const features = [
 }
 
 .welcome-title {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: rgb(var(--app-text-strong-rgb));
-  margin: 0 0 10px;
+  margin: 0 0 6px;
   letter-spacing: -0.02em;
 }
 
 .welcome-desc {
-  font-size: 14px;
+  font-size: 13px;
   color: rgb(var(--app-text-muted-rgb));
-  margin: 0 0 16px;
-  line-height: 1.7;
+  margin: 0 0 12px;
+  line-height: 1.6;
 }
 
 .welcome-tags {
@@ -250,8 +250,8 @@ const features = [
 .feature-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 22px;
+  gap: 12px;
+  padding: 16px;
   cursor: pointer;
   transition: all 0.25s ease;
   position: relative;
@@ -265,9 +265,9 @@ const features = [
 }
 
 .feature-card__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -329,21 +329,21 @@ const features = [
 
 .stats-card,
 .guide-card {
-  padding: 24px;
+  padding: 16px 18px;
 }
 
 /* 统计卡片 */
 .stats-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .stat-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 8px 12px;
   border-radius: 10px;
   background: rgba(var(--app-surface-alt-rgb) / 0.8);
   border: 1px solid rgba(var(--app-border-strong-rgb) / 0.2);
@@ -380,9 +380,9 @@ const features = [
 
 .guide-step {
   display: flex;
-  gap: 14px;
+  gap: 12px;
   align-items: flex-start;
-  padding: 14px;
+  padding: 10px 12px;
   border-radius: 12px;
   background: rgba(var(--app-surface-alt-rgb) / 0.8);
   border: 1px solid rgba(var(--app-border-strong-rgb) / 0.2);
