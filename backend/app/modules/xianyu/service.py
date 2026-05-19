@@ -393,6 +393,11 @@ class XianyuService:
         self._peer_info_cache_ts: dict[str, float] = {}
         self._peer_info_cache_ttl: float = 300.0  # 5 分钟
         self._peer_info_semaphore = asyncio.Semaphore(3)  # 同时最多 3 个并发
+        # login.token 熔断器：连续 N 次 FAIL_SYS_USER_VALIDATE 后暂停一段时间不再请求
+        self._login_token_fail_count: int = 0
+        self._login_token_block_until: float = 0.0
+        self._login_token_fail_threshold: int = 3
+        self._login_token_block_seconds: float = 300.0  # 5 分钟
 
     @property
     def monitor_store(self) -> XianyuMonitorStore:
@@ -2266,6 +2271,16 @@ class XianyuService:
             return bootstrap
 
         device_id = self._resolve_chat_device_id(client, "")
+
+        # 熔断器：风控期间避免持续打 login.token，加重账号封禁
+        now = time.monotonic()
+        if self._login_token_block_until > now:
+            remaining = int(self._login_token_block_until - now)
+            raise ValueError(
+                f"闲鱼接口已被风控拦截，正在冷却中（{remaining} 秒后重试）。"
+                "请在浏览器中正常访问闲鱼几分钟后再试。"
+            )
+
         try:
             token_payload = await self._execute_api(
                 client,
@@ -2282,6 +2297,15 @@ class XianyuService:
             )
         except ValueError as exc:
             message = str(exc).strip()
+            # 命中风控 → 累计失败次数，超过阈值后熔断
+            if "FAIL_SYS_USER_VALIDATE" in message or "RGV587_ERROR" in message:
+                self._login_token_fail_count += 1
+                if self._login_token_fail_count >= self._login_token_fail_threshold:
+                    self._login_token_block_until = time.monotonic() + self._login_token_block_seconds
+                    logger.warning(
+                        f"login.token 连续 {self._login_token_fail_count} 次风控，"
+                        f"熔断 {int(self._login_token_block_seconds)} 秒"
+                    )
             if "RGV587_ERROR" in message:
                 raise ValueError(
                     "闲鱼聊天接口被风控拦截，请尝试在浏览器中访问闲鱼网站完成验证后重新更新 Cookie"
@@ -2289,6 +2313,9 @@ class XianyuService:
             if "FAIL_SYS_SESSION_EXPIRED" in message:
                 raise ValueError("闲鱼登录已过期，请重新登录闲鱼后更新设置页中的 Cookie") from exc
             raise
+        # 成功 → 重置失败计数
+        self._login_token_fail_count = 0
+        self._login_token_block_until = 0.0
         access_token = str(token_payload.get("data", {}).get("accessToken") or "")
         if not access_token:
             raise ValueError("闲鱼聊天 token 获取失败，请重新登录闲鱼后更新设置页中的 Cookie")
