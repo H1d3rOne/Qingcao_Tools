@@ -100,6 +100,7 @@ class XianyuChatWsClient:
         self._heartbeat_task: asyncio.Task | None = None
         self._pending: dict[str, asyncio.Future] = {}
         self._push_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        self._push_subscribers: set[asyncio.Queue[Dict[str, Any]]] = set()
 
     async def connect(self, cookie: str = "") -> None:
         connect_kwargs = {
@@ -207,6 +208,19 @@ class XianyuChatWsClient:
     async def next_push(self) -> Dict[str, Any]:
         return await self._push_queue.get()
 
+    def is_connected(self) -> bool:
+        if not self._ws:
+            return False
+        return not bool(getattr(self._ws, "closed", False))
+
+    def subscribe_pushes(self) -> asyncio.Queue[Dict[str, Any]]:
+        queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        self._push_subscribers.add(queue)
+        return queue
+
+    def unsubscribe_pushes(self, queue: asyncio.Queue[Dict[str, Any]]) -> None:
+        self._push_subscribers.discard(queue)
+
     async def send_rpc(
         self,
         lwp: str,
@@ -254,6 +268,9 @@ class XianyuChatWsClient:
 
                 if payload.get("lwp") and headers:
                     await self._push_queue.put(payload)
+                    for subscriber in list(self._push_subscribers):
+                        with contextlib.suppress(Exception):
+                            subscriber.put_nowait(payload)
                     ack_headers = {
                         "mid": headers.get("mid", f"{random.randint(100, 999)}{int(time.time() * 1000)} 0"),
                         "sid": headers.get("sid", ""),
@@ -354,6 +371,14 @@ class XianyuService:
         self._current_qr_payload: dict[str, str] | None = None
         self._processed_ai_message_keys = deque(maxlen=1000)
         self._processed_ai_message_set: set[str] = set()
+        # 后台 chat AI listener / 保活 / 共享 ws
+        self._shared_chat_client: XianyuChatWsClient | None = None
+        self._shared_chat_client_lock = asyncio.Lock()
+        self._chat_ai_listener_task: asyncio.Task | None = None
+        self._chat_ai_listener_lock = asyncio.Lock()
+        self._chat_keepalive_task: asyncio.Task | None = None
+        self._chat_keepalive_lock = asyncio.Lock()
+        self.chat_keepalive_interval_seconds: int = 180
 
     @property
     def monitor_store(self) -> XianyuMonitorStore:
@@ -407,12 +432,191 @@ class XianyuService:
             )
         return self._delivery_runtime
 
+    def _should_run_chat_ai_listener(self) -> bool:
+        config = self.get_chat_ai_config()
+        if not config.enabled:
+            return False
+        if not self._get_xianyu_cookie_value():
+            return False
+        if not self.chat_ai_store.get_active_provider():
+            return False
+        return True
+
+    def _should_run_chat_event_listener(self) -> bool:
+        return self._should_run_chat_ai_listener()
+
+    def _should_run_chat_keepalive(self) -> bool:
+        return bool(self._get_xianyu_cookie_value())
+
     def _sync_chat_ai_listener_state(self) -> None:
-        """Listener state sync hook (no-op: chat AI listener wiring not yet ported)."""
-        pass
+        """根据当前 AI 配置 / Cookie / Provider 启停后台 listener 与保活。"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        if self._should_run_chat_event_listener():
+            loop.create_task(self.ensure_chat_ai_listener())
+        else:
+            loop.create_task(self.stop_chat_ai_listener())
+
+        if self._should_run_chat_keepalive():
+            loop.create_task(self.ensure_chat_keepalive())
+        else:
+            loop.create_task(self.stop_chat_keepalive())
+
+    async def ensure_chat_ai_listener(self) -> bool:
+        if not self._should_run_chat_event_listener():
+            return False
+
+        async with self._chat_ai_listener_lock:
+            if self._chat_ai_listener_task and not self._chat_ai_listener_task.done():
+                return True
+            self._chat_ai_listener_task = asyncio.create_task(
+                self._chat_ai_listener_loop(),
+                name="xianyu-chat-ai-listener",
+            )
+            return True
+
+    async def stop_chat_ai_listener(self) -> None:
+        async with self._chat_ai_listener_lock:
+            task = self._chat_ai_listener_task
+            self._chat_ai_listener_task = None
+        if task:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+
+    async def ensure_chat_keepalive(self) -> bool:
+        if not self._should_run_chat_keepalive():
+            return False
+
+        async with self._chat_keepalive_lock:
+            if self._chat_keepalive_task and not self._chat_keepalive_task.done():
+                return True
+            self._chat_keepalive_task = asyncio.create_task(
+                self._chat_keepalive_loop(),
+                name="xianyu-chat-keepalive",
+            )
+            return True
+
+    async def stop_chat_keepalive(self) -> None:
+        async with self._chat_keepalive_lock:
+            task = self._chat_keepalive_task
+            self._chat_keepalive_task = None
+        if task:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+
+    async def _close_shared_chat_client(self) -> None:
+        async with self._shared_chat_client_lock:
+            stale_client = self._shared_chat_client
+            self._shared_chat_client = None
+        if stale_client:
+            with contextlib.suppress(Exception):
+                await stale_client.close()
+
+    async def _refresh_chat_runtime_token(self) -> None:
+        cookie = self._require_xianyu_cookie()
+        async with self._create_http_client(cookie) as client:
+            await self._refresh_login_state(client)
+            await self._build_chat_bootstrap(client, include_token=True)
+
+    async def _chat_keepalive_tick(self) -> bool:
+        if not self._should_run_chat_keepalive():
+            return False
+        await self._refresh_chat_runtime_token()
+        shared_client = self._shared_chat_client
+        if shared_client and not shared_client.is_connected():
+            await self._close_shared_chat_client()
+        return True
+
+    async def _chat_keepalive_loop(self) -> None:
+        try:
+            while True:
+                if not self._should_run_chat_keepalive():
+                    await asyncio.sleep(1.0)
+                    continue
+                try:
+                    await self._chat_keepalive_tick()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning(f"闲鱼聊天保活失败，将稍后重试: {exc}")
+                await asyncio.sleep(self.chat_keepalive_interval_seconds)
+        except asyncio.CancelledError:
+            logger.info("闲鱼聊天保活已停止")
+            raise
+
+    async def _chat_ai_listener_loop(self) -> None:
+        subscriber: asyncio.Queue[Dict[str, Any]] | None = None
+        chat_client: XianyuChatWsClient | None = None
+        last_refresh_at = time.monotonic()
+        consecutive_failures = 0
+
+        try:
+            while True:
+                if not self._should_run_chat_event_listener():
+                    await asyncio.sleep(1.0)
+                    consecutive_failures = 0
+                    continue
+
+                try:
+                    chat_client = await self.open_chat_ws_client()
+                    async with self._shared_chat_client_lock:
+                        self._shared_chat_client = chat_client
+                    subscriber = chat_client.subscribe_pushes()
+                    logger.info("闲鱼聊天 AI 后台监听已启动")
+
+                    while True:
+                        if not self._should_run_chat_event_listener():
+                            break
+                        if not chat_client.is_connected():
+                            raise ConnectionError("闲鱼聊天共享连接已断开")
+
+                        if time.monotonic() - last_refresh_at >= 600:
+                            with contextlib.suppress(Exception):
+                                await self._refresh_chat_runtime_token()
+                            last_refresh_at = time.monotonic()
+
+                        try:
+                            payload = await asyncio.wait_for(subscriber.get(), timeout=15.0)
+                        except asyncio.TimeoutError:
+                            if not chat_client.is_connected():
+                                raise ConnectionError("闲鱼聊天共享连接已断开")
+                            continue
+
+                        consecutive_failures = 0
+                        decoded = self.decode_chat_push(payload)
+                        try:
+                            await self.maybe_auto_reply_from_decoded_push(chat_client.profile, decoded)
+                        except Exception as exc:
+                            logger.warning(f"闲鱼聊天 AI 自动回复失败: {exc}")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    consecutive_failures += 1
+                    base_delay = min(5 * (2 ** (consecutive_failures - 1)), 60)
+                    delay = base_delay + random.uniform(0, base_delay * 0.3)
+                    logger.warning(
+                        f"闲鱼聊天 AI 后台监听异常，{delay:.0f} 秒后重连 (连续失败 {consecutive_failures} 次): {exc}"
+                    )
+                    await self._close_shared_chat_client()
+                    await asyncio.sleep(delay)
+                finally:
+                    if chat_client and subscriber:
+                        chat_client.unsubscribe_pushes(subscriber)
+                    subscriber = None
+                    chat_client = None
+        except asyncio.CancelledError:
+            logger.info("闲鱼聊天 AI 后台监听已停止")
+            raise
 
     def get_chat_ai_config(self) -> XianyuChatAiConfig:
-        return self.chat_ai_store.load_config()
+        config = self.chat_ai_store.load_config()
+        self.chat_keepalive_interval_seconds = max(30, min(int(config.chat_keepalive_interval_seconds or 180), 3600))
+        return config
 
     def set_chat_ai_enabled(self, enabled: bool) -> XianyuChatAiConfig:
         config = self.chat_ai_store.set_enabled(enabled)
@@ -923,26 +1127,49 @@ class XianyuService:
         return bootstrap["profile"]
 
     async def diagnose_chat_runtime(self) -> XianyuChatHealthStatus:
-        """轻量级诊断闲鱼聊天链路状态（不开 WebSocket，避免每次诊断都重建连接）"""
+        """诊断闲鱼聊天链路状态。优先使用后台共享 ws 的连接状态，避免重复握手。"""
         cookie_configured = bool(self._get_xianyu_cookie_value())
+        shared_ws_connected = bool(self._shared_chat_client and self._shared_chat_client.is_connected())
+
         if not cookie_configured:
             return XianyuChatHealthStatus(
                 ok=False,
                 status="cookie_missing",
                 message="未配置闲鱼 Cookie，请先登录后更新 Cookie。",
-                shared_ws_connected=False,
+                shared_ws_connected=shared_ws_connected,
                 cookie_configured=False,
             )
 
-        # 只用一次廉价的 HTTP 调用验证 Cookie 是否有效，避免每次诊断都重建 ws 连接
+        # 后台 listener 已经维护着共享 ws，直接读其状态即可
+        if shared_ws_connected:
+            return XianyuChatHealthStatus(
+                ok=True,
+                status="ok",
+                message="闲鱼聊天链路正常。",
+                shared_ws_connected=True,
+                cookie_configured=True,
+            )
+
+        # 共享 ws 未连接：可能是 listener 还没起来 / 没启用 AI / Cookie 失效
+        # 用一次廉价的 HTTP 调用验证 Cookie 是否还有效
         try:
             cookie = self._get_xianyu_cookie_value()
             async with self._create_http_client(cookie) as client:
                 await self._refresh_login_state(client)
+            # Cookie 有效但共享 ws 没连，可能是 AI 没启用
+            config = self.get_chat_ai_config()
+            if not config.enabled:
+                return XianyuChatHealthStatus(
+                    ok=True,
+                    status="ok",
+                    message="闲鱼 Cookie 有效。AI 总开关未启用，未启动后台监听。",
+                    shared_ws_connected=False,
+                    cookie_configured=True,
+                )
             return XianyuChatHealthStatus(
                 ok=True,
                 status="ok",
-                message="闲鱼聊天链路就绪。",
+                message="闲鱼 Cookie 有效，后台监听即将启动。",
                 shared_ws_connected=False,
                 cookie_configured=True,
             )
