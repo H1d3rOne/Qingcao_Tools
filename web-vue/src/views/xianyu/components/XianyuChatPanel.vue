@@ -287,9 +287,10 @@ function handlePushEvent(event: XianyuChatPushEvent) {
   }
 
   if (decoded.type === 'sync' && decoded.items) {
-    const hasNewMessage = decoded.items.some(
-      (item) => item.biz_type === 40000 || item.biz_type === 40104 || item.biz_type === 40102
-    )
+    const hasNewMessage = decoded.items.some((item) => {
+      const bizType = Number(item.biz_type)
+      return bizType === 40 || bizType === 40000 || bizType === 40104 || bizType === 40102
+    })
     if (hasNewMessage) {
       scheduleRefresh()
     }
@@ -1540,7 +1541,7 @@ onBeforeUnmount(() => {
 
 .chat-composer__input-row :deep(.el-textarea__inner) {
   min-height: 52px;
-  background: rgba(var(--app-surface-rgb) / 0.96) !important;
+  background: rgba(var(--app-surface-rgb), 0.96) !important;
   border: 1px solid rgba(var(--app-border-rgb) / 0.72) !important;
   color: rgb(var(--app-text-strong-rgb)) !important;
   -webkit-text-fill-color: rgb(var(--app-text-strong-rgb)) !important;

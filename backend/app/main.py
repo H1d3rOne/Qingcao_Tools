@@ -31,8 +31,11 @@ async def lifespan(app: FastAPI):
     try:
         from app.api.deps import get_xianyu_service
 
-        started = await get_xianyu_service().ensure_chat_ai_listener()
+        service = get_xianyu_service()
+        started = await service.ensure_chat_ai_listener()
         logger.info(f"闲鱼聊天 AI 监听启动: {started}")
+        keepalive_started = await service.ensure_chat_keepalive()
+        logger.info(f"闲鱼聊天保活启动: {keepalive_started}")
     except Exception as exc:
         logger.warning(f"闲鱼聊天 AI 监听启动失败: {exc}")
 
@@ -43,7 +46,9 @@ async def lifespan(app: FastAPI):
     try:
         from app.api.deps import get_xianyu_service
 
-        await get_xianyu_service().stop_chat_ai_listener()
+        service = get_xianyu_service()
+        await service.stop_chat_ai_listener()
+        await service.stop_chat_keepalive()
     except Exception as exc:
         logger.warning(f"闲鱼聊天 AI 监听停止失败: {exc}")
     await close_db()

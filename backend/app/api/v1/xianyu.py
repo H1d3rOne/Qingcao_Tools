@@ -4,7 +4,7 @@
 import asyncio
 import contextlib
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from app.api.deps import get_xianyu_service
@@ -16,8 +16,14 @@ from app.modules.xianyu import (
     XianyuAuthLoginResponse,
     XianyuAuthLogoutResponse,
     XianyuAuthStatusResponse,
+    XianyuBrowserLoginCancelRequest,
+    XianyuBrowserLoginStartResponse,
+    XianyuBrowserLoginStatusResponse,
     XianyuChatAiConfig,
     XianyuChatAiConfigUpdateRequest,
+    XianyuChatAiProvider,
+    XianyuChatAiProviderCreateRequest,
+    XianyuChatAiProviderUpdateRequest,
     XianyuChatAiSessionState,
     XianyuChatAiSessionUpdateRequest,
     XianyuChatAiTestRequest,
@@ -26,6 +32,7 @@ from app.modules.xianyu import (
     XianyuChatClearResult,
     XianyuChatConversationPage,
     XianyuChatCreateSessionRequest,
+    XianyuChatHealthStatus,
     XianyuChatImageSendRequest,
     XianyuChatMarkReadRequest,
     XianyuChatMessagePage,
@@ -36,7 +43,20 @@ from app.modules.xianyu import (
     XianyuChatRecallRequest,
     XianyuChatSendRequest,
     XianyuChatSendResult,
+    XianyuDeliveryExecutionRecord,
+    XianyuDeliveryRule,
+    XianyuDeliveryRuleCreateRequest,
+    XianyuDeliveryRuleUpdateRequest,
+    XianyuDeliveryRuntimeStatus,
     XianyuItemDetail,
+    XianyuManageItem,
+    XianyuManageItemMultiQuantityUpdateRequest,
+    XianyuManageItemPage,
+    XianyuManageItemPolishAllResponse,
+    XianyuManageItemPolishRequest,
+    XianyuManageItemPolishResponse,
+    XianyuManageItemSyncPageRequest,
+    XianyuManageItemUpdateRequest,
     XianyuMonitorHit,
     XianyuMonitorTask,
     XianyuMonitorTaskCreate,
@@ -64,6 +84,9 @@ async def check_xianyu_auth_login(
     service: XianyuService = Depends(get_xianyu_service),
 ):
     result = service.check_login_status(request.qrcode_token)
+    if result.get("success") and result.get("is_logged_in"):
+        with contextlib.suppress(Exception):
+            await service.on_xianyu_cookie_updated()
     return XianyuAuthCheckLoginResponse(**result)
 
 
@@ -73,6 +96,17 @@ async def login_xianyu(
     service: XianyuService = Depends(get_xianyu_service),
 ):
     result = service.login(method=request.method, cookies=request.cookies)
+    if request.method == "cookie" and result.get("success"):
+        status = await service.get_auth_status()
+        if not status.get("is_logged_in"):
+            return XianyuAuthLoginResponse(
+                success=False,
+                message="Cookie 登录校验失败，请更新 Cookie",
+            )
+        # 登录页直接更新 Cookie 时，也必须重置聊天共享 WS / 后台监听。
+        # 否则聊天 tab 可能继续使用旧连接、旧 deviceId 或旧风控熔断状态。
+        with contextlib.suppress(Exception):
+            await service.on_xianyu_cookie_updated()
     return XianyuAuthLoginResponse(
         success=result["success"],
         message=result["message"],
@@ -95,6 +129,32 @@ async def logout_xianyu(
     service: XianyuService = Depends(get_xianyu_service),
 ):
     return XianyuAuthLogoutResponse(**service.logout())
+
+
+@router.post("/auth/browser-qrcode/start", response_model=XianyuBrowserLoginStartResponse)
+async def start_xianyu_browser_login(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """启动浏览器扫码登录"""
+    return XianyuBrowserLoginStartResponse(**(await service.start_browser_login()))
+
+
+@router.get("/auth/browser-qrcode/status", response_model=XianyuBrowserLoginStatusResponse)
+async def get_xianyu_browser_login_status(
+    session_id: str = Query(..., min_length=1, description="扫码会话 ID"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """查询浏览器扫码登录状态"""
+    return XianyuBrowserLoginStatusResponse(**(await service.get_browser_login_status(session_id)))
+
+
+@router.post("/auth/browser-qrcode/cancel", response_model=XianyuAuthLogoutResponse)
+async def cancel_xianyu_browser_login(
+    request: XianyuBrowserLoginCancelRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """取消浏览器扫码登录"""
+    return XianyuAuthLogoutResponse(**(await service.cancel_browser_login(request.session_id)))
 
 
 @router.get("/monitor/tasks", response_model=ApiResponse[list[XianyuMonitorTask]])
@@ -439,15 +499,132 @@ async def update_xianyu_chat_ai_config(
     request: XianyuChatAiConfigUpdateRequest,
     service: XianyuService = Depends(get_xianyu_service),
 ):
+    """兼容旧版单供应商 AI 配置保存接口。"""
     return ApiResponse(data=service.update_chat_ai_config(request))
+
+
+@router.post("/chat/ai/enabled", response_model=ApiResponse[XianyuChatAiConfig])
+async def set_xianyu_chat_ai_enabled(
+    enabled: bool = Query(..., description="是否启用 AI 总开关"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    return ApiResponse(data=service.set_chat_ai_enabled(enabled))
+
+
+@router.post("/chat/ai/keepalive-interval", response_model=ApiResponse[XianyuChatAiConfig])
+async def set_xianyu_chat_keepalive_interval(
+    seconds: int = Query(..., ge=30, le=3600, description="聊天保活间隔秒数"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    return ApiResponse(data=service.set_chat_keepalive_interval(seconds))
+
+
+@router.post("/chat/ai/providers/test", response_model=ApiResponse[XianyuChatAiTestResponse])
+async def test_xianyu_chat_ai_provider(
+    request: XianyuChatAiProviderCreateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """测试 AI 供应商连通性"""
+    try:
+        api_key = request.api_key
+        if not api_key and request.provider_id:
+            saved_key = service.chat_ai_store.load_secret_api_key(request.provider_id)
+            if saved_key:
+                api_key = saved_key
+        reply = await service.test_chat_ai_provider(
+            base_url=request.base_url,
+            api_key=api_key,
+            model=request.get_model(),
+            system_prompt=request.system_prompt,
+        )
+        return ApiResponse(data=XianyuChatAiTestResponse(reply=reply))
+    except Exception as exc:
+        logger.error(f"测试 AI 供应商失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/chat/ai/providers", response_model=ApiResponse[XianyuChatAiProvider])
+async def create_xianyu_chat_ai_provider(
+    request: XianyuChatAiProviderCreateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """创建 AI 供应商"""
+    try:
+        return ApiResponse(data=service.create_chat_ai_provider(request))
+    except Exception as exc:
+        logger.error(f"创建 AI 供应商失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.patch("/chat/ai/providers/{provider_id}", response_model=ApiResponse[XianyuChatAiProvider])
+async def update_xianyu_chat_ai_provider(
+    provider_id: str,
+    request: XianyuChatAiProviderUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """更新 AI 供应商"""
+    result = service.update_chat_ai_provider(provider_id, request)
+    if not result:
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data=result)
+
+
+@router.delete("/chat/ai/providers/{provider_id}", response_model=ApiResponse[dict])
+async def delete_xianyu_chat_ai_provider(
+    provider_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """删除 AI 供应商"""
+    if not service.delete_chat_ai_provider(provider_id):
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data={"deleted": True})
+
+
+@router.post("/chat/ai/providers/{provider_id}/active", response_model=ApiResponse[dict])
+async def set_active_xianyu_chat_ai_provider(
+    provider_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """切换激活的 AI 供应商"""
+    if not service.set_active_chat_ai_provider(provider_id):
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data={"active": provider_id})
+
+
+@router.get("/chat/ai/providers/{provider_id}/api-key", response_model=ApiResponse[dict])
+async def get_xianyu_chat_ai_provider_api_key(
+    provider_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """读取 AI 供应商的 API Key（用于编辑回填）"""
+    api_key = service.chat_ai_store.load_secret_api_key(provider_id)
+    return ApiResponse(data={"api_key": api_key})
+
+
+@router.post("/chat/ai/providers/{provider_id}/active-model", response_model=ApiResponse[XianyuChatAiProvider])
+async def set_xianyu_chat_ai_provider_active_model(
+    provider_id: str,
+    model: str = Query(..., description="模型名称"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """更新 AI 供应商当前激活模型"""
+    result = service.update_chat_ai_provider(provider_id, XianyuChatAiProviderUpdateRequest(active_model=model))
+    if not result:
+        return ApiResponse(success=False, error="供应商不存在")
+    return ApiResponse(data=result)
 
 
 @router.get("/chat/ai/sessions", response_model=ApiResponse[list[XianyuChatAiSessionState]])
 async def list_xianyu_chat_ai_sessions(
+    request: Request,
     cid: list[str] = Query(default_factory=list),
     service: XianyuService = Depends(get_xianyu_service),
 ):
-    return ApiResponse(data=service.list_chat_ai_session_states(cid))
+    """获取会话 AI 状态。兼容 axios 默认的 cid[] 数组序列化格式。"""
+    cids = list(cid)
+    if not cids:
+        cids = request.query_params.getlist("cid[]")
+    return ApiResponse(data=service.list_chat_ai_session_states(cids))
 
 
 @router.post("/chat/ai/sessions/{cid}", response_model=ApiResponse[XianyuChatAiSessionState])
@@ -468,6 +645,14 @@ async def test_xianyu_chat_ai(
     return ApiResponse(data=XianyuChatAiTestResponse(reply=reply))
 
 
+@router.get("/chat/health", response_model=ApiResponse[XianyuChatHealthStatus])
+async def get_xianyu_chat_health(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """诊断闲鱼聊天链路状态"""
+    return ApiResponse(data=await service.diagnose_chat_runtime())
+
+
 @router.websocket("/chat/ws")
 async def websocket_xianyu_chat_proxy(
     websocket: WebSocket,
@@ -476,16 +661,18 @@ async def websocket_xianyu_chat_proxy(
     service = get_xianyu_service()
     await websocket.accept()
     chat_client = None
+    push_subscription = None
     relay_task: asyncio.Task | None = None
     token_refresh_task: asyncio.Task | None = None
 
     try:
         chat_client = await service.open_chat_ws_client()
+        push_subscription = chat_client.subscribe_pushes()
         await websocket.send_json({"type": "connected"})
 
         async def relay_pushes():
             while True:
-                payload = await chat_client.next_push()
+                payload = await push_subscription.get()
                 decoded = service.decode_chat_push(payload)
                 await websocket.send_json(
                     {
@@ -539,13 +726,228 @@ async def websocket_xianyu_chat_proxy(
     finally:
         if token_refresh_task:
             token_refresh_task.cancel()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await token_refresh_task
         if relay_task:
             relay_task.cancel()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await relay_task
-        if chat_client:
-            await chat_client.close()
+        if chat_client and push_subscription is not None:
+            with contextlib.suppress(Exception):
+                chat_client.unsubscribe_pushes(push_subscription)
         with contextlib.suppress(Exception):
             await websocket.send_json({"type": "disconnected"})
+
+
+# ============================================================
+# 闲鱼商品管理 / 自动发货模块
+# ============================================================
+
+@router.get("/manage/items", response_model=ApiResponse[XianyuManageItemPage])
+async def list_xianyu_manage_items(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """获取闲鱼管理商品列表"""
+    try:
+        return ApiResponse(data=service.list_manage_items(page=page, page_size=page_size))
+    except Exception as exc:
+        logger.error(f"获取闲鱼管理商品列表失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/manage/items/sync-page", response_model=ApiResponse[XianyuManageItemPage])
+async def sync_xianyu_manage_items_page(
+    request: XianyuManageItemSyncPageRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """同步闲鱼管理商品单页数据"""
+    try:
+        return ApiResponse(data=await service.sync_manage_items_page(page=request.page, page_size=request.page_size))
+    except Exception as exc:
+        logger.error(f"同步闲鱼管理商品单页失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/manage/items/sync-all", response_model=ApiResponse[dict])
+async def sync_xianyu_manage_items_all(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """同步闲鱼管理商品全部数据"""
+    try:
+        return ApiResponse(data=await service.sync_manage_items_all())
+    except Exception as exc:
+        logger.error(f"同步闲鱼管理商品全部数据失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/manage/items/{item_id}", response_model=ApiResponse[XianyuManageItem])
+async def get_xianyu_manage_item(
+    item_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """获取闲鱼管理商品详情"""
+    try:
+        return ApiResponse(data=service.get_manage_item(item_id))
+    except Exception as exc:
+        logger.error(f"获取闲鱼管理商品详情失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.put("/manage/items/{item_id}", response_model=ApiResponse[XianyuManageItem])
+async def update_xianyu_manage_item(
+    item_id: str,
+    request: XianyuManageItemUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """更新闲鱼管理商品详情"""
+    try:
+        return ApiResponse(data=service.update_manage_item(item_id, request.item_detail))
+    except Exception as exc:
+        logger.error(f"更新闲鱼管理商品详情失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.delete("/manage/items/{item_id}", response_model=ApiResponse[dict])
+async def delete_xianyu_manage_item(
+    item_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """删除闲鱼管理商品"""
+    try:
+        return ApiResponse(data={"deleted": service.delete_manage_item(item_id)})
+    except Exception as exc:
+        logger.error(f"删除闲鱼管理商品失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.put("/manage/items/{item_id}/multi-quantity-delivery", response_model=ApiResponse[XianyuManageItem])
+async def update_xianyu_manage_item_multi_quantity_delivery(
+    item_id: str,
+    request: XianyuManageItemMultiQuantityUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """更新闲鱼管理商品多数量发货开关"""
+    try:
+        return ApiResponse(data=service.set_manage_item_multi_quantity_delivery(item_id, request.enabled))
+    except Exception as exc:
+        logger.error(f"更新闲鱼管理商品多数量发货开关失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/manage/items/polish", response_model=ApiResponse[XianyuManageItemPolishResponse])
+async def polish_xianyu_manage_item(
+    request: XianyuManageItemPolishRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """擦亮单个闲鱼管理商品"""
+    try:
+        result = await service.polish_manage_item(request.item_id, request.enable_notification)
+        return ApiResponse(data=result)
+    except Exception as exc:
+        logger.error(f"擦亮闲鱼管理商品失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/manage/items/polish-all", response_model=ApiResponse[XianyuManageItemPolishAllResponse])
+async def polish_all_xianyu_manage_items(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """擦亮所有本地缓存的闲鱼管理商品"""
+    try:
+        result = await service.polish_all_manage_items()
+        return ApiResponse(data=result)
+    except Exception as exc:
+        logger.error(f"批量擦亮闲鱼管理商品失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/manage/delivery-rules", response_model=ApiResponse[list[XianyuDeliveryRule]])
+async def list_xianyu_delivery_rules(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """获取闲鱼自动发货规则列表"""
+    try:
+        return ApiResponse(data=service.list_delivery_rules())
+    except Exception as exc:
+        logger.error(f"获取闲鱼自动发货规则失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/manage/delivery-rules", response_model=ApiResponse[XianyuDeliveryRule])
+async def create_xianyu_delivery_rule(
+    request: XianyuDeliveryRuleCreateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """创建闲鱼自动发货规则"""
+    try:
+        return ApiResponse(data=service.create_delivery_rule(request))
+    except Exception as exc:
+        logger.error(f"创建闲鱼自动发货规则失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.put("/manage/delivery-rules/{rule_id}", response_model=ApiResponse[XianyuDeliveryRule])
+async def update_xianyu_delivery_rule(
+    rule_id: str,
+    request: XianyuDeliveryRuleUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """更新闲鱼自动发货规则"""
+    try:
+        return ApiResponse(data=service.update_delivery_rule(rule_id, request))
+    except Exception as exc:
+        logger.error(f"更新闲鱼自动发货规则失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.delete("/manage/delivery-rules/{rule_id}", response_model=ApiResponse[dict])
+async def delete_xianyu_delivery_rule(
+    rule_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """删除闲鱼自动发货规则"""
+    try:
+        return ApiResponse(data={"deleted": service.delete_delivery_rule(rule_id)})
+    except Exception as exc:
+        logger.error(f"删除闲鱼自动发货规则失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/manage/delivery-rules/{rule_id}/toggle", response_model=ApiResponse[XianyuDeliveryRule])
+async def toggle_xianyu_delivery_rule(
+    rule_id: str,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """切换闲鱼自动发货规则启用状态"""
+    try:
+        return ApiResponse(data=service.toggle_delivery_rule(rule_id))
+    except Exception as exc:
+        logger.error(f"切换闲鱼自动发货规则失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/manage/runtime/status", response_model=ApiResponse[XianyuDeliveryRuntimeStatus])
+async def get_xianyu_delivery_runtime_status(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """获取闲鱼自动发货运行状态"""
+    try:
+        return ApiResponse(data=service.get_delivery_runtime_status())
+    except Exception as exc:
+        logger.error(f"获取闲鱼自动发货运行状态失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/manage/runtime/executions", response_model=ApiResponse[list[XianyuDeliveryExecutionRecord]])
+async def list_xianyu_delivery_executions(
+    limit: int = Query(20, ge=1, le=100, description="返回数量"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """获取闲鱼自动发货执行记录"""
+    try:
+        return ApiResponse(data=service.list_delivery_executions(limit=limit))
+    except Exception as exc:
+        logger.error(f"获取闲鱼自动发货执行记录失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))

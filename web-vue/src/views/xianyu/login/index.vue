@@ -54,17 +54,18 @@
           </el-form-item>
           <el-form-item>
             <el-button
-              :loading="fillCookieLoading"
-              @click="fillSavedCookie"
-            >
-              从本地已保存 Cookie 填充
-            </el-button>
-            <el-button
               type="primary"
               :loading="cookieSubmitting"
               @click="loginByCookie"
             >
               登录
+            </el-button>
+            <el-button
+              text
+              :disabled="cookieSubmitting"
+              @click="fillSavedCookie"
+            >
+              从本地已保存 Cookie 填充
             </el-button>
           </el-form-item>
         </el-form>
@@ -185,7 +186,6 @@ const qrcodeImage = ref('')
 const checkingLogin = ref(false)
 const checkingText = ref('等待扫码中...')
 const cookieSubmitting = ref(false)
-const fillCookieLoading = ref(false)
 
 // 自动登录状态：idle=未开始，pending=进行中，failed=失败，success=成功
 const autoLoginStatus = ref<'idle' | 'pending' | 'failed' | 'success'>('idle')
@@ -320,20 +320,17 @@ const loginByCookie = async () => {
 }
 
 const fillSavedCookie = async () => {
-  fillCookieLoading.value = true
   try {
     const response = await getFullXianyuCookie()
-    const cookie = response.data?.cookie?.trim() || ''
-    if (!cookie) {
-      ElMessage.warning('本地未找到已保存的闲鱼 Cookie')
+    const savedCookie = response.data?.cookie?.trim() || ''
+    if (!savedCookie) {
+      ElMessage.warning('本地未保存闲鱼 Cookie')
       return
     }
-    cookieForm.cookie = cookie
-    ElMessage.success('已从本地填充闲鱼 Cookie')
+    cookieForm.cookie = savedCookie
+    ElMessage.success('已填充本地保存的 Cookie')
   } catch (err: unknown) {
     ElMessage.error(err instanceof Error ? err.message : '读取本地 Cookie 失败')
-  } finally {
-    fillCookieLoading.value = false
   }
 }
 

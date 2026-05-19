@@ -2,6 +2,7 @@
 设置相关 API
 """
 from fastapi import APIRouter, Depends
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.base.schemas import ApiResponse
@@ -11,7 +12,7 @@ from app.modules.settings import (
     UpdateXianyuCookieRequest, StatusResponse, XianyuCookieValue
 )
 from app.modules.settings import SettingsService
-from app.api.deps import get_settings_service
+from app.api.deps import get_settings_service, get_xianyu_service
 from app.db.database import get_db
 from app.modules.douyin.video.services.stats_service import StatsService
 
@@ -88,6 +89,12 @@ async def update_xianyu_cookie(
     """更新闲鱼 Cookie"""
     success = await service.update_xianyu_cookie(request.cookie)
     if success:
+        # 通知闲鱼服务重置共享 ws 并用新 cookie 重启 listener / 保活
+        try:
+            xianyu_service = get_xianyu_service()
+            await xianyu_service.on_xianyu_cookie_updated()
+        except Exception as exc:
+            logger.warning(f"Cookie 更新后重启闲鱼后台监听失败: {exc}")
         return ApiResponse(message="闲鱼Cookie更新成功")
     return ApiResponse(success=False, error="更新失败")
 
