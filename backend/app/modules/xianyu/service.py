@@ -2514,21 +2514,21 @@ class XianyuService:
         return "".join(parts) + "-" + normalized
 
     def _resolve_chat_device_id(self, client: httpx.AsyncClient, user_id: str) -> str:
-        """优先用 xianyu_fingerprint.json 里的 deviceId，再回落到 cookie 派生，最后才走确定性 hash。"""
-        fingerprint = getattr(self.auth_login, "fingerprint", {}) or {}
-        device_id = str(fingerprint.get("deviceId") or "").strip()
-        if device_id:
-            return device_id
+        """派生稳定的聊天 deviceId（格式：UUID-userId）。
 
+        参照 XianYuApis 项目的 generate_device_id(unb) 流程：用账号 unb 派生 device_id
+        以保证同账号每次上报相同。注意 xianyu_fingerprint.json 里的 deviceId 是浏览器
+        登录指纹用的（短 base64 串），与聊天协议格式不兼容，不能用在这里。
+        """
         cookie_user_id = str(self._get_cookie_value(client, "unb") or "").strip()
         if cookie_user_id:
             return self._build_chat_device_id(cookie_user_id)
 
-        cookie_device_id = str(self._get_cookie_value(client, "cna") or "").strip()
-        if cookie_device_id:
-            return cookie_device_id
+        normalized_user_id = str(user_id or "").strip()
+        if normalized_user_id:
+            return self._build_chat_device_id(normalized_user_id)
 
-        return self._build_chat_device_id(user_id)
+        return self._build_chat_device_id("0")
 
     def _generate_message_uuid(self) -> str:
         return f"-{int(time.time() * 1000)}{uuid.uuid4().hex[:10]}"
