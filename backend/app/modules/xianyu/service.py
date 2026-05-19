@@ -153,6 +153,15 @@ class XianyuChatWsClient:
             },
         )
         if response.get("code") != 200:
+            import logging as _logging
+            _logging.getLogger("xianyu.service").error(
+                "ws /reg 鉴权失败: code=%s body=%s headers=%s did=%s token=%s",
+                response.get("code"),
+                response.get("body"),
+                response.get("headers"),
+                self.device_id,
+                f"{self.access_token[:10]}...{self.access_token[-6:]}" if self.access_token else "EMPTY",
+            )
             raise ValueError(self._extract_ws_error(response, "闲鱼聊天鉴权失败"))
 
         current_time = int(time.time() * 1000)
