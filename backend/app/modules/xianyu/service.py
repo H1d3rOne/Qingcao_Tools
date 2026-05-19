@@ -466,7 +466,12 @@ class XianyuService:
         return True
 
     def _should_run_chat_event_listener(self) -> bool:
-        return self._should_run_chat_ai_listener()
+        """只要 Cookie 配置好就维护后台共享 ws；AI 自动回复在循环内部按 config.enabled 过滤。
+
+        这样所有 HTTP 路由（list_chat_messages、send_chat_text 等）都能复用这个共享连接，
+        避免每次请求都新开 ws + 调 login.token，触发闲鱼风控（FAIL_SYS_USER_VALIDATE）。
+        """
+        return bool(self._get_xianyu_cookie_value())
 
     def _should_run_chat_keepalive(self) -> bool:
         return bool(self._get_xianyu_cookie_value())
@@ -1223,8 +1228,7 @@ class XianyuService:
 
     async def list_chat_conversations(self, offset: int = 0, limit: int = 20) -> XianyuChatConversationPage:
         """获取聊天会话列表"""
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             response = await chat_client.send_rpc("/r/Conversation/listNewest", [offset, limit])
             self._ensure_chat_rpc_success(response, "获取闲鱼聊天会话失败")
             raw_items = [item for item in (response.get("body") or []) if isinstance(item, dict)]
@@ -1264,8 +1268,6 @@ class XianyuService:
                 limit=limit,
                 conversations=conversations,
             )
-        finally:
-            await chat_client.close()
 
     async def list_chat_messages(
         self,
@@ -1275,8 +1277,7 @@ class XianyuService:
         direction: str = "prev",
     ) -> XianyuChatMessagePage:
         """获取聊天消息列表"""
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             response = await chat_client.send_rpc(
                 "/r/MessageManager/listUserMessages",
                 [
@@ -1305,8 +1306,6 @@ class XianyuService:
                 has_more=bool(payload.get("hasMore")),
                 messages=messages,
             )
-        finally:
-            await chat_client.close()
 
     async def send_chat_text(self, cid: str, text: str) -> XianyuChatSendResult:
         """发送闲鱼聊天文本消息"""
@@ -1314,8 +1313,7 @@ class XianyuService:
         if not summary:
             raise ValueError("请输入要发送的消息内容")
 
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             conversation_payload = await self._get_chat_conversation_payload(chat_client, cid)
             message_payload, send_options = self._build_chat_send_payloads(
                 cid=cid,
@@ -1349,8 +1347,6 @@ class XianyuService:
                 raise ValueError("发送闲鱼聊天消息失败")
 
             return self._build_chat_send_result(cid=cid, summary=summary, payload=response)
-        finally:
-            await chat_client.close()
 
     async def clear_chat_red_point(self, cids: List[str]) -> XianyuChatClearResult:
         """清理聊天会话红点"""
@@ -1358,8 +1354,7 @@ class XianyuService:
         if not valid_cids:
             return XianyuChatClearResult(success_count=0)
 
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             response = await chat_client.send_rpc("/r/Conversation/clearRedPoint", [valid_cids])
             try:
                 self._ensure_chat_rpc_success(response, "清理闲鱼聊天红点失败")
@@ -1369,13 +1364,10 @@ class XianyuService:
                     return XianyuChatClearResult(success_count=0)
                 raise
             return XianyuChatClearResult(success_count=len(valid_cids))
-        finally:
-            await chat_client.close()
 
     async def send_chat_image(self, cid: str, image_url: str, width: int = 0, height: int = 0) -> XianyuChatSendResult:
         """发送闲鱼聊天图片消息，参照 XianYuApis 的 send_image，含 fallback 重试"""
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             image_base64 = self._encode_chat_image(image_url, width, height)
             msg_payload = {
                 "uuid": self._generate_message_uuid(),
@@ -1465,8 +1457,6 @@ class XianyuService:
                     raise last_error
                 raise ValueError("发送闲鱼图片消息失败")
             return self._build_chat_send_result(cid=cid, summary="[图片]", payload=response)
-        finally:
-            await chat_client.close()
 
     async def upload_and_send_chat_image(
         self,
@@ -1488,45 +1478,37 @@ class XianyuService:
 
     async def recall_chat_message(self, message_id: str) -> bool:
         """撤回闲鱼聊天消息，参照 XianYuApis 的 send_recall_message"""
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             response = await chat_client.send_rpc("/r/MessageManager/recallMessage", [message_id])
             return response.get("code") == 200
-        finally:
-            await chat_client.close()
 
     async def mark_chat_read(self, cid: str) -> bool:
         """标记闲鱼聊天消息已读，参照 XianYuApis 的 send_message_read"""
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             response = await chat_client.send_rpc("/r/MessageStatus/read", [cid])
             return response.get("code") == 200
-        finally:
-            await chat_client.close()
 
     async def create_chat_session(self, peer_user_id: str, item_id: str = "") -> dict[str, Any]:
         """创建单聊会话，参照 XianYuApis 的 create_chat"""
-        chat_client = await self.open_chat_ws_client()
         try:
-            myid = chat_client.profile.main_user_id or chat_client.profile.user_id
-            body = [
-                {
-                    "pairFirst": f"{peer_user_id}@goofish",
-                    "pairSecond": f"{myid}@goofish",
-                    "bizType": "1",
-                    "extension": {"itemId": item_id} if item_id else {},
-                    "ctx": {"appVersion": "1.0", "platform": "web"},
-                }
-            ]
-            response = await chat_client.send_rpc("/r/SingleChatConversation/create", body)
-            self._ensure_chat_rpc_success(response, "创建闲鱼聊天会话失败")
-            result_body = response.get("body") or {}
-            cid = str(result_body.get("cid") or "")
-            return {"success": True, "cid": cid}
+            async with self._borrow_chat_ws_client() as chat_client:
+                myid = chat_client.profile.main_user_id or chat_client.profile.user_id
+                body = [
+                    {
+                        "pairFirst": f"{peer_user_id}@goofish",
+                        "pairSecond": f"{myid}@goofish",
+                        "bizType": "1",
+                        "extension": {"itemId": item_id} if item_id else {},
+                        "ctx": {"appVersion": "1.0", "platform": "web"},
+                    }
+                ]
+                response = await chat_client.send_rpc("/r/SingleChatConversation/create", body)
+                self._ensure_chat_rpc_success(response, "创建闲鱼聊天会话失败")
+                result_body = response.get("body") or {}
+                cid = str(result_body.get("cid") or "")
+                return {"success": True, "cid": cid}
         except ValueError as exc:
             return {"success": False, "message": str(exc)}
-        finally:
-            await chat_client.close()
 
     def decode_chat_push(self, push_payload: Dict[str, Any]) -> Dict[str, Any]:
         """解码闲鱼聊天推送消息，参照 XianYuApis 的 handler.py"""
@@ -1816,8 +1798,7 @@ class XianyuService:
 
     async def _open_chat_session_via_bootstrap(self, item_id: str, peer_user_id: str) -> dict[str, Any]:
         """最小化刷新聊天上下文，尝试发现已存在的目标会话，不主动发消息。"""
-        chat_client = await self.open_chat_ws_client()
-        try:
+        async with self._borrow_chat_ws_client() as chat_client:
             response = await chat_client.send_rpc("/r/Conversation/listNewest", [0, 40])
             self._ensure_chat_rpc_success(response, "获取闲鱼聊天会话失败")
             conversations = [
@@ -1863,8 +1844,6 @@ class XianyuService:
                 "success": False,
                 "message": create_result.get("message", "创建会话失败"),
             }
-        finally:
-            await chat_client.close()
 
     async def open_chat_ws_client(self) -> XianyuChatWsClient:
         """打开闲鱼聊天 WebSocket 客户端，参照 XianYuApis 先刷新 token 再连接"""
@@ -1890,6 +1869,24 @@ class XianyuService:
                 raise ValueError("闲鱼聊天鉴权失败，请重新登录闲鱼后更新设置页中的 Cookie") from exc
             raise
         return chat_client
+
+    @contextlib.asynccontextmanager
+    async def _borrow_chat_ws_client(self):
+        """借用共享 ws；如果后台 listener 已经维护着共享 ws，就直接复用，避免每次 HTTP 请求都重新握手触发风控。
+
+        没有共享 ws 时（后台 listener 未启用），开一个临时连接并在结束时关闭。
+        """
+        shared = self._shared_chat_client
+        if shared is not None and shared.is_connected():
+            yield shared
+            return
+
+        chat_client = await self.open_chat_ws_client()
+        try:
+            yield chat_client
+        finally:
+            with contextlib.suppress(Exception):
+                await chat_client.close()
 
     async def _execute_api(
         self,
