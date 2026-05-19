@@ -432,6 +432,20 @@ class XianyuService:
             )
         return self._delivery_runtime
 
+    async def on_xianyu_cookie_updated(self) -> None:
+        """Cookie 更新后，关闭旧的共享 ws 并重启后台 listener / 保活，让它们用新 cookie 重新建立连接。"""
+        # 清空临时凭据缓存
+        self._temp_provider_api_key = None
+        # 关掉旧 ws，listener 循环里会自动用新 cookie 重连
+        await self._close_shared_chat_client()
+        # 先停后启，确保用新 cookie 起新连接
+        await self.stop_chat_ai_listener()
+        await self.stop_chat_keepalive()
+        if self._should_run_chat_event_listener():
+            await self.ensure_chat_ai_listener()
+        if self._should_run_chat_keepalive():
+            await self.ensure_chat_keepalive()
+
     def _should_run_chat_ai_listener(self) -> bool:
         config = self.get_chat_ai_config()
         if not config.enabled:
@@ -589,6 +603,9 @@ class XianyuService:
 
                         consecutive_failures = 0
                         decoded = self.decode_chat_push(payload)
+                        items_count = len(decoded.get("items") or [])
+                        biz_types = [it.get("biz_type") for it in (decoded.get("items") or [])]
+                        logger.info(f"AI 监听收到推送: type={decoded.get('type')} items={items_count} biz_types={biz_types}")
                         try:
                             await self.maybe_auto_reply_from_decoded_push(chat_client.profile, decoded)
                         except Exception as exc:
@@ -1656,28 +1673,52 @@ class XianyuService:
 
         config = self.get_chat_ai_config()
         if not config.enabled:
+            logger.debug("AI auto-reply skipped: 总开关未启用")
             return None
 
         provider = self.chat_ai_store.get_active_provider()
         if not provider:
+            logger.debug("AI auto-reply skipped: 没有激活的 AI 供应商")
             return None
 
         current_user_id = profile.main_user_id or profile.user_id
-        for item in decoded.get("items") or []:
+        items = decoded.get("items") or []
+        if not items:
+            return None
+
+        for idx, item in enumerate(items):
+            biz_type = item.get("biz_type")
             candidate = self._extract_ai_candidate(item)
             if not candidate:
+                if biz_type == 40000:
+                    logger.debug(f"AI auto-reply skipped[{idx}]: biz_type=40000 但解析失败")
                 continue
             if candidate["sender_uid"] == current_user_id:
+                logger.debug(f"AI auto-reply skipped[{idx}]: 消息是自己发的")
                 continue
-            if not self.chat_ai_store.get_session_enabled(candidate["cid"]):
+            session_on = self.chat_ai_store.get_session_enabled(candidate["cid"])
+            logger.info(
+                f"AI 候选消息 cid={candidate['cid']} sender={candidate['sender_uid']} "
+                f"text={candidate['text'][:40]!r} session_ai_on={session_on}"
+            )
+            if not session_on:
+                logger.debug(f"AI auto-reply skipped: 会话 {candidate['cid']} 未启用 AI")
                 continue
             if not self._remember_ai_message_key(candidate["message_key"]):
+                logger.debug(f"AI auto-reply skipped: 消息已处理过 key={candidate['message_key']}")
                 continue
 
-            messages = self._build_chat_ai_messages(provider=provider, text=candidate["text"], cid=candidate["cid"])
-            reply = await self._request_chat_ai_reply(provider=provider, messages=messages)
-            await self.send_chat_text(cid=candidate["cid"], text=reply)
-            return reply
+            try:
+                messages = self._build_chat_ai_messages(provider=provider, text=candidate["text"], cid=candidate["cid"])
+                logger.info(f"AI 调用供应商 {provider.name} model={provider.model}")
+                reply = await self._request_chat_ai_reply(provider=provider, messages=messages)
+                logger.info(f"AI 回复 cid={candidate['cid']} reply={reply[:80]!r}")
+                await self.send_chat_text(cid=candidate["cid"], text=reply)
+                logger.info(f"AI 自动回复已发送 cid={candidate['cid']}")
+                return reply
+            except Exception as exc:
+                logger.error(f"AI 自动回复失败 cid={candidate['cid']}: {exc}")
+                raise
 
         return None
 
