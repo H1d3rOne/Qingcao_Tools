@@ -563,10 +563,15 @@ async def set_xianyu_chat_ai_provider_active_model(
 
 @router.get("/chat/ai/sessions", response_model=ApiResponse[list[XianyuChatAiSessionState]])
 async def list_xianyu_chat_ai_sessions(
+    request: Request,
     cid: list[str] = Query(default_factory=list),
     service: XianyuService = Depends(get_xianyu_service),
 ):
-    return ApiResponse(data=service.list_chat_ai_session_states(cid))
+    """获取会话 AI 状态。兼容 axios 默认的 cid[] 数组序列化格式。"""
+    cids = list(cid)
+    if not cids:
+        cids = request.query_params.getlist("cid[]")
+    return ApiResponse(data=service.list_chat_ai_session_states(cids))
 
 
 @router.post("/chat/ai/sessions/{cid}", response_model=ApiResponse[XianyuChatAiSessionState])
