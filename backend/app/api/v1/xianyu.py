@@ -16,7 +16,11 @@ from app.modules.xianyu import (
     XianyuAuthLoginResponse,
     XianyuAuthLogoutResponse,
     XianyuAuthStatusResponse,
+    XianyuBrowserLoginCancelRequest,
+    XianyuBrowserLoginStartResponse,
+    XianyuBrowserLoginStatusResponse,
     XianyuChatAiConfig,
+    XianyuChatAiConfigUpdateRequest,
     XianyuChatAiProvider,
     XianyuChatAiProviderCreateRequest,
     XianyuChatAiProviderUpdateRequest,
@@ -80,6 +84,9 @@ async def check_xianyu_auth_login(
     service: XianyuService = Depends(get_xianyu_service),
 ):
     result = service.check_login_status(request.qrcode_token)
+    if result.get("success") and result.get("is_logged_in"):
+        with contextlib.suppress(Exception):
+            await service.on_xianyu_cookie_updated()
     return XianyuAuthCheckLoginResponse(**result)
 
 
@@ -89,6 +96,17 @@ async def login_xianyu(
     service: XianyuService = Depends(get_xianyu_service),
 ):
     result = service.login(method=request.method, cookies=request.cookies)
+    if request.method == "cookie" and result.get("success"):
+        status = await service.get_auth_status()
+        if not status.get("is_logged_in"):
+            return XianyuAuthLoginResponse(
+                success=False,
+                message="Cookie 登录校验失败，请更新 Cookie",
+            )
+        # 登录页直接更新 Cookie 时，也必须重置聊天共享 WS / 后台监听。
+        # 否则聊天 tab 可能继续使用旧连接、旧 deviceId 或旧风控熔断状态。
+        with contextlib.suppress(Exception):
+            await service.on_xianyu_cookie_updated()
     return XianyuAuthLoginResponse(
         success=result["success"],
         message=result["message"],
@@ -111,6 +129,32 @@ async def logout_xianyu(
     service: XianyuService = Depends(get_xianyu_service),
 ):
     return XianyuAuthLogoutResponse(**service.logout())
+
+
+@router.post("/auth/browser-qrcode/start", response_model=XianyuBrowserLoginStartResponse)
+async def start_xianyu_browser_login(
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """启动浏览器扫码登录"""
+    return XianyuBrowserLoginStartResponse(**(await service.start_browser_login()))
+
+
+@router.get("/auth/browser-qrcode/status", response_model=XianyuBrowserLoginStatusResponse)
+async def get_xianyu_browser_login_status(
+    session_id: str = Query(..., min_length=1, description="扫码会话 ID"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """查询浏览器扫码登录状态"""
+    return XianyuBrowserLoginStatusResponse(**(await service.get_browser_login_status(session_id)))
+
+
+@router.post("/auth/browser-qrcode/cancel", response_model=XianyuAuthLogoutResponse)
+async def cancel_xianyu_browser_login(
+    request: XianyuBrowserLoginCancelRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """取消浏览器扫码登录"""
+    return XianyuAuthLogoutResponse(**(await service.cancel_browser_login(request.session_id)))
 
 
 @router.get("/monitor/tasks", response_model=ApiResponse[list[XianyuMonitorTask]])
@@ -450,6 +494,15 @@ async def get_xianyu_chat_ai_config(
     return ApiResponse(data=service.get_chat_ai_config())
 
 
+@router.post("/chat/ai/config", response_model=ApiResponse[XianyuChatAiConfig])
+async def update_xianyu_chat_ai_config(
+    request: XianyuChatAiConfigUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """兼容旧版单供应商 AI 配置保存接口。"""
+    return ApiResponse(data=service.update_chat_ai_config(request))
+
+
 @router.post("/chat/ai/enabled", response_model=ApiResponse[XianyuChatAiConfig])
 async def set_xianyu_chat_ai_enabled(
     enabled: bool = Query(..., description="是否启用 AI 总开关"),
@@ -608,16 +661,18 @@ async def websocket_xianyu_chat_proxy(
     service = get_xianyu_service()
     await websocket.accept()
     chat_client = None
+    push_subscription = None
     relay_task: asyncio.Task | None = None
     token_refresh_task: asyncio.Task | None = None
 
     try:
         chat_client = await service.open_chat_ws_client()
+        push_subscription = chat_client.subscribe_pushes()
         await websocket.send_json({"type": "connected"})
 
         async def relay_pushes():
             while True:
-                payload = await chat_client.next_push()
+                payload = await push_subscription.get()
                 decoded = service.decode_chat_push(payload)
                 await websocket.send_json(
                     {
@@ -671,14 +726,15 @@ async def websocket_xianyu_chat_proxy(
     finally:
         if token_refresh_task:
             token_refresh_task.cancel()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await token_refresh_task
         if relay_task:
             relay_task.cancel()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await relay_task
-        if chat_client:
-            await chat_client.close()
+        if chat_client and push_subscription is not None:
+            with contextlib.suppress(Exception):
+                chat_client.unsubscribe_pushes(push_subscription)
         with contextlib.suppress(Exception):
             await websocket.send_json({"type": "disconnected"})
 

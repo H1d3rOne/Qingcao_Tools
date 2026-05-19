@@ -26,12 +26,15 @@ import websockets
 
 from app.core.config import settings as app_settings
 from app.modules.xianyu.ai_store import XianyuChatAiStore
+from app.modules.xianyu.browser_login import XianyuBrowserLoginManager
+from app.modules.xianyu.crypto import decrypt as xianyu_decrypt
 from app.modules.xianyu.delivery_runtime import XianyuDeliveryRuntime
 from app.modules.xianyu.delivery_store import XianyuDeliveryStore
 from app.modules.xianyu.item_store import XianyuItemStore
 from app.modules.xianyu.monitor_store import XianyuMonitorStore
 from app.modules.xianyu.schemas import (
     XianyuChatAiConfig,
+    XianyuChatAiConfigUpdateRequest,
     XianyuChatAiProvider,
     XianyuChatAiProviderCreateRequest,
     XianyuChatAiProviderUpdateRequest,
@@ -71,6 +74,8 @@ from xianyu_client.cookie_store import (
     load_xianyu_cookie_string,
     save_xianyu_cookie_string,
 )
+
+logger = logging.getLogger("xianyu.service")
 
 
 class XianyuChatWsClient:
@@ -155,12 +160,12 @@ class XianyuChatWsClient:
         if response.get("code") != 200:
             import logging as _logging
             _logging.getLogger("xianyu.service").error(
-                "ws /reg 鉴权失败: code=%s body=%s headers=%s did=%s token=%s",
+                "ws /reg 鉴权失败: code=%s body=%s headers=%s did=%s token_len=%s",
                 response.get("code"),
                 response.get("body"),
                 response.get("headers"),
                 self.device_id,
-                f"{self.access_token[:10]}...{self.access_token[-6:]}" if self.access_token else "EMPTY",
+                len(self.access_token or ""),
             )
             raise ValueError(self._extract_ws_error(response, "闲鱼聊天鉴权失败"))
 
@@ -220,7 +225,38 @@ class XianyuChatWsClient:
     def is_connected(self) -> bool:
         if not self._ws:
             return False
-        return not bool(getattr(self._ws, "closed", False))
+
+        # websockets 新旧版本的连接对象字段不完全一致：
+        # - legacy protocol 有 .open / .closed
+        # - newer ClientConnection 更依赖 .state / .close_code
+        # 之前只读 .closed，遇到字段缺失或状态语义变化时会误判，导致切换会话时
+        # 重建 WS + 重新请求 login.token，容易触发闲鱼风控。
+        if self._receiver_task and self._receiver_task.done():
+            return False
+
+        closed = getattr(self._ws, "closed", None)
+        if closed is not None:
+            return not bool(closed)
+
+        open_state = getattr(self._ws, "open", None)
+        if open_state is not None:
+            return bool(open_state)
+
+        close_code = getattr(self._ws, "close_code", None)
+        if close_code is not None:
+            return False
+
+        state = getattr(self._ws, "state", None)
+        if state is not None:
+            state_name = str(getattr(state, "name", "") or "").upper()
+            state_text = str(state).upper()
+            if state_name == "OPEN" or state_text.endswith(".OPEN") or state_text == "1":
+                return True
+            if state_name in {"CLOSING", "CLOSED"} or state_text.endswith((".CLOSING", ".CLOSED")) or state_text in {"2", "3"}:
+                return False
+
+        # 没有明确关闭信号时按已连接处理，避免保活中的正常连接被反复重建。
+        return True
 
     def subscribe_pushes(self) -> asyncio.Queue[Dict[str, Any]]:
         queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
@@ -237,7 +273,7 @@ class XianyuChatWsClient:
         headers: Optional[Dict[str, Any]] = None,
         timeout: float = 15.0,
     ) -> Dict[str, Any]:
-        if not self._ws:
+        if not self._ws or not self.is_connected():
             raise ValueError("闲鱼聊天链路未建立")
 
         mid = f"{random.randint(100, 999)}{int(time.time() * 1000)}"
@@ -330,6 +366,8 @@ class XianyuService:
     item_polish_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idle.item.polish/1.0/"
     chat_login_user_api_name = "mtop.taobao.idlemessage.pc.loginuser.get"
     chat_login_user_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idlemessage.pc.loginuser.get/1.0/"
+    chat_user_query_api_name = "mtop.taobao.idlemessage.pc.user.query"
+    chat_user_query_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idlemessage.pc.user.query/1.0/"
     chat_login_token_api_name = "mtop.taobao.idlemessage.pc.login.token"
     chat_login_token_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idlemessage.pc.login.token/1.0/"
     chat_ws_url = "wss://wss-goofish.dingtalk.com/"
@@ -365,9 +403,11 @@ class XianyuService:
         self._xianyu_cookie_path = Path.cwd() / "config" / "xianyu_cookies.json"
         self._chat_ai_config_path = Path.cwd() / "config" / "xianyu_ai_config.json"
         self._chat_ai_sessions_path = Path.cwd() / "config" / "xianyu_ai_sessions.json"
+        self._chat_device_store_path = Path.cwd() / "config" / "xianyu_chat_devices.json"
         self._item_store_path = Path.cwd() / "config" / "xianyu_manage_items.json"
         self._delivery_rules_path = Path.cwd() / "config" / "xianyu_delivery_rules.json"
         self._delivery_runtime_path = Path.cwd() / "config" / "xianyu_delivery_runtime.json"
+        self._browser_login_manager = XianyuBrowserLoginManager(Path.cwd() / "config")
         self._monitor_store: XianyuMonitorStore | None = None
         self._chat_ai_store: XianyuChatAiStore | None = None
         self._item_store: XianyuItemStore | None = None
@@ -392,7 +432,12 @@ class XianyuService:
         self._peer_info_cache: dict[str, dict] = {}
         self._peer_info_cache_ts: dict[str, float] = {}
         self._peer_info_cache_ttl: float = 300.0  # 5 分钟
+        self._chat_session_info_cache: dict[str, dict] = {}
+        self._chat_session_info_cache_ts: dict[str, float] = {}
+        self._chat_session_info_cache_ttl: float = 300.0  # 5 分钟
         self._peer_info_semaphore = asyncio.Semaphore(3)  # 同时最多 3 个并发
+        self._chat_session_info_semaphore = asyncio.Semaphore(2)
+        self._conversation_item_cache: dict[str, dict[str, str]] = {}
         # login.token 熔断器：连续 N 次 FAIL_SYS_USER_VALIDATE 后暂停一段时间不再请求
         self._login_token_fail_count: int = 0
         self._login_token_block_until: float = 0.0
@@ -455,6 +500,8 @@ class XianyuService:
         """Cookie 更新后，关闭旧的共享 ws 并重启后台 listener / 保活，让它们用新 cookie 重新建立连接。"""
         # 清空临时凭据缓存
         self._temp_provider_api_key = None
+        self._login_token_fail_count = 0
+        self._login_token_block_until = 0.0
         # 关掉旧 ws，listener 循环里会自动用新 cookie 重连
         await self._close_shared_chat_client()
         # 先停后启，确保用新 cookie 起新连接
@@ -559,7 +606,6 @@ class XianyuService:
         cookie = self._require_xianyu_cookie()
         async with self._create_http_client(cookie) as client:
             await self._refresh_login_state(client)
-            await self._build_chat_bootstrap(client, include_token=True)
 
     async def _chat_keepalive_tick(self) -> bool:
         if not self._should_run_chat_keepalive():
@@ -630,6 +676,12 @@ class XianyuService:
                         items_count = len(decoded.get("items") or [])
                         biz_types = [it.get("biz_type") for it in (decoded.get("items") or [])]
                         logger.info(f"AI 监听收到推送: type={decoded.get('type')} items={items_count} biz_types={biz_types}")
+                        delivery_event = self._extract_delivery_candidate_event(decoded, profile=chat_client.profile)
+                        if delivery_event:
+                            try:
+                                await self.handle_delivery_candidate_event(delivery_event)
+                            except Exception as exc:
+                                logger.warning(f"闲鱼自动发货事件处理失败: {exc}")
                         try:
                             await self.maybe_auto_reply_from_decoded_push(chat_client.profile, decoded)
                         except Exception as exc:
@@ -666,6 +718,12 @@ class XianyuService:
 
     def set_chat_keepalive_interval(self, seconds: int) -> XianyuChatAiConfig:
         config = self.chat_ai_store.set_chat_keepalive_interval_seconds(seconds)
+        self._sync_chat_ai_listener_state()
+        return config
+
+    def update_chat_ai_config(self, request: XianyuChatAiConfigUpdateRequest) -> XianyuChatAiConfig:
+        """兼容旧版单供应商 AI 配置接口。"""
+        config = self.chat_ai_store.save_config(request)
         self._sync_chat_ai_listener_state()
         return config
 
@@ -750,6 +808,190 @@ class XianyuService:
             return f"data:image/svg+xml;base64,{encoded}"
         except Exception:
             return None
+
+    async def _browser_login_qrcode_data_url(self, page) -> str:
+        """从浏览器登录页提取二维码 data URL。
+
+        优先读取 canvas.toDataURL；如果二维码 canvas 被跨域图片污染导致 tainted，
+        只截取 canvas 元素本身，避免退化为整页截图。
+        """
+        canvas = page.locator("canvas")
+        canvas_count = 0
+        with contextlib.suppress(Exception):
+            canvas_count = int(await canvas.count())
+
+        if canvas_count > 0:
+            with contextlib.suppress(Exception):
+                data_url = await page.evaluate(
+                    """selector => {
+                        const canvas = document.querySelector(selector);
+                        return canvas ? canvas.toDataURL('image/png') : '';
+                    }""",
+                    "canvas",
+                )
+                if isinstance(data_url, str) and data_url.startswith("data:image/"):
+                    return data_url
+
+            screenshot_bytes = await canvas.first.screenshot(type="png")
+            encoded = base64.b64encode(screenshot_bytes).decode("utf-8")
+            return f"data:image/png;base64,{encoded}"
+
+        for selector in ("img[src^='data:image']", "img"):
+            locator = page.locator(selector)
+            count = 0
+            with contextlib.suppress(Exception):
+                count = int(await locator.count())
+            if count <= 0:
+                continue
+            with contextlib.suppress(Exception):
+                src = str(await locator.first.get_attribute("src") or "").strip()
+                if src.startswith("data:image/"):
+                    return src
+            screenshot_bytes = await locator.first.screenshot(type="png")
+            encoded = base64.b64encode(screenshot_bytes).decode("utf-8")
+            return f"data:image/png;base64,{encoded}"
+
+        raise ValueError("未找到扫码二维码")
+
+    def _browser_login_cookie_string(self, cookies: list[dict[str, Any]]) -> str:
+        """保留 goofish 相关 Cookie，避免遗漏 havana/cookie2/_m_h5_tk 等登录态。"""
+        result: dict[str, str] = {}
+        for cookie in cookies or []:
+            name = str(cookie.get("name") or "").strip()
+            value = str(cookie.get("value") or "")
+            domain = str(cookie.get("domain") or "").lower()
+            if not name:
+                continue
+            if "goofish.com" in domain or "taobao.com" in domain or "alibaba.com" in domain:
+                result[name] = value
+        return "; ".join(f"{name}={value}" for name, value in result.items())
+
+    async def _browser_login_status_from_page(self, page, context) -> dict[str, Any]:
+        with contextlib.suppress(Exception):
+            await page.wait_for_load_state("domcontentloaded", timeout=1000)
+        with contextlib.suppress(Exception):
+            await page.wait_for_timeout(300)
+
+        cookies = await context.cookies()
+        cookie_string = self._browser_login_cookie_string(cookies)
+        cookie_names = {str(cookie.get("name") or "") for cookie in cookies or []}
+        has_login_cookie = any(
+            name.startswith("havana_lgc2_")
+            or name in {"unb", "cookie2", "cookie17", "sgcookie", "tracknick"}
+            for name in cookie_names
+        )
+        if cookie_string and has_login_cookie:
+            return {
+                "success": True,
+                "message": "登录成功",
+                "status": "success",
+                "is_logged_in": True,
+                "login_token": cookie_string,
+                "cookie_string": cookie_string,
+            }
+
+        text = ""
+        with contextlib.suppress(Exception):
+            text = str(await page.evaluate("document.body ? document.body.innerText : ''") or "")
+        if "已扫码" in text or "确认" in text:
+            return {"success": True, "message": "已扫码，请在手机上确认登录", "status": "scanned", "is_logged_in": False}
+        return {"success": True, "message": "等待扫码中...", "status": "waiting", "is_logged_in": False}
+
+    async def start_browser_login(self) -> dict[str, Any]:
+        """启动真实浏览器扫码登录；Playwright 不可用时返回清晰失败信息。"""
+        try:
+            from playwright.async_api import async_playwright
+
+            playwright = await async_playwright().start()
+            browser = await playwright.chromium.launch(headless=True)
+            context = await browser.new_context(user_agent=self.default_headers["user-agent"])
+            page = await context.new_page()
+            await page.goto("https://passport.goofish.com/mini_login.htm", wait_until="domcontentloaded")
+            qrcode_image = await self._browser_login_qrcode_data_url(page)
+            session = self._browser_login_manager.create_session(qrcode_image=qrcode_image, expires_in=300)
+
+            async def cleanup():
+                with contextlib.suppress(Exception):
+                    await context.close()
+                with contextlib.suppress(Exception):
+                    await browser.close()
+                with contextlib.suppress(Exception):
+                    await playwright.stop()
+
+            async def monitor_login():
+                try:
+                    while True:
+                        manager_session = self._browser_login_manager.get_session(session.session_id)
+                        if not manager_session or manager_session.status in {"success", "cancelled", "expired", "failed"}:
+                            break
+                        status = await self._browser_login_status_from_page(page, context)
+                        if status.get("is_logged_in"):
+                            cookie_string = str(status.get("cookie_string") or status.get("login_token") or "")
+                            if cookie_string:
+                                self._browser_login_manager.mark_success(session.session_id, cookie_string=cookie_string)
+                                app_settings.cookies.xianyu = cookie_string
+                                await self.on_xianyu_cookie_updated()
+                                break
+                        else:
+                            self._browser_login_manager.update_session(
+                                session.session_id,
+                                status=str(status.get("status") or "waiting"),
+                                message=str(status.get("message") or "等待扫码中..."),
+                            )
+                        await asyncio.sleep(2)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    with contextlib.suppress(Exception):
+                        self._browser_login_manager.update_session(
+                            session.session_id,
+                            status="failed",
+                            message=f"浏览器扫码登录失败: {exc}",
+                        )
+                finally:
+                    await cleanup()
+
+            monitor_task = asyncio.create_task(monitor_login(), name=f"xianyu-browser-login-{session.session_id}")
+            self._browser_login_manager.bind_runtime(session.session_id, cleanup=cleanup, monitor_task=monitor_task)
+            return {
+                "success": True,
+                "message": session.message,
+                "session_id": session.session_id,
+                "qrcode_image": session.qrcode_image,
+                "expires_in": max(session.expires_at - int(time.time()), 0),
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "message": f"启动浏览器扫码登录失败: {exc}",
+                "session_id": "",
+                "qrcode_image": None,
+                "expires_in": 0,
+            }
+
+    async def get_browser_login_status(self, session_id: str) -> dict[str, Any]:
+        session = self._browser_login_manager.get_session(session_id)
+        if not session:
+            return {
+                "success": False,
+                "message": "扫码会话不存在或已失效",
+                "status": "expired",
+                "is_logged_in": False,
+                "login_token": None,
+            }
+        return {
+            "success": True,
+            "message": session.message,
+            "status": session.status,
+            "is_logged_in": session.status == "success",
+            "login_token": session.login_token or None,
+        }
+
+    async def cancel_browser_login(self, session_id: str) -> dict[str, Any]:
+        try:
+            return self._browser_login_manager.cancel_session(session_id)
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
 
     def get_login_qrcode(self) -> dict[str, Any]:
         try:
@@ -1168,7 +1410,7 @@ class XianyuService:
         return bootstrap["profile"]
 
     async def diagnose_chat_runtime(self) -> XianyuChatHealthStatus:
-        """诊断闲鱼聊天链路状态。优先使用后台共享 ws 的连接状态，避免重复握手。"""
+        """诊断闲鱼聊天链路状态。优先使用后台共享 ws 的连接状态。"""
         cookie_configured = bool(self._get_xianyu_cookie_value())
         shared_ws_connected = bool(self._shared_chat_client and self._shared_chat_client.is_connected())
 
@@ -1191,40 +1433,28 @@ class XianyuService:
                 cookie_configured=True,
             )
 
-        # 共享 ws 未连接：可能是 listener 还没起来 / 没启用 AI / Cookie 失效
-        # 用一次廉价的 HTTP 调用验证 Cookie 是否还有效
+        # 共享 ws 未连接时，实际探测一次聊天 WS；否则 login.token / /reg 风控不会暴露给前端。
+        probe_client = None
         try:
-            cookie = self._get_xianyu_cookie_value()
-            async with self._create_http_client(cookie) as client:
-                await self._refresh_login_state(client)
-            # Cookie 有效但共享 ws 没连，可能是 AI 没启用
-            config = self.get_chat_ai_config()
-            if not config.enabled:
-                return XianyuChatHealthStatus(
-                    ok=True,
-                    status="ok",
-                    message="闲鱼 Cookie 有效。AI 总开关未启用，未启动后台监听。",
-                    shared_ws_connected=False,
-                    cookie_configured=True,
-                )
+            probe_client = await self.open_chat_ws_client()
             return XianyuChatHealthStatus(
                 ok=True,
                 status="ok",
-                message="闲鱼 Cookie 有效，后台监听即将启动。",
-                shared_ws_connected=False,
+                message="闲鱼聊天链路正常。",
+                shared_ws_connected=bool(probe_client and probe_client.is_connected()),
                 cookie_configured=True,
             )
         except Exception as exc:
             error_text = str(exc)
             status = "error"
-            captcha_url = ""
+            captcha_url = self._extract_first_url(error_text)
             lowered = error_text.lower()
             if "captcha" in lowered or "风控" in error_text or "verify" in lowered or "validate" in lowered:
                 status = "risk_blocked"
                 message = f"闲鱼请求被风控拦截：{error_text}"
-            elif "session_expired" in lowered or "auth" in lowered or "token" in lowered or "登录" in error_text:
+            elif "session_expired" in lowered or "auth" in lowered or "token" in lowered or "登录" in error_text or "鉴权" in error_text:
                 status = "auth_invalid"
-                message = "闲鱼登录态可能已失效，请尝试更新设置页中的 Cookie。"
+                message = error_text if "闲鱼" in error_text else f"闲鱼登录态可能已失效：{error_text}"
             else:
                 message = f"聊天链路诊断失败：{error_text}"
             return XianyuChatHealthStatus(
@@ -1245,10 +1475,15 @@ class XianyuService:
             peer_info_cache: Dict[str, Dict[str, Any]] = {}
             if raw_items:
                 peer_ids = set()
+                session_ids = set()
                 for item in raw_items:
                     single = item.get("singleChatUserConversation") or {}
                     conversation = single.get("singleChatConversation") or {}
                     ext = conversation.get("extension") or {}
+                    cid = str(conversation.get("cid") or "")
+                    session_id = cid.split("@", 1)[0] if cid else ""
+                    if session_id:
+                        session_ids.add(session_id)
                     pair_first = str(conversation.get("pairFirst") or "")
                     pair_second = str(conversation.get("pairSecond") or "")
                     current_user_id = chat_client.profile.main_user_id or chat_client.profile.user_id
@@ -1262,6 +1497,12 @@ class XianyuService:
                         pid = str(ext.get("extUserId") or pair_second_id or pair_first_id)
                     if pid and pid not in {"0", "-1"}:
                         peer_ids.add(pid)
+                if session_ids:
+                    tasks = [self.get_chat_session_user_info(session_id) for session_id in session_ids]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for session_id, result in zip(session_ids, results):
+                        if isinstance(result, dict) and result:
+                            peer_info_cache[session_id] = result
                 if peer_ids:
                     tasks = [self.get_peer_user_info(pid) for pid in peer_ids]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1592,33 +1833,42 @@ class XianyuService:
     async def _request_chat_ai_reply(
         self,
         *,
-        provider: XianyuChatAiProvider,
         messages: list[dict[str, str]],
+        provider: XianyuChatAiProvider | None = None,
+        config: XianyuChatAiConfig | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> str:
+        if provider is None and config is None:
+            raise ValueError("AI 供应商未配置")
+
         # 测试场景：使用临时 api_key（不持久化）
         if self._temp_provider_api_key:
             api_key = self._temp_provider_api_key
-        else:
+        elif provider is not None:
             api_key = self.chat_ai_store.load_secret_api_key(provider.id).strip()
+        else:
+            api_key = self._load_secret_chat_ai_api_key()
         if not api_key:
             raise ValueError("AI API Key 未配置")
 
-        base_url = provider.base_url.rstrip("/")
+        base_url = (provider.base_url if provider is not None else config.base_url).rstrip("/")
+        model_name = provider.model if provider is not None else config.model
         payload = {
-            "model": provider.model,
+            "model": model_name,
             "messages": messages,
         }
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Content-Type": "application/json; charset=utf-8",
         }
+        body = json.dumps(payload, ensure_ascii=provider is not None).encode("utf-8")
 
         async with httpx.AsyncClient(timeout=30.0, transport=transport) as client:
             response = await client.post(
                 f"{base_url}/chat/completions",
                 headers=headers,
-                content=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                content=body,
             )
             response.raise_for_status()
             data = response.json()
@@ -1630,25 +1880,141 @@ class XianyuService:
         message = choices[0].get("message") or {}
         content = str(message.get("content") or "").strip()
         if not content:
-            raise ValueError("AI 接口返回了空回复")
+            finish_reason = str(choices[0].get("finish_reason") or choices[0].get("native_finish_reason") or "")
+            usage = data.get("usage") or {}
+            details = usage.get("completion_tokens_details") or {}
+            completion_tokens = self._to_int(usage.get("completion_tokens"))
+            reasoning_tokens = self._to_int(details.get("reasoning_tokens"))
+            answer_tokens = max(completion_tokens - reasoning_tokens, 0) if completion_tokens else 0
+            usage_text = json.dumps(usage, ensure_ascii=False, separators=(",", ":")) if usage else "{}"
+            if reasoning_tokens and answer_tokens:
+                raise ValueError(
+                    "AI 接口返回了空回复；推测是网关将推理模型转换为 chat.completion 时丢失 content。"
+                    f"finish_reason={finish_reason or 'unknown'}，answer_tokens={answer_tokens}，usage={usage_text}。"
+                    "建议切换为非推理模型（如 gpt-4o、gpt-4.1-mini）或更换 OpenAI 兼容网关。"
+                )
+            raise ValueError(
+                f"AI 接口返回了空回复；finish_reason={finish_reason or 'unknown'}，usage={usage_text}"
+            )
         return content
 
     def _extract_ai_candidate(self, item: dict[str, Any]) -> dict[str, str] | None:
         decoded = item.get("decoded") or {}
-        if item.get("biz_type") != 40000:
+        try:
+            biz_type = int(str(item.get("biz_type") or 0))
+        except (TypeError, ValueError):
+            biz_type = 0
+        if biz_type not in (40, 40000):
             return None
+
+        raw_text = str(decoded.get("raw_text") or "")
+
+        def normalize_cid(value: Any) -> str:
+            text = str(value or "").strip()
+            if not text:
+                return ""
+            # protobuf 解密文本里有时带 ".PNM" 后缀；RPC 需要纯 cid。
+            text = text.split(".PNM", 1)[0]
+            if "@" in text:
+                head, domain = text.split("@", 1)
+                return f"{head}@{domain.split()[0]}" if head else ""
+            return text
+
+        def build_candidate(cid: Any, sender_uid: Any, text: Any, sender_name: Any = "") -> dict[str, str] | None:
+            normalized_cid = normalize_cid(cid)
+            normalized_sender = str(sender_uid or "").strip().split("@", 1)[0]
+            normalized_text = str(text or "").strip()
+            if not normalized_cid or not normalized_sender or not normalized_text:
+                return None
+            message_id = str(decoded.get("message_id") or "").strip()
+            key_material = "|".join(
+                part
+                for part in (
+                    normalized_cid,
+                    normalized_sender,
+                    normalized_text,
+                    message_id,
+                    raw_text,
+                )
+                if part
+            )
+            if not key_material:
+                key_material = json.dumps(item, ensure_ascii=False, sort_keys=True, default=str)
+            key = hashlib.sha1(key_material.encode("utf-8", errors="ignore")).hexdigest()
+            return {
+                "cid": normalized_cid,
+                "sender_uid": normalized_sender,
+                "sender_name": str(sender_name or "").strip(),
+                "text": normalized_text,
+                "message_key": key,
+            }
+
+        def extract_cid_from_text(text: str) -> str:
+            if not text:
+                return ""
+            patterns = (
+                r"(?:\"|')?(?:cid|sid|sessionId)(?:\"|')?\s*[:=]\s*(?:\"|')?([0-9A-Za-z._-]+(?:@goofish)?)",
+                r"(?:sid|sessionId)=([0-9A-Za-z._-]+)",
+                r"([0-9]{6,}@goofish)",
+            )
+            for pattern in patterns:
+                match = re.search(pattern, text)
+                if match:
+                    return normalize_cid(match.group(1))
+            return ""
+
+        def recursive_find_cid(obj: Any) -> str:
+            if isinstance(obj, dict):
+                for key in ("cid", "sid", "sessionId"):
+                    value = obj.get(key)
+                    if value:
+                        cid = normalize_cid(value)
+                        if cid:
+                            return cid
+                for value in obj.values():
+                    cid = recursive_find_cid(value)
+                    if cid:
+                        return cid
+            elif isinstance(obj, list):
+                for value in obj:
+                    cid = recursive_find_cid(value)
+                    if cid:
+                        return cid
+            return ""
 
         for obj in decoded.get("json_objects") or []:
             payload = obj.get("1") or {}
             meta = payload.get("10") or {}
-            cid = str(payload.get("2") or "").split("@")[0].strip()
+            cid = str(payload.get("2") or "").strip()
             sender_uid = str(meta.get("senderUserId") or "").strip()
             text = str(meta.get("reminderContent") or "").strip()
-            if cid and sender_uid and text:
-                raw_text = str(decoded.get("raw_text") or "")
-                key = hashlib.sha1(raw_text.encode("utf-8", errors="ignore")).hexdigest()
-                return {"cid": cid, "sender_uid": sender_uid, "text": text, "message_key": key}
-        return None
+            sender_name = str(meta.get("reminderTitle") or "").strip()
+            candidate = build_candidate(cid, sender_uid, text, sender_name)
+            if candidate:
+                return candidate
+
+        # 解密 fallback：有些推送无法完整提取到 json_objects[0]["1"]["10"]，
+        # 但 _decode_message_data 已经从全文递归提取到了顶层 sender/reminder 字段。
+        fallback_cid = str(decoded.get("cid") or "").strip()
+        if not fallback_cid:
+            for obj in decoded.get("json_objects") or []:
+                fallback_cid = recursive_find_cid(obj)
+                if fallback_cid:
+                    break
+        if not fallback_cid:
+            for url in decoded.get("urls") or []:
+                fallback_cid = extract_cid_from_text(str(url))
+                if fallback_cid:
+                    break
+        if not fallback_cid:
+            fallback_cid = extract_cid_from_text(raw_text)
+
+        return build_candidate(
+            fallback_cid,
+            decoded.get("sender_user_id"),
+            decoded.get("reminder_content"),
+            decoded.get("nickname"),
+        )
 
     def _remember_ai_message_key(self, key: str) -> bool:
         if key in self._processed_ai_message_set:
@@ -1660,13 +2026,63 @@ class XianyuService:
         self._processed_ai_message_set.add(key)
         return True
 
-    def _build_chat_ai_messages(self, *, provider: XianyuChatAiProvider, text: str, cid: str = "") -> list[dict[str, str]]:
-        content = text if not cid else f"会话 CID：{cid}\n买家消息：{text}"
+    def _build_chat_ai_messages(
+        self,
+        *,
+        provider: XianyuChatAiProvider,
+        text: str,
+        cid: str = "",
+        sender_name: str = "",
+        item_title: str = "",
+        history: list[XianyuChatMessage] | None = None,
+    ) -> list[dict[str, str]]:
         system_prompt = provider.system_prompt or "你是闲鱼客服助手，回复要简洁、礼貌、像真人卖家。"
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": content},
-        ]
+        context_parts: list[str] = []
+        if cid:
+            context_parts.append(f"会话 CID：{cid}")
+        if sender_name:
+            context_parts.append(f"当前买家昵称：{sender_name}")
+        if item_title:
+            context_parts.append(f"当前咨询商品：{item_title}")
+        if context_parts:
+            system_prompt = system_prompt.rstrip() + "\n\n" + "\n".join(context_parts)
+
+        messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+        for item in history or []:
+            content = str(item.text or item.summary or "").strip()
+            if not content:
+                continue
+            messages.append({
+                "role": "assistant" if item.direction == "out" else "user",
+                "content": content,
+            })
+        messages.append({"role": "user", "content": text})
+        return messages
+
+    async def _get_conversation_item_title(self, cid: str) -> str:
+        try:
+            page = await self.list_chat_conversations(offset=0, limit=40)
+        except Exception:
+            return ""
+        cid_variants = set(self._chat_cid_variants(cid))
+        for session in page.conversations:
+            if session.cid in cid_variants or session.session_id in cid_variants:
+                return session.item_title or session.title or ""
+        return ""
+
+    def _chat_cid_variants(self, cid: str) -> list[str]:
+        """返回同一聊天会话的完整/短 CID 兼容写法。
+
+        历史配置里会话 AI 开关曾经用短 cid（如 ``123``）保存；新聊天接口和
+        前端会话列表更多使用完整 cid（如 ``123@goofish``）。自动回复链路需要
+        同时兼容两种状态，否则会出现“当前会话已开启 AI 但后台判断未开启”。
+        """
+        text = str(cid or "").strip()
+        if not text:
+            return []
+        short = text.split("@", 1)[0]
+        full = text if "@" in text else f"{short}@{self.chat_domain}"
+        return list(dict.fromkeys([text, full, short]))
 
     async def maybe_auto_reply_from_decoded_push(self, profile: XianyuChatProfile, decoded: dict[str, Any]) -> str | None:
         if decoded.get("type") != "sync":
@@ -1697,12 +2113,19 @@ class XianyuService:
             if candidate["sender_uid"] == current_user_id:
                 logger.debug(f"AI auto-reply skipped[{idx}]: 消息是自己发的")
                 continue
-            session_on = self.chat_ai_store.get_session_enabled(candidate["cid"])
+            cid_variants = self._chat_cid_variants(candidate["cid"])
+            enabled_cid = next(
+                (cid for cid in cid_variants if self.chat_ai_store.get_session_enabled(cid)),
+                "",
+            )
+            reply_cid = enabled_cid or candidate["cid"]
+            session_on = bool(enabled_cid)
             logger.info(
                 f"AI 候选消息 cid={candidate['cid']} sender={candidate['sender_uid']} "
                 f"text={candidate['text'][:40]!r} session_ai_on={session_on}"
             )
             if not session_on:
+                self._log.info("AI 自动回复跳过：当前会话未开启 cid=%s", candidate["cid"])
                 logger.debug(f"AI auto-reply skipped: 会话 {candidate['cid']} 未启用 AI")
                 continue
             if not self._remember_ai_message_key(candidate["message_key"]):
@@ -1710,27 +2133,96 @@ class XianyuService:
                 continue
 
             try:
-                messages = self._build_chat_ai_messages(provider=provider, text=candidate["text"], cid=candidate["cid"])
+                await self._mark_chat_read_before_ai_reply(reply_cid=reply_cid, source_cid=candidate["cid"])
+                item_title = await self._get_conversation_item_title(reply_cid)
+                history: list[XianyuChatMessage] = []
+                try:
+                    page = await self.list_chat_messages(reply_cid, limit=8)
+                    history = [
+                        item
+                        for item in page.messages
+                        if (item.text or item.summary)
+                        and str(item.text or item.summary or "").strip() != candidate["text"]
+                    ][-6:]
+                except Exception:
+                    history = []
+                messages = self._build_chat_ai_messages(
+                    provider=provider,
+                    text=candidate["text"],
+                    cid=reply_cid,
+                    sender_name=candidate.get("sender_name", ""),
+                    item_title=item_title,
+                    history=history,
+                )
                 logger.info(f"AI 调用供应商 {provider.name} model={provider.model}")
                 reply = await self._request_chat_ai_reply(provider=provider, messages=messages)
-                logger.info(f"AI 回复 cid={candidate['cid']} reply={reply[:80]!r}")
-                await self.send_chat_text(cid=candidate["cid"], text=reply)
-                logger.info(f"AI 自动回复已发送 cid={candidate['cid']}")
+                logger.info(f"AI 回复 cid={reply_cid} reply={reply[:80]!r}")
+                await self.send_chat_text(cid=reply_cid, text=reply)
+                logger.info(f"AI 自动回复已发送 cid={reply_cid}")
                 return reply
             except Exception as exc:
-                logger.error(f"AI 自动回复失败 cid={candidate['cid']}: {exc}")
+                logger.error(f"AI 自动回复失败 cid={reply_cid}: {exc}")
                 raise
 
         return None
 
-    def _decode_message_data(self, encoded: str) -> Dict[str, Any]:
-        """解码推送消息的 data 字段，参照 XianYuApis 的 decode_message_data"""
-        try:
-            decoded = base64.b64decode(encoded)
-            text = decoded.decode("utf-8", errors="replace")
-        except Exception:
-            return {"raw_text": encoded}
+    async def _mark_chat_read_before_ai_reply(self, reply_cid: str, source_cid: str = "") -> bool:
+        """AI 自动回复前先把会话标记为已读。
 
+        参考 XianYuApis 的监听处理顺序：收到私信推送后先确认会话已读，再执行业务回复。
+        已读失败不应阻断自动回复；不同入口保存的 cid 可能是完整 cid 或短 cid，所以这里按
+        完整/原始/短 cid 依次轻量尝试。
+        """
+        candidates: list[str] = []
+        for cid in (reply_cid, source_cid):
+            variants = self._chat_cid_variants(cid)
+            if not variants:
+                continue
+            # 网页端通常使用完整 cid；无论传入的是短 cid 还是完整 cid，都优先尝试带 @ 的版本。
+            preferred = [variant for variant in variants if "@" in variant]
+            preferred.extend(variants)
+            for candidate in preferred:
+                candidate = str(candidate or "").strip()
+                if candidate and candidate not in candidates:
+                    candidates.append(candidate)
+
+        last_error = ""
+        for cid in candidates:
+            try:
+                if await self.mark_chat_read(cid):
+                    logger.info("AI 自动回复前已标记会话已读 cid=%s", cid)
+                    return True
+            except Exception as exc:
+                last_error = str(exc)
+                logger.debug("AI 自动回复前标记已读失败 cid=%s: %s", cid, exc)
+
+        if candidates:
+            logger.warning("AI 自动回复前标记已读未成功 cid=%s error=%s", candidates[0], last_error or "unknown")
+        return False
+
+    def _update_decoded_message_fields(self, result: Dict[str, Any], obj: Any) -> None:
+        """从解码后的 JSON 片段中递归提取 AI 自动回复需要的字段。"""
+        if isinstance(obj, dict):
+            field_map = {
+                "senderUserId": "sender_user_id",
+                "reminderContent": "reminder_content",
+                "reminderTitle": "nickname",
+                "messageId": "message_id",
+                "cid": "cid",
+                "sid": "cid",
+                "sessionId": "cid",
+            }
+            for source_key, result_key in field_map.items():
+                value = obj.get(source_key)
+                if value is not None and not result.get(result_key):
+                    result[result_key] = str(value)
+            for value in obj.values():
+                self._update_decoded_message_fields(result, value)
+        elif isinstance(obj, list):
+            for value in obj:
+                self._update_decoded_message_fields(result, value)
+
+    def _build_decoded_message_result(self, text: str) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             "raw_text": text,
             "json_objects": [],
@@ -1739,7 +2231,29 @@ class XianyuService:
             "nickname": "",
             "reminder_content": "",
             "sender_user_id": "",
+            "cid": "",
+            "message_id": "",
         }
+
+        seen_snippets: set[str] = set()
+
+        def add_json_object(obj: Any, snippet: str = "") -> None:
+            if isinstance(obj, dict):
+                key = snippet or json.dumps(obj, ensure_ascii=False, sort_keys=True)
+                if key not in seen_snippets:
+                    seen_snippets.add(key)
+                    result["json_objects"].append(obj)
+                self._update_decoded_message_fields(result, obj)
+            elif isinstance(obj, list):
+                self._update_decoded_message_fields(result, obj)
+                for entry in obj:
+                    add_json_object(entry)
+
+        stripped = text.strip()
+        if stripped.startswith(("{", "[")):
+            with contextlib.suppress(Exception):
+                add_json_object(json.loads(stripped), stripped)
+
         brace_count = 0
         start = -1
         for i, char in enumerate(text):
@@ -1747,24 +2261,48 @@ class XianyuService:
                 if brace_count == 0:
                     start = i
                 brace_count += 1
-            elif char == "}":
+            elif char == "}" and brace_count > 0:
                 brace_count -= 1
                 if brace_count == 0 and start >= 0:
+                    snippet = text[start : i + 1]
                     try:
-                        obj = json.loads(text[start : i + 1])
-                        result["json_objects"].append(obj)
-                        if "reminderTitle" in obj:
-                            result["nickname"] = obj["reminderTitle"]
-                        if "reminderContent" in obj:
-                            result["reminder_content"] = obj["reminderContent"]
-                        if "senderUserId" in obj:
-                            result["sender_user_id"] = obj["senderUserId"]
+                        add_json_object(json.loads(snippet), snippet)
                     except Exception:
                         pass
                     start = -1
+
         url_match = re.search(r"(fleamarket://[^\s\x00]+?)(?=\s|senderUserId|$)", text)
         if url_match:
             result["urls"].append(url_match.group(1))
+        return result
+
+    def _decode_message_data(self, encoded: str) -> Dict[str, Any]:
+        """解码推送消息的 data 字段，参照 XianYuApis 的 decode_message_data"""
+        raw = str(encoded or "")
+        if raw.lstrip().startswith(("{", "[")):
+            return self._build_decoded_message_result(raw)
+
+        try:
+            padding = "=" * (-len(raw) % 4)
+            decoded = base64.b64decode(raw + padding)
+            text = decoded.decode("utf-8", errors="replace")
+        except Exception:
+            text = raw
+
+        result = self._build_decoded_message_result(text)
+        if result.get("sender_user_id") or result.get("reminder_content"):
+            return result
+
+        with contextlib.suppress(Exception):
+            decrypted = xianyu_decrypt(raw)
+            if decrypted:
+                decrypted_result = self._build_decoded_message_result(str(decrypted))
+                if (
+                    decrypted_result.get("json_objects")
+                    or decrypted_result.get("sender_user_id")
+                    or decrypted_result.get("reminder_content")
+                ):
+                    return decrypted_result
         return result
 
     async def open_chat_session(self, item_id: str, peer_user_id: str) -> dict[str, Any]:
@@ -1855,12 +2393,28 @@ class XianyuService:
                 "message": create_result.get("message", "创建会话失败"),
             }
 
-    async def open_chat_ws_client(self) -> XianyuChatWsClient:
-        """打开闲鱼聊天 WebSocket 客户端，参照 XianYuApis 先刷新 token 再连接"""
+    def _is_chat_auth_error(self, message: str) -> bool:
+        return any(
+            marker in message
+            for marker in (
+                "token is not found",
+                "FAIL_SYS_USER_VALIDATE",
+                "FAIL_SYS_SESSION_EXPIRED",
+                "闲鱼聊天鉴权失败",
+                "闲鱼登录已过期",
+                "Cookie",
+            )
+        )
+
+    async def _create_connected_chat_ws_client(self) -> XianyuChatWsClient:
+        """创建一条新的闲鱼聊天 WebSocket 连接。调用方负责决定是否缓存复用。"""
         cookie = self._require_xianyu_cookie()
         async with self._create_http_client(cookie) as client:
-            await self._refresh_login_state(client)
+            # 这里不预先额外调用 loginuser.get；_build_chat_bootstrap 会按需获取
+            # profile + login.token。减少建连时连续 HTTP 请求，降低 fresh cookie
+            # 被风控的概率。
             bootstrap = await self._build_chat_bootstrap(client, include_token=True)
+            runtime_cookie = self._build_cookie_header(client) or cookie
 
         chat_client = XianyuChatWsClient(
             ws_url=self.chat_ws_url,
@@ -1872,31 +2426,65 @@ class XianyuService:
             profile=bootstrap["profile"],
         )
         try:
-            await chat_client.connect(cookie=cookie)
+            await chat_client.connect(cookie=runtime_cookie)
         except ValueError as exc:
+            with contextlib.suppress(Exception):
+                await chat_client.close()
             message = str(exc).strip()
             if message in {"token is not found", "FAIL_SYS_USER_VALIDATE", "FAIL_SYS_SESSION_EXPIRED"}:
-                raise ValueError("闲鱼聊天鉴权失败，请重新登录闲鱼后更新设置页中的 Cookie") from exc
+                raise ValueError(
+                    self._format_chat_auth_failure(
+                        reason=message,
+                        bootstrap=bootstrap,
+                        cookie=runtime_cookie,
+                    )
+                ) from exc
+            raise
+        except Exception:
+            with contextlib.suppress(Exception):
+                await chat_client.close()
             raise
         return chat_client
+
+    async def open_chat_ws_client(self) -> XianyuChatWsClient:
+        """获取共享闲鱼聊天 WebSocket 客户端。
+
+        聊天页、消息列表、发送消息、后台 AI 监听共用同一条连接，避免多条 WS 反复调用
+        login.token 触发风控，也避免前端 WS 关闭时把后台 AI 监听链路切断。
+        """
+        async with self._shared_chat_client_lock:
+            shared = self._shared_chat_client
+            if shared is not None and shared.is_connected():
+                return shared
+
+            if shared is not None:
+                self._shared_chat_client = None
+                with contextlib.suppress(Exception):
+                    await shared.close()
+
+            try:
+                chat_client = await self._create_connected_chat_ws_client()
+            except ValueError as exc:
+                message = str(exc).strip()
+                if not self._is_chat_auth_error(message):
+                    raise
+                # 不在鉴权/风控错误后立刻二次请求 login.token。会话切换时最容易
+                # 因连续握手被判风险；这里交给后台保活刷新 loginuser.get 后再重连。
+                with contextlib.suppress(Exception):
+                    await self._refresh_chat_runtime_token()
+                raise
+
+            self._shared_chat_client = chat_client
+            return chat_client
 
     @contextlib.asynccontextmanager
     async def _borrow_chat_ws_client(self):
         """借用共享 ws；如果后台 listener 已经维护着共享 ws，就直接复用，避免每次 HTTP 请求都重新握手触发风控。
 
-        没有共享 ws 时（后台 listener 未启用），开一个临时连接并在结束时关闭。
+        没有共享 ws 时会创建并缓存一条共享连接，不在单个 HTTP 请求结束时关闭。
         """
-        shared = self._shared_chat_client
-        if shared is not None and shared.is_connected():
-            yield shared
-            return
-
         chat_client = await self.open_chat_ws_client()
-        try:
-            yield chat_client
-        finally:
-            with contextlib.suppress(Exception):
-                await chat_client.close()
+        yield chat_client
 
     async def _execute_api(
         self,
@@ -2257,7 +2845,13 @@ class XianyuService:
         client: httpx.AsyncClient,
         include_token: bool = True,
     ) -> Dict[str, Any]:
-        """构建闲鱼聊天初始化上下文，参照 XianYuApis 先获取 token 再获取用户 ID"""
+        """构建闲鱼聊天初始化上下文。
+
+        建连路径尽量对齐 XianYuApis：优先使用 Cookie 里的 unb 作为当前账号 ID，
+        直接生成 ``UUID-unb`` 的 IM deviceId 后请求 login.token。只有 Cookie 缺少
+        unb 或只是读取 profile 时，才调用 loginuser.get。这样能减少 fresh Cookie
+        建连前的额外 HTTP 请求，降低会话切换/重连时被风控的概率。
+        """
         profile = XianyuChatProfile(
             user_id="",
             main_user_id="",
@@ -2266,11 +2860,46 @@ class XianyuService:
             avatar="",
         )
 
+        cookie_user_id = str(self._get_cookie_value(client, "unb") or "").strip()
+        if cookie_user_id:
+            profile.user_id = cookie_user_id
+            profile.main_user_id = cookie_user_id
+
+        should_fetch_profile = (not include_token) or not (profile.main_user_id or profile.user_id)
+        if should_fetch_profile:
+            try:
+                user_payload = await self._execute_api(
+                    client,
+                    api_name=self.chat_login_user_api_name,
+                    api_url=self.chat_login_user_api_url,
+                    payload={},
+                )
+                user_data = user_payload.get("data", {})
+                profile.user_id = str(user_data.get("userId") or profile.user_id or "")
+                profile.main_user_id = str(
+                    user_data.get("mainUserId")
+                    or user_data.get("userId")
+                    or profile.main_user_id
+                    or ""
+                )
+            except Exception as exc:
+                logger.debug("获取闲鱼聊天 profile 失败: %s", exc)
+
         bootstrap: Dict[str, Any] = {"profile": profile}
         if not include_token:
             return bootstrap
 
-        device_id = self._resolve_chat_device_id(client, "")
+        if not (profile.main_user_id or profile.user_id):
+            raise ValueError(
+                self._format_chat_auth_failure(
+                    reason="Cookie 中缺少 unb，且 loginuser.get 未返回账号 ID",
+                    bootstrap=bootstrap,
+                    cookie=self._build_cookie_header(client),
+                )
+            )
+
+        device_id = self._resolve_chat_device_id(client, profile.main_user_id or profile.user_id)
+        bootstrap["device_id"] = device_id
 
         # 熔断器：风控期间避免持续打 login.token，加重账号封禁
         now = time.monotonic()
@@ -2291,8 +2920,9 @@ class XianyuService:
                     "deviceId": device_id,
                 },
                 extra_params={
-                    "spm_pre": "a21ybx.home.sidebar.2.4c053da6oKH21u",
-                    "log_id": "4c053da6oKH21u",
+                    # 对齐 XianYuApis 的 login.token 参数，减少与网页 IM 链路的指纹差异。
+                    "spm_pre": "a21ybx.item.want.1.14ad3da6ALVq3n",
+                    "log_id": "14ad3da6ALVq3n",
                 },
             )
         except ValueError as exc:
@@ -2312,6 +2942,18 @@ class XianyuService:
                 ) from exc
             if "FAIL_SYS_SESSION_EXPIRED" in message:
                 raise ValueError("闲鱼登录已过期，请重新登录闲鱼后更新设置页中的 Cookie") from exc
+            if (
+                "FAIL_SYS_USER_VALIDATE" in message
+                or "闲鱼登录已过期" in message
+                or "Cookie" in message
+            ):
+                raise ValueError(
+                    self._format_chat_auth_failure(
+                        reason=f"login.token 失败：{message}",
+                        bootstrap=bootstrap,
+                        cookie=self._build_cookie_header(client),
+                    )
+                ) from exc
             raise
         # 成功 → 重置失败计数
         self._login_token_fail_count = 0
@@ -2320,23 +2962,90 @@ class XianyuService:
         if not access_token:
             raise ValueError("闲鱼聊天 token 获取失败，请重新登录闲鱼后更新设置页中的 Cookie")
 
-        bootstrap["device_id"] = device_id
         bootstrap["access_token"] = access_token
 
-        try:
-            user_payload = await self._execute_api(
-                client,
-                api_name=self.chat_login_user_api_name,
-                api_url=self.chat_login_user_api_url,
-                payload={},
-            )
-            user_data = user_payload.get("data", {})
-            profile.user_id = str(user_data.get("userId") or "")
-            profile.main_user_id = str(user_data.get("mainUserId") or user_data.get("userId") or "")
-        except Exception:
-            pass
-
         return bootstrap
+
+    def _format_chat_auth_failure(
+        self,
+        reason: str,
+        bootstrap: Dict[str, Any] | None = None,
+        cookie: str = "",
+    ) -> str:
+        """生成不泄露 Cookie/token 值的聊天鉴权诊断。"""
+        bootstrap = bootstrap or {}
+        profile = bootstrap.get("profile")
+        user_id = ""
+        if isinstance(profile, XianyuChatProfile):
+            user_id = str(profile.main_user_id or profile.user_id or "").strip()
+        device_id = str(bootstrap.get("device_id") or "").strip()
+        did_suffix = device_id.rsplit("-", 1)[-1] if "-" in device_id else ""
+
+        cookie_map = self._parse_cookie_string(cookie or self._get_xianyu_cookie_value())
+        important = ("unb", "cookie2", "sgcookie", "t", "_m_h5_tk", "_m_h5_tk_enc", "cna", "cookie17", "tracknick")
+        present = [name for name in important if cookie_map.get(name)]
+        missing = [name for name in ("unb", "cookie2", "sgcookie", "_m_h5_tk") if not cookie_map.get(name)]
+
+        diagnostics = []
+        if user_id:
+            diagnostics.append(f"user_id={user_id}")
+        if did_suffix:
+            diagnostics.append(f"deviceId后缀={did_suffix}")
+        diagnostics.append(f"Cookie包含={','.join(present) if present else '无关键项'}")
+        if missing:
+            diagnostics.append(f"缺少={','.join(missing)}")
+
+        return (
+            f"闲鱼聊天鉴权失败（{str(reason or '未知原因').strip()}）。"
+            f"诊断：{'；'.join(diagnostics)}。"
+            "请确认粘贴的是 www.goofish.com 登录后的完整 Cookie；"
+            "如果刚更新，先在浏览器正常打开闲鱼聊天页 1-2 分钟后再重试。"
+        )
+
+    async def get_chat_session_user_info(self, session_id: str) -> Dict[str, Any]:
+        """获取聊天会话买家资料（idlemessage pc.user.query），带 TTL 缓存降低风控概率。"""
+        normalized = str(session_id or "").split("@", 1)[0].strip()
+        if not normalized:
+            return {}
+
+        now = time.monotonic()
+        cached_ts = self._chat_session_info_cache_ts.get(normalized, 0.0)
+        if now - cached_ts < self._chat_session_info_cache_ttl:
+            cached = self._chat_session_info_cache.get(normalized)
+            if cached is not None:
+                return cached
+
+        async with self._chat_session_info_semaphore:
+            cached_ts = self._chat_session_info_cache_ts.get(normalized, 0.0)
+            if time.monotonic() - cached_ts < self._chat_session_info_cache_ttl:
+                cached = self._chat_session_info_cache.get(normalized)
+                if cached is not None:
+                    return cached
+
+            cookie = self._require_xianyu_cookie()
+            try:
+                async with self._create_http_client(cookie) as client:
+                    result = await self._execute_api(
+                        client,
+                        api_name=self.chat_user_query_api_name,
+                        api_url=self.chat_user_query_api_url,
+                        payload={
+                            "type": 0,
+                            "sessionType": 1,
+                            "sessionId": normalized,
+                            "isOwner": False,
+                        },
+                    )
+                    data = result.get("data") or {}
+            except Exception as exc:
+                self._chat_session_info_cache[normalized] = {}
+                self._chat_session_info_cache_ts[normalized] = now
+                logger.debug(f"get_chat_session_user_info({normalized}) failed: {exc}")
+                return {}
+
+            self._chat_session_info_cache[normalized] = data
+            self._chat_session_info_cache_ts[normalized] = time.monotonic()
+            return data
 
     async def get_peer_user_info(self, user_id: str) -> Dict[str, Any]:
         """获取买家公开信息，带 TTL 缓存 + 并发限流，避免触发风控。"""
@@ -2419,10 +3128,18 @@ class XianyuService:
         )
         last_sender_uid = str(last_extension.get("senderUserId") or "").split("@")[0]
 
-        peer_info = (peer_info_cache or {}).get(peer_user_id) or {} if peer_user_id else {}
+        session_id = cid.split("@", 1)[0] if cid else ""
+        cache = peer_info_cache or {}
+        peer_info = (
+            (cache.get(session_id) if session_id else None)
+            or (cache.get(peer_user_id) if peer_user_id else None)
+            or {}
+        )
+        user_info = peer_info.get("userInfo") if isinstance(peer_info.get("userInfo"), dict) else {}
         _base = (peer_info.get("module") or {}).get("base") or {} if peer_info.get("module") else {}
         peer_display_name = (
-            str(_base.get("displayName") or "")
+            str(user_info.get("fishNick") or "")
+            or str(_base.get("displayName") or "")
             or str(extension.get(f"squadName_{peer_user_id}") or extension.get("itemTitle") or "")
         )
         if not peer_display_name and last_sender_uid == peer_user_id:
@@ -2447,7 +3164,9 @@ class XianyuService:
                     peer_ext = ext_data
                     break
         peer_avatar = ""
-        if _base:
+        if user_info:
+            peer_avatar = self._normalize_image_url(str(user_info.get("logo") or ""))
+        if not peer_avatar and _base:
             _avatar_obj = _base.get("avatar") or {}
             if isinstance(_avatar_obj, dict):
                 peer_avatar = self._normalize_image_url(str(_avatar_obj.get("avatar") or ""))
@@ -2461,7 +3180,7 @@ class XianyuService:
         if not peer_avatar and peer_user_id and peer_user_id not in {"0", "-1"}:
             peer_avatar = f"https://api.goofish.com/m/userAvatar.action?id={peer_user_id}&needHttps=1"
 
-        return XianyuChatConversation(
+        mapped = XianyuChatConversation(
             cid=cid,
             session_id=cid.split("@")[0] if cid else "",
             session_type=1,
@@ -2488,6 +3207,16 @@ class XianyuService:
             visible=bool(single.get("visible", 1)),
             can_send=can_send,
         )
+        if cid:
+            cache_value = {
+                "item_id": mapped.item_id,
+                "peer_user_id": mapped.peer_user_id,
+                "item_title": mapped.item_title,
+            }
+            self._conversation_item_cache[cid] = cache_value
+            if mapped.session_id:
+                self._conversation_item_cache[mapped.session_id] = cache_value
+        return mapped
 
     def _map_chat_message(
         self,
@@ -2557,9 +3286,59 @@ class XianyuService:
                     raise ValueError(message)
         raise ValueError(fallback)
 
-    def _build_chat_device_id(self, user_id: str) -> str:
-        """为给定账号派生稳定的 deviceId，避免同账号每次上报都不同触发风控。"""
+    def _load_chat_device_map(self) -> Dict[str, str]:
+        try:
+            if not self._chat_device_store_path.exists():
+                return {}
+            payload = json.loads(self._chat_device_store_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                return {}
+            return {str(key): str(value) for key, value in payload.items() if key and value}
+        except Exception:
+            return {}
+
+    def _save_chat_device_map(self, device_map: Dict[str, str]) -> None:
+        self._chat_device_store_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self._chat_device_store_path.with_suffix(self._chat_device_store_path.suffix + ".tmp")
+        tmp_path.write_text(
+            json.dumps(device_map, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp_path.replace(self._chat_device_store_path)
+
+    def _is_chat_device_id_for_user(self, device_id: str, user_id: str) -> bool:
+        normalized_user = str(user_id or "").strip()
+        text = str(device_id or "").strip()
+        if not normalized_user or not text:
+            return False
+        prefix, sep, suffix = text.rpartition("-")
+        if sep != "-" or suffix != normalized_user:
+            return False
+        # UUID 主体应为 36 位（参考 XianYuApis: random UUID + "-" + unb）。
+        # 对字符集保持宽松，兼容历史生成器的大小写/数字。
+        return len(prefix) == 36
+
+    def _build_chat_device_id(self, user_id: str, *, persist: bool = True) -> str:
+        """获取账号级 IM deviceId。
+
+        XianYuApis 的实现是在实例初始化时生成 ``random-uuid + "-" + unb`` 并复用。
+        本项目服务会重启，所以把该值按 unb 持久化；避免每次切换会话/重启后 deviceId
+        漂移，也避免错误复用扫码登录的 cna/device 指纹。
+        """
         normalized = str(user_id or "0").strip() or "0"
+        if persist:
+            device_map = self._load_chat_device_map()
+            existing = str(device_map.get(normalized) or "").strip()
+            if self._is_chat_device_id_for_user(existing, normalized):
+                return existing
+
+            generated = f"{uuid.uuid4()}-{normalized}"
+            device_map[normalized] = generated
+            with contextlib.suppress(Exception):
+                self._save_chat_device_map(device_map)
+            return generated
+
+        # 兜底：如果运行态配置目录不可写，用确定性值保证同账号本进程/测试稳定。
         chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
         digest = hashlib.sha256(f"xianyu-device:{normalized}".encode("utf-8")).digest()
         parts = []
@@ -2576,17 +3355,20 @@ class XianyuService:
         return "".join(parts) + "-" + normalized
 
     def _resolve_chat_device_id(self, client: httpx.AsyncClient, user_id: str) -> str:
-        """派生稳定的聊天 deviceId（格式：UUID-userId）。
+        """解析聊天 IM deviceId（格式：UUID-userId）。
 
-        参照 XianYuApis 项目的 generate_device_id(unb) 流程：用账号 unb 派生 device_id
-        以保证同账号每次上报相同。注意 xianyu_fingerprint.json 里的 deviceId 是浏览器
-        登录指纹用的（短 base64 串），与聊天协议格式不兼容，不能用在这里。
+        只复用“本身就是 IM deviceId 且后缀匹配 unb”的指纹；扫码/浏览器登录指纹
+        里的 deviceId/cna 不再直接用于 login.token，避免和账号 unb 不匹配触发风控。
         """
         cookie_user_id = str(self._get_cookie_value(client, "unb") or "").strip()
-        if cookie_user_id:
-            return self._build_chat_device_id(cookie_user_id)
+        normalized_user_id = cookie_user_id or str(user_id or "").strip()
 
-        normalized_user_id = str(user_id or "").strip()
+        fingerprint = getattr(self.auth_login, "fingerprint", {}) or {}
+        if isinstance(fingerprint, dict) and normalized_user_id:
+            fingerprint_device_id = str(fingerprint.get("deviceId") or "").strip()
+            if self._is_chat_device_id_for_user(fingerprint_device_id, normalized_user_id):
+                return fingerprint_device_id
+
         if normalized_user_id:
             return self._build_chat_device_id(normalized_user_id)
 
@@ -2995,10 +3777,14 @@ class XianyuService:
         return parsed
 
     def _sync_runtime_cookie(self, client: httpx.AsyncClient) -> None:
-        """同步运行时 Cookie，仅更新 _m_h5_tk/_m_h5_tk_enc 到持久存储"""
+        """同步运行时 Cookie。
+
+        除 mtop token 外，也保留聊天鉴权相关 Cookie，避免刷新 token 后持久化配置
+        仍停留在旧 cookie2/sgcookie/t，导致聊天 WS 和自动回复链路失效。
+        """
         current_cookie = self._parse_cookie_string(self._get_xianyu_cookie_value())
         refreshed = False
-        for key in ("_m_h5_tk", "_m_h5_tk_enc", "mtop_partitioned_detect"):
+        for key in ("cookie2", "sgcookie", "t", "_m_h5_tk", "_m_h5_tk_enc", "mtop_partitioned_detect"):
             value = self._get_cookie_value(client, key)
             if value:
                 current_cookie[key] = value
@@ -3028,7 +3814,7 @@ class XianyuService:
     def _extract_error(self, payload: Dict) -> str:
         ret = payload.get("ret", [])
         if ret:
-            return str(ret[0])
+            return "; ".join(str(item) for item in ret if item)
         return "闲鱼接口请求失败"
 
     def _to_int(self, value) -> int:
@@ -3068,6 +3854,10 @@ class XianyuService:
             return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
         except (TypeError, ValueError, OSError):
             return ""
+
+    def _extract_first_url(self, text: str) -> str:
+        match = re.search(r"https?://[^\s，,。)）]+", str(text or ""))
+        return match.group(0) if match else ""
 
     def _normalize_image_url(self, url: str) -> str:
         url = str(url or "").strip()
@@ -3367,3 +4157,130 @@ class XianyuService:
 
     def list_delivery_executions(self, limit: int = 20) -> list[XianyuDeliveryExecutionRecord]:
         return self.delivery_store.list_executions(limit=limit)
+
+    async def handle_delivery_candidate_event(self, event: dict[str, Any]) -> None:
+        """把聊天推送中识别到的付款/待发货事件交给自动发货运行时处理。"""
+        await self.delivery_runtime.process_event(event, executor=self)
+
+    async def send_chat_and_ship(
+        self,
+        *,
+        order_id: str,
+        item_id: str,
+        buyer_id: str,
+        delivery_text: str,
+    ) -> dict[str, Any]:
+        """自动发货执行器：优先发送聊天发货文本，虚拟发货接口后续可在这里扩展。"""
+        cid = self._find_cached_delivery_cid(item_id=item_id, buyer_id=buyer_id)
+        if not cid:
+            with contextlib.suppress(Exception):
+                page = await self.list_chat_conversations(offset=0, limit=40)
+                for session in page.conversations:
+                    if session.item_id == str(item_id) and session.peer_user_id == str(buyer_id):
+                        cid = session.cid
+                        break
+
+        sent_message_id = ""
+        if cid and str(delivery_text or "").strip():
+            result = await self.send_chat_text(cid=cid, text=str(delivery_text).strip())
+            sent_message_id = result.message_id
+        elif not cid:
+            logger.warning("自动发货未找到可发送会话: order_id=%s item_id=%s buyer_id=%s", order_id, item_id, buyer_id)
+
+        return {
+            "success": True,
+            "order_id": order_id,
+            "item_id": item_id,
+            "buyer_id": buyer_id,
+            "cid": cid,
+            "message_id": sent_message_id,
+        }
+
+    def _find_cached_delivery_cid(self, *, item_id: str, buyer_id: str) -> str:
+        normalized_item_id = str(item_id or "").strip()
+        normalized_buyer_id = str(buyer_id or "").strip()
+        for cid, cached in self._conversation_item_cache.items():
+            if "@" not in str(cid):
+                continue
+            if (
+                str(cached.get("item_id") or "").strip() == normalized_item_id
+                and str(cached.get("peer_user_id") or "").strip() == normalized_buyer_id
+            ):
+                return str(cid)
+        return ""
+
+    def _extract_delivery_candidate_event(
+        self,
+        decoded: dict[str, Any],
+        profile: XianyuChatProfile | None = None,
+    ) -> dict[str, str] | None:
+        """从聊天 sync 推送中提取“买家已付款/待发货”候选事件。"""
+        if not isinstance(decoded, dict) or decoded.get("type") != "sync":
+            return None
+
+        current_user_id = ""
+        if profile:
+            current_user_id = str(profile.main_user_id or profile.user_id or "").split("@", 1)[0]
+
+        for item in decoded.get("items") or []:
+            item_decoded = item.get("decoded") or {}
+            if not isinstance(item_decoded, dict):
+                continue
+
+            for obj in item_decoded.get("json_objects") or []:
+                payload = obj.get("1") if isinstance(obj, dict) else None
+                if not isinstance(payload, dict):
+                    continue
+                if not self._is_delivery_system_payload(payload):
+                    continue
+
+                cid = str(payload.get("2") or "").strip()
+                cid_short = cid.split("@", 1)[0] if cid else ""
+                meta = payload.get("10") if isinstance(payload.get("10"), dict) else {}
+                ext_wrapper = payload.get("3") if isinstance(payload.get("3"), dict) else {}
+                extension = ext_wrapper.get("extension") if isinstance(ext_wrapper.get("extension"), dict) else {}
+                cached = (
+                    self._conversation_item_cache.get(cid)
+                    or self._conversation_item_cache.get(cid_short)
+                    or {}
+                )
+
+                text = str(meta.get("reminderContent") or meta.get("detailNotice") or "").strip()
+                raw_sources = [
+                    str(item_decoded.get("raw_text") or ""),
+                    " ".join(str(url) for url in (item_decoded.get("urls") or [])),
+                    str(extension.get("updateKey") or ""),
+                    text,
+                ]
+                order_id = self._extract_delivery_order_id(" ".join(raw_sources))
+                item_id = str(extension.get("itemId") or cached.get("item_id") or "").strip()
+                sender_id = str(meta.get("senderUserId") or "").split("@", 1)[0].strip()
+                buyer_id = sender_id
+                if not buyer_id or buyer_id in {"0", "-1"} or (current_user_id and buyer_id == current_user_id):
+                    buyer_id = str(cached.get("peer_user_id") or "").strip()
+
+                if order_id and item_id and buyer_id:
+                    return {
+                        "order_id": order_id,
+                        "item_id": item_id,
+                        "buyer_id": buyer_id,
+                        "text": text,
+                    }
+        return None
+
+    def _is_delivery_system_payload(self, payload: dict[str, Any]) -> bool:
+        flag = self._to_int(payload.get("7"))
+        notice_type = self._to_int((((payload.get("6") or {}).get("3") or {}).get("4")))
+        return flag == 1 and notice_type == 6
+
+    def _extract_delivery_order_id(self, text: str) -> str:
+        source = str(text or "")
+        patterns = [
+            r"(?:orderId|order_id|tradeId|bizOrderId)=([0-9]{8,})",
+            r"trade_paid_done_seller:([0-9]{8,})",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, source)
+            if match:
+                return match.group(1)
+        return ""

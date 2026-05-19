@@ -18,7 +18,7 @@ class FakeReusableChatClient:
 
 
 @pytest.mark.asyncio
-async def test_open_chat_ws_client_retries_once_after_chat_auth_refresh(monkeypatch):
+async def test_open_chat_ws_client_does_not_retry_login_token_after_chat_auth_error(monkeypatch):
     service = XianyuService()
     created = []
     refreshed = {'count': 0}
@@ -39,13 +39,14 @@ async def test_open_chat_ws_client_retries_once_after_chat_auth_refresh(monkeypa
     monkeypatch.setattr(service, '_create_connected_chat_ws_client', fake_create_connected_chat_ws_client)
 
     try:
-        client = await service.open_chat_ws_client()
+        with pytest.raises(ValueError, match='闲鱼登录已过期'):
+            await service.open_chat_ws_client()
     finally:
         await service.stop_chat_keepalive()
 
-    assert isinstance(client, FakeReusableChatClient)
     assert refreshed['count'] == 1
-    assert len(created) == 2
+    # 鉴权/风控错误后不立刻第二次 login.token + /reg，避免会话切换时连续握手加重风控。
+    assert created == ['failed']
 
 
 def test_sync_runtime_cookie_persists_chat_auth_cookie_whitelist(monkeypatch):
@@ -141,8 +142,9 @@ async def test_diagnose_chat_runtime_returns_risk_blocked_with_captcha_url(monke
 
 
 @pytest.mark.asyncio
-async def test_build_chat_bootstrap_prefers_fingerprint_device_id(monkeypatch):
+async def test_build_chat_bootstrap_ignores_non_chat_fingerprint_device_id(monkeypatch, tmp_path):
     service = XianyuService()
+    service._chat_device_store_path = tmp_path / 'xianyu_chat_devices.json'
     captured = {}
 
     class _FakeLogin:
@@ -161,15 +163,18 @@ async def test_build_chat_bootstrap_prefers_fingerprint_device_id(monkeypatch):
     monkeypatch.setattr(service, '_execute_api', fake_execute_api)
 
     async with httpx.AsyncClient() as client:
+        client.cookies.set('unb', '111', domain='.goofish.com')
         bootstrap = await service._build_chat_bootstrap(client, include_token=True)
 
-    assert captured['payload']['deviceId'] == 'fingerprint-device-id'
-    assert bootstrap['device_id'] == 'fingerprint-device-id'
+    assert captured['payload']['deviceId'] != 'fingerprint-device-id'
+    assert captured['payload']['deviceId'].endswith('-111')
+    assert bootstrap['device_id'].endswith('-111')
 
 
 @pytest.mark.asyncio
-async def test_build_chat_bootstrap_uses_unb_suffix_for_generated_device_id(monkeypatch):
+async def test_build_chat_bootstrap_uses_unb_suffix_for_generated_device_id(monkeypatch, tmp_path):
     service = XianyuService()
+    service._chat_device_store_path = tmp_path / 'xianyu_chat_devices.json'
     captured = {}
 
     class _FakeLogin:

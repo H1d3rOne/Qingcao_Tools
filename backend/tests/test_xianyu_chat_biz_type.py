@@ -47,6 +47,60 @@ def test_extract_candidate_accepts_biz_type_40000():
     assert candidate["text"] == "莫多想"
 
 
+def test_extract_candidate_accepts_string_biz_type_and_top_level_decoded_fields():
+    svc = XianyuService()
+
+    candidate = svc._extract_ai_candidate(
+        {
+            "biz_type": "40000",
+            "decoded": {
+                "raw_text": "",
+                "cid": "60613035186@goofish",
+                "sender_user_id": "824092266",
+                "reminder_content": "莫多想",
+                "nickname": "呵呵是你想太多",
+            },
+        }
+    )
+
+    assert candidate is not None
+    assert candidate["cid"] == "60613035186@goofish"
+    assert candidate["text"] == "莫多想"
+    assert candidate["sender_uid"] == "824092266"
+    assert candidate["sender_name"] == "呵呵是你想太多"
+
+
+def test_extract_candidate_message_key_uses_fields_when_raw_text_empty():
+    svc = XianyuService()
+
+    first = svc._extract_ai_candidate(
+        {
+            "biz_type": 40000,
+            "decoded": {
+                "raw_text": "",
+                "cid": "60613035186@goofish",
+                "sender_user_id": "824092266",
+                "reminder_content": "第一条",
+            },
+        }
+    )
+    second = svc._extract_ai_candidate(
+        {
+            "biz_type": 40000,
+            "decoded": {
+                "raw_text": "",
+                "cid": "60613035186@goofish",
+                "sender_user_id": "824092266",
+                "reminder_content": "第二条",
+            },
+        }
+    )
+
+    assert first is not None
+    assert second is not None
+    assert first["message_key"] != second["message_key"]
+
+
 def test_extract_candidate_rejects_typing_indicator():
     svc = XianyuService()
     # bizType=40006 is typing change, never an AI reply target.

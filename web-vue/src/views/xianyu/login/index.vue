@@ -60,6 +60,13 @@
             >
               登录
             </el-button>
+            <el-button
+              text
+              :disabled="cookieSubmitting"
+              @click="fillSavedCookie"
+            >
+              从本地已保存 Cookie 填充
+            </el-button>
           </el-form-item>
         </el-form>
       </div>
@@ -309,6 +316,21 @@ const loginByCookie = async () => {
     ElMessage.error(err instanceof Error ? err.message : '登录失败')
   } finally {
     cookieSubmitting.value = false
+  }
+}
+
+const fillSavedCookie = async () => {
+  try {
+    const response = await getFullXianyuCookie()
+    const savedCookie = response.data?.cookie?.trim() || ''
+    if (!savedCookie) {
+      ElMessage.warning('本地未保存闲鱼 Cookie')
+      return
+    }
+    cookieForm.cookie = savedCookie
+    ElMessage.success('已填充本地保存的 Cookie')
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '读取本地 Cookie 失败')
   }
 }
 

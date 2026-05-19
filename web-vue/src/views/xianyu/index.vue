@@ -2147,8 +2147,8 @@ watch(activeBottomTab, () => {
   gap: 10px;
   padding: 14px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(var(--app-border-rgb) / 0.56);
-  background: rgba(var(--app-surface-alt-rgb) / 0.92);
+  border: 1px solid rgba(var(--app-border-rgb), 0.56);
+  background: rgba(var(--app-surface-alt-rgb), 0.92);
   box-shadow: 0 10px 24px rgba(var(--app-shadow-rgb) / 0.08);
 }
 
