@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from app.modules.xianyu.ai_store import XianyuChatAiStore
 from app.modules.xianyu.schemas import XianyuChatAiConfigUpdateRequest
@@ -67,3 +68,32 @@ def test_ai_store_roundtrips_session_states(tmp_path: Path):
         {'cid': 'cid-1', 'enabled': True},
         {'cid': 'cid-2', 'enabled': False},
     ]
+
+
+def test_ai_store_restores_providers_from_backup_when_config_becomes_stub(tmp_path: Path):
+    config_path = tmp_path / 'xianyu_ai_config.json'
+    store = XianyuChatAiStore(
+        config_path=config_path,
+        sessions_path=tmp_path / 'xianyu_ai_sessions.json',
+    )
+    store.save_config(
+        XianyuChatAiConfigUpdateRequest(
+            enabled=False,
+            base_url='https://example.com/v1',
+            api_key='sk-test-12345678',
+            model='gpt-4.1-mini',
+            system_prompt='reply briefly',
+            temperature=0.3,
+        )
+    )
+    assert (tmp_path / 'xianyu_ai_config.json.bak').exists()
+
+    config_path.write_text(json.dumps({'enabled': True}), encoding='utf-8')
+
+    config = store.load_config()
+
+    assert config.enabled is True
+    assert len(config.providers) == 1
+    assert config.providers[0].base_url == 'https://example.com/v1'
+    assert config.providers[0].api_key_configured is True
+    assert store.load_secret_api_key() == 'sk-test-12345678'

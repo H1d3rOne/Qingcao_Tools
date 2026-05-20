@@ -25,6 +25,7 @@ import qrcode.image.svg
 import websockets
 
 from app.core.config import settings as app_settings
+from app.core.config_bootstrap import get_runtime_config_dir, write_json_atomic
 from app.modules.xianyu.ai_store import XianyuChatAiStore
 from app.modules.xianyu.browser_login import XianyuBrowserLoginManager
 from app.modules.xianyu.crypto import decrypt as xianyu_decrypt
@@ -408,15 +409,16 @@ class XianyuService:
     }
 
     def __init__(self):
-        self._monitor_store_path = Path.cwd() / "config" / "xianyu_monitor_tasks.json"
-        self._xianyu_cookie_path = Path.cwd() / "config" / "xianyu_cookies.json"
-        self._chat_ai_config_path = Path.cwd() / "config" / "xianyu_ai_config.json"
-        self._chat_ai_sessions_path = Path.cwd() / "config" / "xianyu_ai_sessions.json"
-        self._chat_device_store_path = Path.cwd() / "config" / "xianyu_chat_devices.json"
-        self._item_store_path = Path.cwd() / "config" / "xianyu_manage_items.json"
-        self._delivery_rules_path = Path.cwd() / "config" / "xianyu_delivery_rules.json"
-        self._delivery_runtime_path = Path.cwd() / "config" / "xianyu_delivery_runtime.json"
-        self._browser_login_manager = XianyuBrowserLoginManager(Path.cwd() / "config")
+        config_dir = get_runtime_config_dir()
+        self._monitor_store_path = config_dir / "xianyu_monitor_tasks.json"
+        self._xianyu_cookie_path = config_dir / "xianyu_cookies.json"
+        self._chat_ai_config_path = config_dir / "xianyu_ai_config.json"
+        self._chat_ai_sessions_path = config_dir / "xianyu_ai_sessions.json"
+        self._chat_device_store_path = config_dir / "xianyu_chat_devices.json"
+        self._item_store_path = config_dir / "xianyu_manage_items.json"
+        self._delivery_rules_path = config_dir / "xianyu_delivery_rules.json"
+        self._delivery_runtime_path = config_dir / "xianyu_delivery_runtime.json"
+        self._browser_login_manager = XianyuBrowserLoginManager(config_dir)
         self._monitor_store: XianyuMonitorStore | None = None
         self._chat_ai_store: XianyuChatAiStore | None = None
         self._item_store: XianyuItemStore | None = None
@@ -3312,13 +3314,7 @@ class XianyuService:
             return {}
 
     def _save_chat_device_map(self, device_map: Dict[str, str]) -> None:
-        self._chat_device_store_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._chat_device_store_path.with_suffix(self._chat_device_store_path.suffix + ".tmp")
-        tmp_path.write_text(
-            json.dumps(device_map, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        tmp_path.replace(self._chat_device_store_path)
+        write_json_atomic(self._chat_device_store_path, device_map)
 
     def _is_chat_device_id_for_user(self, device_id: str, user_id: str) -> bool:
         normalized_user = str(user_id or "").strip()

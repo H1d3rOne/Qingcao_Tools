@@ -17,50 +17,47 @@ lsof -ti:3121 | xargs kill -9 2>/dev/null || true
 lsof -ti:3120 | xargs kill -9 2>/dev/null || true
 sleep 1
 
-# 检查 YAML 配置文件
-mkdir -p "$PROJECT_ROOT/backend/app/config"
-if [ ! -f "$PROJECT_ROOT/backend/app/config/config.yaml" ]; then
-    echo ""
-    echo "⚠️  配置文件不存在，正在创建默认配置..."
-    cat > "$PROJECT_ROOT/backend/app/config/config.yaml" << 'EOF'
-# Qingcao_Tools 配置文件
-app:
-  name: "Qingcao_Tools API"
-  version: "1.0.0"
-  debug: false
-  api_prefix: "/api/v1"
+# 检查统一运行态配置目录
+CONFIG_DIR="$PROJECT_ROOT/backend/config"
+CONFIG_EXAMPLE_DIR="$PROJECT_ROOT/backend/config.example"
+LEGACY_CONFIG_DIR="$PROJECT_ROOT/backend/app/config"
+mkdir -p "$CONFIG_DIR"
 
-server:
-  host: "0.0.0.0"
-  port: 5000
-
-database:
-  url: "sqlite+aiosqlite:///./data.db"
-
-redis:
-  url: "redis://localhost:6379/0"
-  enabled: false
-
-cookies:
-  douyin: ""
-  douyin_live: ""
-  quark: ""
-
-download:
-  path: "./datas/media"
-  excel_path: "./datas/excel"
-
-security:
-  secret_key: "please-change-this-secret-key-in-production"
-  access_token_expire_minutes: 1440
-
-request:
-  timeout: 30
-  max_retries: 3
-EOF
-    echo "✅ 配置文件已创建: backend/app/config/config.yaml"
-    echo "💡 请在设置页面配置 Cookie 后使用"
+# 兼容旧版本：如果 backend/app/config/config.yaml 已存在，优先复制到新的统一目录。
+if [ ! -f "$CONFIG_DIR/config.yaml" ] && [ -f "$LEGACY_CONFIG_DIR/config.yaml" ]; then
+    cp "$LEGACY_CONFIG_DIR/config.yaml" "$CONFIG_DIR/config.yaml"
+    echo "✅ 已迁移旧配置: backend/app/config/config.yaml -> backend/config/config.yaml"
 fi
+
+if [ -d "$CONFIG_EXAMPLE_DIR" ]; then
+    CREATED_CONFIG=0
+    for file in \
+        config.yaml \
+        quark_cookies.json \
+        xianyu_ai_config.json \
+        xianyu_ai_sessions.json \
+        xianyu_chat_devices.json \
+        xianyu_cookies.json \
+        xianyu_delivery_rules.json \
+        xianyu_delivery_runtime.json \
+        xianyu_fingerprint.json \
+        xianyu_manage_items.json \
+        xianyu_monitor_tasks.json
+    do
+        if [ ! -f "$CONFIG_DIR/$file" ] && [ -f "$CONFIG_EXAMPLE_DIR/$file" ]; then
+            cp "$CONFIG_EXAMPLE_DIR/$file" "$CONFIG_DIR/$file"
+            CREATED_CONFIG=1
+        fi
+    done
+    if [ "$CREATED_CONFIG" -eq 1 ]; then
+        echo "✅ 已初始化本地配置目录: backend/config/"
+        echo "💡 真实 Cookie/API Key 只会保存在 backend/config/，不会提交到 Git"
+    fi
+fi
+
+export QINGCAO_CONFIG_DIR="${QINGCAO_CONFIG_DIR:-$CONFIG_DIR}"
+export XIANYU_CONFIG_DIR="${XIANYU_CONFIG_DIR:-$QINGCAO_CONFIG_DIR}"
+export QUARK_CONFIG_DIR="${QUARK_CONFIG_DIR:-$QINGCAO_CONFIG_DIR}"
 
 # 启动后端
 echo ""
@@ -177,7 +174,8 @@ echo "  后端: /tmp/qingcao-backend.log"
 echo "  前端: /tmp/qingcao-frontend.log"
 echo "========================================"
 echo ""
-echo "💡 提示: 配置文件为 backend/app/config/config.yaml"
+echo "💡 提示: 本地配置目录为 backend/config/"
+echo "💡 提示: 可提交模板目录为 backend/config.example/"
 echo "💡 提示: 首次使用请在设置页面配置 Cookie"
 echo ""
 echo "按 Ctrl+C 停止所有服务"

@@ -83,20 +83,32 @@ pnpm install
 
 ### 🎨 配置文件
 
-首次运行需要创建配置文件 `backend/.env`：
+项目现在使用统一的本地运行态配置目录：
 
-```env
-# 抖音 Cookie（必需）
-DY_COOKIES='你的抖音Cookie'
+- `backend/config.example/`：可提交的安全模板，方便别人 clone 后初始化；
+- `backend/config/`：本机私有配置与运行态数据，已被 `.gitignore` 忽略，不会提交 Cookie/API Key/设备指纹；
+- `backend/app/config/`：旧版配置目录，仅作为启动时迁移兼容。
 
-# 直播 Cookie（可选，用于直播间功能）
-DY_LIVE_COOKIES='你的直播Cookie'
+一键启动时会自动从 `backend/config.example/` 初始化缺失文件到 `backend/config/`，也可以手动执行：
 
-# 夸克 Cookie（可选，用于夸克网盘功能）
-QUARK_COOKIES='你的夸克Cookie'
+```bash
+cp -R backend/config.example backend/config
 ```
 
-> 💡 也可以启动后在设置页面通过 Web 界面配置 Cookie
+常用配置文件：
+
+```text
+backend/config/config.yaml                    # 全局 YAML 配置
+backend/config/quark_cookies.json             # 夸克 Cookie
+backend/config/xianyu_cookies.json            # 闲鱼 Cookie
+backend/config/xianyu_ai_config.json          # 闲鱼 AI 供应商配置
+backend/config/xianyu_monitor_tasks.json      # 闲鱼监控任务
+backend/config/xianyu_manage_items.json       # 闲鱼商品管理缓存
+backend/config/xianyu_delivery_rules.json     # 闲鱼自动发货规则
+backend/config/xianyu_chat_devices.json       # 闲鱼聊天 deviceId 映射
+```
+
+> 💡 推荐启动后在设置页面配置 Cookie 和 AI 供应商。关键本地配置写入时会自动生成同名 `.bak`，例如 `xianyu_ai_config.json.bak`，防止误删或被空配置覆盖。
 
 **Cookie 获取方式：**
 1. 在浏览器中打开对应网站并登录
@@ -124,8 +136,8 @@ pnpm run dev
 ```
 
 ### 🌐 访问地址
-- 前端界面: http://localhost:3000
-- 后端 API 文档: http://localhost:5000/docs
+- 前端界面: http://localhost:3120
+- 后端 API 文档: http://localhost:3121/docs
 
 ## 📸 效果预览
 

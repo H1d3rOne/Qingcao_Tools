@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 from typing import Iterable
 
+from app.core.config_bootstrap import write_json_atomic
 from app.modules.xianyu.schemas import XianyuManageItem, XianyuManageItemPage
 
 
@@ -18,10 +19,7 @@ class XianyuItemStore:
         return json.loads(raw or "[]")
 
     def _save(self, items: list[dict]) -> None:
-        self.path.write_text(
-            json.dumps(items, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        write_json_atomic(self.path, items)
 
     def list_items(self, page: int = 1, page_size: int = 100) -> XianyuManageItemPage:
         page = max(int(page or 1), 1)

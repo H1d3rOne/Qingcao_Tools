@@ -12,10 +12,14 @@ def get_config_dir() -> Path:
     # 优先使用环境变量
     config_dir = os.getenv('QUARK_CONFIG_DIR')
     if config_dir:
-        return Path(config_dir)
+        return Path(config_dir).expanduser()
+
+    shared_config_dir = os.getenv('QINGCAO_CONFIG_DIR')
+    if shared_config_dir:
+        return Path(shared_config_dir).expanduser()
 
     # 默认使用当前目录下的config文件夹
-    return Path.cwd() / 'config'
+    return Path(__file__).resolve().parents[1] / 'config'
 
 
 def get_default_headers() -> Dict[str, str]:

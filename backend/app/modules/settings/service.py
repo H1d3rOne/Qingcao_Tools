@@ -3,6 +3,7 @@
 """
 import yaml
 from app.core.config import settings as app_settings, _find_config_file
+from app.core.config_bootstrap import backup_runtime_file
 from app.modules.settings.schemas import CookieInfo, StatusResponse, XianyuCookieValue
 from app.modules.douyin.common.auth import auth
 from quark_client.cookie_store import load_quark_cookie_string, save_quark_cookie_string
@@ -117,8 +118,10 @@ class SettingsService:
             config_data[section][key] = value
             
             # 写回文件
+            backup_runtime_file(self.config_path)
             with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(config_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            backup_runtime_file(self.config_path)
             
             # 更新内存中的配置
             if section == "cookies":

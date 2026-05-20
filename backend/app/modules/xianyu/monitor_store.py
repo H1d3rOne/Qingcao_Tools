@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from app.core.config_bootstrap import write_json_atomic
 from app.modules.xianyu.schemas import XianyuMonitorHit, XianyuMonitorTask, XianyuMonitorTaskCreate
 
 
@@ -97,7 +98,4 @@ class XianyuMonitorStore:
         return [XianyuMonitorTask.model_validate(item) for item in data]
 
     def _save(self, tasks: list[XianyuMonitorTask]) -> None:
-        self.path.write_text(
-            json.dumps([task.model_dump() for task in tasks], ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        write_json_atomic(self.path, [task.model_dump() for task in tasks])

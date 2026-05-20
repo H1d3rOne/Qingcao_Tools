@@ -1,0 +1,11 @@
+{
+  "running": false,
+  "last_event_at": 0,
+  "last_success_at": 0,
+  "last_failure_at": 0,
+  "last_error": "",
+  "enabled_rule_count": 0,
+  "recent_success_count": 0,
+  "recent_failure_count": 0,
+  "executions": []
+}
