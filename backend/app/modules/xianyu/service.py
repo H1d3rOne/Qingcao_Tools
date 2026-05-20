@@ -57,6 +57,9 @@ from app.modules.xianyu.schemas import (
     XianyuItemDetail,
     XianyuManageItem,
     XianyuManageItemPage,
+    XianyuOrder,
+    XianyuOrderPage,
+    XianyuOrderShipResult,
     XianyuMonitorTask,
     XianyuMonitorTaskCreate,
     XianyuMonitorTaskUpdate,
@@ -364,6 +367,12 @@ class XianyuService:
     manage_item_list_api_url = "https://h5api.m.goofish.com/h5/mtop.idle.web.xyh.item.list/1.0/"
     item_polish_api_name = "mtop.taobao.idle.item.polish"
     item_polish_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idle.item.polish/1.0/"
+    merchant_order_list_api_name = "mtop.taobao.idle.trade.merchant.sold.get"
+    merchant_order_list_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idle.trade.merchant.sold.get/1.0/"
+    merchant_order_ship_api_name = "mtop.taobao.idle.logistic.consign.dummy"
+    merchant_order_ship_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idle.logistic.consign.dummy/1.0/"
+    merchant_order_referer = "https://seller.goofish.com/?site=COMMONPRO#/seller-trade/order-manage"
+    merchant_order_biz_code = "COMMONPRO"
     chat_login_user_api_name = "mtop.taobao.idlemessage.pc.loginuser.get"
     chat_login_user_api_url = "https://h5api.m.goofish.com/h5/mtop.taobao.idlemessage.pc.loginuser.get/1.0/"
     chat_user_query_api_name = "mtop.taobao.idlemessage.pc.user.query"
@@ -2493,6 +2502,7 @@ class XianyuService:
         api_url: str,
         payload: Dict,
         extra_params: Optional[Dict[str, str]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> Dict:
         """执行通用闲鱼接口请求，参照 xianyu-cli 的 Cookie 冻结 + index API 刷新策略"""
         response_data = await self._perform_api_request(
@@ -2501,6 +2511,7 @@ class XianyuService:
             api_url=api_url,
             payload=payload,
             extra_params=extra_params,
+            extra_headers=extra_headers,
         )
 
         if self._is_token_expired(response_data):
@@ -2511,6 +2522,7 @@ class XianyuService:
                 api_url=api_url,
                 payload=payload,
                 extra_params=extra_params,
+                extra_headers=extra_headers,
                 allow_bootstrap=False,
             )
 
@@ -2573,6 +2585,7 @@ class XianyuService:
         api_url: str,
         payload: Dict,
         extra_params: Optional[Dict[str, str]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
         allow_bootstrap: bool = True,
     ) -> Dict:
         """发起闲鱼 API 请求，参照 xianyu-cli 通过 Cookie header 发送冻结 Cookie，不更新 jar"""
@@ -2613,6 +2626,7 @@ class XianyuService:
             api_url,
             params=params,
             data={"data": data_json},
+            headers=extra_headers or None,
         )
         response.raise_for_status()
         self._extract_token_cookies(client, response)
@@ -3932,6 +3946,195 @@ class XianyuService:
             "item_detail": str(raw.get("item_detail") or ""),
             "multi_quantity_delivery": bool(raw.get("multi_quantity_delivery") or False),
         }
+
+    _ORDER_STATUS_GROUP_MAP = {
+        "待发货": "pending_ship",
+        "部分发货": "pending_ship",
+        "待付款": "pending_payment",
+        "处理中": "processing",
+        "已发货": "shipped",
+        "部分待收尾": "shipped",
+        "交易成功": "completed",
+        "已完成": "completed",
+        "退款中": "refunding",
+        "退款撤销": "cancelled",
+        "交易关闭": "cancelled",
+        "已关闭": "cancelled",
+    }
+
+    def _map_merchant_order(self, raw: Dict[str, Any]) -> Optional[XianyuOrder]:
+        common = raw.get("commonData") if isinstance(raw.get("commonData"), dict) else {}
+        buyer = raw.get("buyerInfoVO") if isinstance(raw.get("buyerInfoVO"), dict) else {}
+        price = raw.get("priceVO") if isinstance(raw.get("priceVO"), dict) else {}
+        item = raw.get("itemInfoVO") if isinstance(raw.get("itemInfoVO"), dict) else {}
+
+        order_id = str(common.get("orderId") or "").strip()
+        if not order_id:
+            return None
+
+        status_text = str(common.get("orderStatus") or "").strip()
+        status_group = self._ORDER_STATUS_GROUP_MAP.get(status_text, "unknown")
+
+        item_title = str(item.get("title") or common.get("itemTitle") or "").strip()
+        item_image = self._normalize_image_url(str(item.get("picUrl") or common.get("itemPic") or ""))
+        item_price = str(item.get("price") or price.get("auctionPrice") or "").strip()
+
+        amount_text = ""
+        for candidate in (price.get("totalPrice"), price.get("confirmFee"), price.get("auctionPrice")):
+            text = str(candidate or "").strip()
+            if text:
+                amount_text = text
+                break
+
+        is_dummy = bool(item.get("isDummy") or common.get("isDummy") or raw.get("isDummy"))
+        quantity_raw = common.get("quantity") or item.get("quantity") or raw.get("quantity") or 1
+        try:
+            quantity = int(quantity_raw)
+        except (TypeError, ValueError):
+            quantity = 1
+
+        return XianyuOrder(
+            order_id=order_id,
+            item_id=str(common.get("itemId") or item.get("itemId") or "").strip(),
+            item_title=item_title,
+            item_image=item_image,
+            item_price=item_price,
+            buyer_id=str(buyer.get("buyerId") or "").strip(),
+            buyer_nick=str(buyer.get("userNick") or "").strip(),
+            buyer_avatar=self._normalize_image_url(str(buyer.get("avatar") or "")),
+            amount=amount_text,
+            status_code=str(common.get("orderStatusCode") or "").strip(),
+            status_text=status_text,
+            status_group=status_group,
+            created_at=str(common.get("createTime") or "").strip(),
+            paid_at=str(common.get("paySuccessTime") or "").strip(),
+            finished_at=str(common.get("finishTime") or "").strip(),
+            is_dummy=is_dummy,
+            quantity=quantity,
+            remark=str(common.get("buyerMessage") or buyer.get("buyerMemo") or "").strip(),
+        )
+
+    async def list_merchant_orders(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        status: str = "ALL",
+        order_id_query: str = "",
+    ) -> XianyuOrderPage:
+        """获取当前账号的卖家订单列表"""
+        page = max(int(page or 1), 1)
+        page_size = max(min(int(page_size or 20), 50), 1)
+        query_code = (status or "ALL").strip().upper() or "ALL"
+
+        cookie = self._get_xianyu_cookie_value()
+        if not cookie:
+            raise ValueError("请先在设置页配置闲鱼 Cookie")
+
+        async with httpx.AsyncClient(
+            headers=self.default_headers,
+            timeout=30.0,
+            follow_redirects=True,
+        ) as client:
+            for name, value in self._parse_cookie_string(cookie).items():
+                client.cookies.set(name, value, domain=".goofish.com")
+
+            if not self._get_cookie_value(client, "_m_h5_tk"):
+                await self._warmup_token(client)
+            await self._refresh_login_state(client)
+
+            payload = {
+                "pageNumber": page,
+                "rowsPerPage": page_size,
+                "orderIds": order_id_query.strip(),
+                "queryCode": query_code,
+                "orderSearchParam": "{}",
+            }
+            response_data = await self._execute_api(
+                client,
+                api_name=self.merchant_order_list_api_name,
+                api_url=self.merchant_order_list_api_url,
+                payload=payload,
+                extra_params={
+                    "valueType": "string",
+                    "spm_cnt": "a21107h.42831410.0.0",
+                },
+                extra_headers={
+                    "idle_site_biz_code": self.merchant_order_biz_code,
+                    "idle_user_group_member_id": "",
+                    "origin": "https://seller.goofish.com",
+                    "referer": self.merchant_order_referer,
+                },
+            )
+
+        module = ((response_data.get("data") or {}).get("module") or {})
+        raw_items = module.get("items") or []
+        if not isinstance(raw_items, list):
+            raw_items = []
+
+        orders = [self._map_merchant_order(item) for item in raw_items if isinstance(item, dict)]
+        orders = [order for order in orders if order is not None]
+
+        has_more = str(module.get("nextPage") or "").lower() == "true"
+        total_text = str(module.get("totalCount") or "").strip()
+        try:
+            total = int(total_text) if total_text.isdigit() else len(orders)
+        except (TypeError, ValueError):
+            total = len(orders)
+
+        return XianyuOrderPage(
+            orders=orders,
+            page=page,
+            page_size=page_size,
+            total=total,
+            has_more=has_more,
+        )
+
+    async def ship_merchant_order(
+        self,
+        order_id: str,
+        trade_text: str = "",
+    ) -> XianyuOrderShipResult:
+        """提交虚拟商品自动发货（mtop.taobao.idle.logistic.consign.dummy）"""
+        order_id = (order_id or "").strip()
+        if not order_id:
+            raise ValueError("订单号不能为空")
+
+        cookie = self._get_xianyu_cookie_value()
+        if not cookie:
+            raise ValueError("请先在设置页配置闲鱼 Cookie")
+
+        async with httpx.AsyncClient(
+            headers=self.default_headers,
+            timeout=30.0,
+            follow_redirects=True,
+        ) as client:
+            for name, value in self._parse_cookie_string(cookie).items():
+                client.cookies.set(name, value, domain=".goofish.com")
+
+            if not self._get_cookie_value(client, "_m_h5_tk"):
+                await self._warmup_token(client)
+            await self._refresh_login_state(client)
+
+            payload = {
+                "orderId": order_id,
+                "tradeText": trade_text or "",
+                "picList": [],
+                "newUnconsign": True,
+            }
+            await self._execute_api(
+                client,
+                api_name=self.merchant_order_ship_api_name,
+                api_url=self.merchant_order_ship_api_url,
+                payload=payload,
+                extra_headers={
+                    "idle_site_biz_code": self.merchant_order_biz_code,
+                    "origin": "https://seller.goofish.com",
+                    "referer": self.merchant_order_referer,
+                },
+            )
+
+        logger.info(f"订单已完成虚拟发货：order={order_id}")
+        return XianyuOrderShipResult(order_id=order_id, success=True, message="虚拟发货成功")
 
     def list_manage_items(self, page: int = 1, page_size: int = 20) -> XianyuManageItemPage:
         return self.item_store.list_items(page=page, page_size=page_size)

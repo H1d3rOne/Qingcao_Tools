@@ -659,3 +659,47 @@ class XianyuDeliveryRuntimeStatus(BaseModel):
     enabled_rule_count: int = Field(0, description="启用规则数量")
     recent_success_count: int = Field(0, description="最近成功数")
     recent_failure_count: int = Field(0, description="最近失败数")
+
+
+class XianyuOrder(BaseModel):
+    """闲鱼订单"""
+    order_id: str = Field("", description="订单 ID")
+    item_id: str = Field("", description="商品 ID")
+    item_title: str = Field("", description="商品标题")
+    item_image: str = Field("", description="商品图片")
+    item_price: str = Field("", description="商品单价")
+    buyer_id: str = Field("", description="买家 ID")
+    buyer_nick: str = Field("", description="买家昵称")
+    buyer_avatar: str = Field("", description="买家头像")
+    amount: str = Field("", description="订单金额")
+    status_code: str = Field("", description="状态码")
+    status_text: str = Field("", description="状态文本")
+    status_group: str = Field("", description="状态分组")
+    created_at: str = Field("", description="创建时间")
+    paid_at: str = Field("", description="支付时间")
+    finished_at: str = Field("", description="完成时间")
+    is_dummy: bool = Field(False, description="是否虚拟商品")
+    quantity: int = Field(1, description="数量")
+    remark: str = Field("", description="买家备注")
+
+
+class XianyuOrderPage(BaseModel):
+    """闲鱼订单列表"""
+    orders: List[XianyuOrder] = Field(default_factory=list, description="订单列表")
+    page: int = Field(1, description="当前页")
+    page_size: int = Field(20, description="每页数量")
+    total: int = Field(0, description="总数")
+    has_more: bool = Field(False, description="是否还有更多")
+
+
+class XianyuOrderShipRequest(BaseModel):
+    """闲鱼订单发货请求"""
+    order_id: str = Field(..., min_length=1, description="订单 ID")
+    trade_text: str = Field("", description="发货备注")
+
+
+class XianyuOrderShipResult(BaseModel):
+    """闲鱼订单发货结果"""
+    order_id: str = Field("", description="订单 ID")
+    success: bool = Field(True, description="是否成功")
+    message: str = Field("", description="结果消息")

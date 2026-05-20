@@ -61,6 +61,9 @@ from app.modules.xianyu import (
     XianyuMonitorTask,
     XianyuMonitorTaskCreate,
     XianyuMonitorTaskUpdate,
+    XianyuOrderPage,
+    XianyuOrderShipRequest,
+    XianyuOrderShipResult,
     XianyuSearchRequest,
     XianyuSearchResult,
     XianyuService,
@@ -950,4 +953,43 @@ async def list_xianyu_delivery_executions(
         return ApiResponse(data=service.list_delivery_executions(limit=limit))
     except Exception as exc:
         logger.error(f"获取闲鱼自动发货执行记录失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/orders", response_model=ApiResponse[XianyuOrderPage])
+async def list_xianyu_merchant_orders(
+    page: int = Query(1, ge=1, description="页码（从 1 开始）"),
+    page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    status: str = Query("ALL", description="订单状态码，ALL/WAIT_SELLER_SEND_GOODS 等"),
+    order_id: str = Query("", description="订单号筛选，支持模糊查询"),
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """获取当前账号的卖家订单列表"""
+    try:
+        result = await service.list_merchant_orders(
+            page=page,
+            page_size=page_size,
+            status=status,
+            order_id_query=order_id,
+        )
+        return ApiResponse(data=result)
+    except Exception as exc:
+        logger.error(f"获取闲鱼订单列表失败: {exc}")
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/orders/ship", response_model=ApiResponse[XianyuOrderShipResult])
+async def ship_xianyu_merchant_order(
+    request: XianyuOrderShipRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    """对指定订单提交虚拟自动发货"""
+    try:
+        result = await service.ship_merchant_order(
+            order_id=request.order_id,
+            trade_text=request.trade_text,
+        )
+        return ApiResponse(data=result)
+    except Exception as exc:
+        logger.error(f"虚拟发货失败: {exc}")
         return ApiResponse(success=False, error=str(exc))
