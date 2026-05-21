@@ -82,3 +82,64 @@ def test_submit_publish_returns_item_id(monkeypatch):
 
     assert result.item_id == "987654321"
     assert "987654321" in result.detail_url
+
+
+def test_build_publish_image_upload_result_accepts_object_shape():
+    service = XianyuService()
+
+    result = service._build_publish_image_upload_result(
+        {
+            "success": True,
+            "object": {
+                "url": "http://img.alicdn.com/example.png",
+                "pix": "640x480",
+            },
+            "data": {"imageId": "img-1"},
+        }
+    )
+
+    assert result.image_id == "img-1"
+    assert result.image_url == "https://img.alicdn.com/example.png"
+    assert result.width == 640
+    assert result.height == 480
+
+
+def test_build_publish_image_upload_result_accepts_nested_data_shape():
+    service = XianyuService()
+
+    result = service._build_publish_image_upload_result(
+        {
+            "data": {
+                "result": {
+                    "files": [
+                        {
+                            "image_url": "https://gw.alicdn.com/chat-image.jpg",
+                            "resourceId": "res-1",
+                            "width": 300,
+                            "height": 200,
+                        }
+                    ]
+                }
+            }
+        }
+    )
+
+    assert result.image_id == "res-1"
+    assert result.image_url == "https://gw.alicdn.com/chat-image.jpg"
+    assert result.width == 300
+    assert result.height == 200
+
+
+def test_build_publish_image_upload_result_accepts_stringified_nested_json():
+    service = XianyuService()
+
+    result = service._build_publish_image_upload_result(
+        {
+            "data": '{"url":"https://img.alicdn.com/from-json.png","size":"120x90","id":"json-1"}'
+        }
+    )
+
+    assert result.image_id == "json-1"
+    assert result.image_url == "https://img.alicdn.com/from-json.png"
+    assert result.width == 120
+    assert result.height == 90

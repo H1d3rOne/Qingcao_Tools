@@ -1249,28 +1249,145 @@ class XianyuService:
         content_type: str,
     ) -> XianyuPublishImageUploadResult:
         response = await self._call_publish_image_upload_api(filename, content, content_type)
-        data = response.get("data") or {}
-        obj = response.get("object") or {}
-        image_url = str(obj.get("url") or data.get("imageUrl") or "")
+        return self._build_publish_image_upload_result(response)
+
+    def _build_publish_image_upload_result(self, response: dict[str, Any]) -> XianyuPublishImageUploadResult:
+        """兼容闲鱼图片上传接口的多种返回结构。
+
+        `stream-upload.goofish.com/api/upload.api` 在不同账号/场景下可能把图片信息放在：
+        - 顶层 `object`；
+        - `data.object` / `data.data`；
+        - 列表里的第一个对象；
+        - 或仅返回字符串 URL。
+        之前只读了 `object.url` 和 `data.imageUrl`，会导致上传成功但解析不到 URL。
+        """
+        candidates = self._iter_upload_response_objects(response)
+        image_url = ""
+        image_id = ""
         width = 0
         height = 0
-        pix = str(obj.get("pix") or "")
-        if "x" in pix:
-            parts = pix.split("x", 1)
-            try:
-                width, height = int(parts[0]), int(parts[1])
-            except (ValueError, IndexError):
-                pass
-        if not width:
-            width = int(data.get("width") or 0)
-        if not height:
-            height = int(data.get("height") or 0)
+
+        for candidate in candidates:
+            if not image_url:
+                image_url = self._extract_upload_image_url(candidate)
+            if not image_id:
+                image_id = self._extract_upload_image_id(candidate)
+            if not width or not height:
+                item_width, item_height = self._extract_upload_image_size(candidate)
+                width = width or item_width
+                height = height or item_height
+            if image_url and image_id and (width or height):
+                break
+
         return XianyuPublishImageUploadResult(
-            image_id=str(data.get("imageId") or ""),
-            image_url=image_url,
+            image_id=image_id,
+            image_url=self._normalize_image_url(image_url),
             width=width,
             height=height,
         )
+
+    def _iter_upload_response_objects(self, value: Any) -> list[Any]:
+        """深度展开上传响应，保留可能携带 URL/尺寸的 dict、list 和字符串。"""
+        items: list[Any] = []
+        queue: deque[Any] = deque([value])
+        seen: set[int] = set()
+        preferred_keys = (
+            "object",
+            "data",
+            "result",
+            "file",
+            "files",
+            "url",
+            "imageUrl",
+            "image_url",
+            "downloadUrl",
+            "resourceUrl",
+            "path",
+            "picUrl",
+            "pic_url",
+        )
+
+        while queue:
+            current = queue.popleft()
+            if isinstance(current, (dict, list)):
+                object_id = id(current)
+                if object_id in seen:
+                    continue
+                seen.add(object_id)
+
+            if isinstance(current, dict):
+                items.append(current)
+                for key in preferred_keys:
+                    if key in current:
+                        queue.append(current[key])
+                for key, nested in current.items():
+                    if key not in preferred_keys and isinstance(nested, (dict, list)):
+                        queue.append(nested)
+            elif isinstance(current, list):
+                for nested in current:
+                    queue.append(nested)
+            elif isinstance(current, str):
+                text = current.strip()
+                if text:
+                    items.append(text)
+                    if (text.startswith("{") and text.endswith("}")) or (text.startswith("[") and text.endswith("]")):
+                        try:
+                            queue.append(json.loads(text))
+                        except json.JSONDecodeError:
+                            pass
+        return items
+
+    def _extract_upload_image_url(self, candidate: Any) -> str:
+        if isinstance(candidate, str):
+            text = candidate.strip()
+            if (text.startswith("{") and text.endswith("}")) or (text.startswith("[") and text.endswith("]")):
+                return ""
+            return self._extract_first_url(candidate)
+        if not isinstance(candidate, dict):
+            return ""
+        for key in (
+            "url",
+            "imageUrl",
+            "image_url",
+            "downloadUrl",
+            "download_url",
+            "resourceUrl",
+            "resource_url",
+            "picUrl",
+            "pic_url",
+            "ossUrl",
+            "oss_url",
+            "path",
+        ):
+            value = candidate.get(key)
+            if isinstance(value, str) and value.strip():
+                if key == "path" and not value.startswith(("http://", "https://", "//")):
+                    continue
+                return value.strip()
+        return ""
+
+    def _extract_upload_image_id(self, candidate: Any) -> str:
+        if not isinstance(candidate, dict):
+            return ""
+        for key in ("imageId", "image_id", "id", "fileId", "file_id", "resourceId", "resource_id", "objectId", "object_id"):
+            value = candidate.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        return ""
+
+    def _extract_upload_image_size(self, candidate: Any) -> tuple[int, int]:
+        if not isinstance(candidate, dict):
+            return 0, 0
+
+        width = self._to_int(candidate.get("width") or candidate.get("w"))
+        height = self._to_int(candidate.get("height") or candidate.get("h"))
+        pix = str(candidate.get("pix") or candidate.get("size") or candidate.get("resolution") or "")
+        if (not width or not height) and "x" in pix.lower():
+            parts = re.split(r"x|X|×", pix, maxsplit=1)
+            if len(parts) == 2:
+                width = width or self._to_int(parts[0])
+                height = height or self._to_int(parts[1])
+        return width, height
 
     async def submit_publish(self, payload: dict[str, Any]) -> XianyuPublishSubmitResult:
         request_payload = self._build_publish_payload(payload)
@@ -1326,10 +1443,18 @@ class XianyuService:
                 "_input_charset": "utf-8",
             }
             files = {"file": (filename, content, content_type or "image/png")}
+            client.headers.pop("content-type", None)
+            headers = {
+                key: value
+                for key, value in self.default_headers.items()
+                if key.lower() != "content-type"
+            }
+            headers["accept"] = "*/*"
             response = await client.post(
                 self.upload_url,
                 params=params,
                 files=files,
+                headers=headers,
             )
             response.raise_for_status()
             return response.json()
@@ -3866,11 +3991,13 @@ class XianyuService:
             return ""
 
     def _extract_first_url(self, text: str) -> str:
-        match = re.search(r"https?://[^\s，,。)）]+", str(text or ""))
+        match = re.search(r"https?://[^\s，,。)）\"'<>\]}]+", str(text or ""))
         return match.group(0) if match else ""
 
     def _normalize_image_url(self, url: str) -> str:
         url = str(url or "").strip()
+        if url.startswith("//"):
+            return "https:" + url
         if url.startswith("http://"):
             return "https://" + url[len("http://"):]
         return url
