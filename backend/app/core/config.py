@@ -25,7 +25,7 @@ RUNTIME_CONFIG_DIR = ensure_runtime_config()
 
 class AppConfig(BaseModel):
     """应用配置"""
-    name: str = "Qingcao_Tools API"
+    name: str = "青草工具箱 API"
     version: str = "1.0.0"
     debug: bool = False
     api_prefix: str = "/api/v1"

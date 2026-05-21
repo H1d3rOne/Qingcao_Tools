@@ -15,7 +15,7 @@ const router = createRouter({
 
 router.beforeEach(async (to, _from, next) => {
   const title = to.meta.title as string | undefined
-  document.title = title ? `${title} - Qingcao_Tools` : 'Qingcao_Tools'
+  document.title = title ? `${title} - 青草工具箱` : '青草工具箱'
 
   const isQuarkRoute = to.path.startsWith('/quark')
   const isXianyuRoute = to.path.startsWith('/xianyu')

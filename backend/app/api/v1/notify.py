@@ -83,7 +83,7 @@ async def test_wecom_notify(request: TestNotifyRequest):
                 json={
                     "msgtype": "text",
                     "text": {
-                        "content": f"【Qingcao_Tools】\n{request.message}"
+                        "content": f"【青草工具箱】\n{request.message}"
                     }
                 }
             )
@@ -108,7 +108,7 @@ async def test_dingtalk_notify(request: TestNotifyRequest):
                 json={
                     "msgtype": "text",
                     "text": {
-                        "content": f"【Qingcao_Tools】\n{request.message}"
+                        "content": f"【青草工具箱】\n{request.message}"
                     }
                 }
             )
@@ -133,7 +133,7 @@ async def test_feishu_notify(request: TestNotifyRequest):
                 json={
                     "msg_type": "text",
                     "content": {
-                        "text": f"【Qingcao_Tools】\n{request.message}"
+                        "text": f"【青草工具箱】\n{request.message}"
                     }
                 }
             )

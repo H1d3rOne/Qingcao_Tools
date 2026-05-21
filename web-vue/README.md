@@ -1,4 +1,4 @@
-# 抖音数据采集平台 - 前端项目
+# 青草工具箱 - 前端项目
 
 基于 Vue 3 + TypeScript + Element Plus 的现代化前端应用。
 
@@ -27,7 +27,7 @@ npm install
 npm run dev
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3120
 
 ### 3. 构建生产版本
 
@@ -101,4 +101,4 @@ npm run format
 python3 web_server.py
 ```
 
-后端服务默认运行在 http://localhost:5000
+后端服务默认运行在 http://localhost:3121

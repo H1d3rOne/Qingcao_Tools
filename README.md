@@ -10,7 +10,7 @@
     </a>
 </div>
 
-# Qingcao_Tools
+# 青草工具箱
 
 **✨ 一款集成多种实用工具的工具箱应用，目前支持抖音解析、夸克网盘等功能**
 
@@ -19,7 +19,7 @@
 ## 📁 项目结构
 
 ```
-Qingcao_Tools/
+青草工具箱/
 ├── backend/                 # 后端服务 (FastAPI)
 │   ├── app/
 │   │   ├── api/            # API 路由
@@ -142,7 +142,7 @@ pnpm run dev
 ## 📸 效果预览
 
 ### 首页
-![首页](https://via.placeholder.com/800x450?text=Qingcao_Tools%E9%A6%96%E9%A1%B5)
+![首页](https://via.placeholder.com/800x450?text=青草工具箱%E9%A6%96%E9%A1%B5)
 
 ### 抖音解析
 ![抖音解析](https://via.placeholder.com/800x450?text=抖音解析模块)
@@ -154,7 +154,7 @@ pnpm run dev
 
 | 日期 | 说明 |
 | ---- | ---- |
-| 25/03/12 | 重构为 Qingcao_Tools，新增夸克工具模块，优化 UI 设计 |
+| 25/03/12 | 重构为 青草工具箱，新增夸克工具模块，优化 UI 设计 |
 | 25/03/12 | 重构项目结构，新增 Vue3 前端界面，支持 Web 配置 Cookie |
 | 25/06/07 | 开放所有之前闭源的代码，包括数据爬取和直播间监听 |
 | 23/12/22 | 修复了直播间监控 |
