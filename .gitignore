@@ -60,6 +60,8 @@ backend/venv/
 backend/datas/
 backend/logs/
 backend/config/
+!backend/config.example/
+!backend/config.example/**
 backend/app/datas/
 backend/app/config/
 backend/app/modules/quark/config/
@@ -67,7 +69,9 @@ backend/xianyu_client/
 
 # 抖音/闲鱼/夸克 cookie 与浏览器档案（敏感）
 **/xianyu_cookies.json
+!backend/config.example/xianyu_cookies.json
 **/quark_cookies.json
+!backend/config.example/quark_cookies.json
 **/xianyu_browser_profile/
 **/douyin_cookies.json
 

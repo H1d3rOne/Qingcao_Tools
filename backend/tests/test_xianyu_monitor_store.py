@@ -21,6 +21,7 @@ def test_monitor_store_create_update_delete_roundtrip(tmp_path: Path):
     assert created.id
     assert created.keyword == "4060"
     assert store.list_tasks()[0].id == created.id
+    assert (tmp_path / "xianyu_monitor_tasks.json.bak").exists()
 
     updated = store.update_task(created.id, {"enabled": False, "sort_field": "price"})
     assert updated is not None

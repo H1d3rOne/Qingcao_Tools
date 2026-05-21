@@ -1,6 +1,6 @@
 """
 FastAPI 主入口
-Qingcao_Tools API 服务
+青草工具箱 API 服务
 """
 from contextlib import asynccontextmanager
 
@@ -24,7 +24,7 @@ setup_logger()
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
-    logger.info("🚀 启动 Qingcao_Tools...")
+    logger.info("🚀 启动 青草工具箱...")
     await init_db()
     logger.info("✅ 数据库初始化完成")
 
@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Qingcao_Tools - 提供抖音解析、夸克网盘等多种实用工具",
+    description="青草工具箱 - 提供抖音解析、夸克网盘等多种实用工具",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

@@ -3,6 +3,7 @@ import time
 import uuid
 from pathlib import Path
 
+from app.core.config_bootstrap import write_json_atomic
 from app.modules.xianyu.schemas import (
     XianyuDeliveryExecutionRecord,
     XianyuDeliveryRule,
@@ -26,7 +27,7 @@ class XianyuDeliveryStore:
         return json.loads(raw or "[]")
 
     def _save_rules(self, rules: list[dict]) -> None:
-        self.rules_path.write_text(json.dumps(rules, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_atomic(self.rules_path, rules)
 
     def _default_runtime_state(self) -> dict:
         return {
@@ -52,7 +53,7 @@ class XianyuDeliveryStore:
         return state
 
     def _save_runtime_state(self, state: dict) -> None:
-        self.runtime_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_atomic(self.runtime_path, state)
 
     def _ensure_runtime_file(self) -> None:
         if not self.runtime_path.exists():

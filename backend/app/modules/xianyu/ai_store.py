@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from app.core.config_bootstrap import backup_runtime_file, write_json_atomic
 from app.modules.xianyu.schemas import (
     XianyuChatAiConfig,
     XianyuChatAiConfigUpdateRequest,
@@ -304,12 +305,75 @@ class XianyuChatAiStore:
         if not path.exists():
             return dict(default)
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return dict(default)
+        if path == self.config_path:
+            payload = self._restore_ai_config_from_backup_if_needed(payload)
+        return payload
 
     def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if path != self.config_path:
+            write_json_atomic(path, payload)
+            return
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._backup_ai_config_if_restorable(self._read_json_raw(path))
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp_path.replace(path)
+        self._backup_ai_config_if_restorable(payload)
+
+    def _read_json_raw(self, path: Path) -> dict[str, Any]:
+        if not path.exists():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _backup_ai_config_if_restorable(self, payload: dict[str, Any]) -> None:
+        if not self._is_restorable_ai_config(payload):
+            return
+        backup_runtime_file(self.config_path)
+
+    def _restore_ai_config_from_backup_if_needed(self, payload: Any) -> dict[str, Any]:
+        current = payload if isinstance(payload, dict) else {}
+        if self._is_restorable_ai_config(current):
+            return current
+        if not self._looks_like_ai_config_stub(current):
+            return current
+
+        backup_path = self.config_path.with_suffix(self.config_path.suffix + ".bak")
+        backup = self._read_json_raw(backup_path)
+        if not self._is_restorable_ai_config(backup):
+            return current
+
+        restored = dict(backup)
+        # 保留用户最后一次切换的总开关/保活间隔，但把供应商与密钥从备份恢复回来。
+        if "enabled" in current:
+            restored["enabled"] = bool(current.get("enabled"))
+        if "chat_keepalive_interval_seconds" in current:
+            restored["chat_keepalive_interval_seconds"] = current.get("chat_keepalive_interval_seconds")
+        self.config_path.write_text(json.dumps(restored, ensure_ascii=False, indent=2), encoding="utf-8")
+        return restored
+
+    def _is_restorable_ai_config(self, payload: Any) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        providers = payload.get("providers")
+        if isinstance(providers, list) and any(isinstance(item, dict) for item in providers):
+            return True
+        return bool(str(payload.get("api_key") or "").strip())
+
+    def _looks_like_ai_config_stub(self, payload: Any) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        if not payload:
+            return False
+        stub_keys = {"enabled", "chat_keepalive_interval_seconds"}
+        return set(payload.keys()).issubset(stub_keys)
 
     def _mask_api_key(self, api_key: str) -> str:
         if not api_key:

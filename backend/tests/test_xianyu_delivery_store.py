@@ -25,6 +25,8 @@ def test_delivery_store_rule_and_execution_roundtrip(tmp_path: Path):
 
     assert rule.id
     assert store.list_rules()[0].name == "卡密发货"
+    assert (tmp_path / "xianyu_delivery_rules.json.bak").exists()
+    assert (tmp_path / "xianyu_delivery_runtime.json.bak").exists()
 
     toggled = store.toggle_rule(rule.id)
     assert toggled is not None

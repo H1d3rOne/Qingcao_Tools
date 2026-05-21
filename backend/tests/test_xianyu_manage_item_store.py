@@ -22,6 +22,7 @@ def test_item_store_roundtrip(tmp_path: Path):
 
     assert len(saved) == 1
     assert store.list_items().items[0].item_id == "1001"
+    assert (tmp_path / "xianyu_manage_items.json.bak").exists()
 
     updated = store.update_item("1001", item_detail="v2")
     assert updated is not None

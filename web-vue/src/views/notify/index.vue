@@ -131,7 +131,7 @@ async function handleSaveFeishu() {
 async function handleTestWecom() {
   wecomTesting.value = true
   try {
-    await testWecomNotify('这是一条来自 Qingcao_Tools 的测试消息')
+    await testWecomNotify('这是一条来自 青草工具箱 的测试消息')
     ElMessage.success('测试消息发送成功')
   } catch (err: any) {
     ElMessage.error(err.message || '发送失败')
@@ -143,7 +143,7 @@ async function handleTestWecom() {
 async function handleTestDingtalk() {
   dingtalkTesting.value = true
   try {
-    await testDingtalkNotify('这是一条来自 Qingcao_Tools 的测试消息')
+    await testDingtalkNotify('这是一条来自 青草工具箱 的测试消息')
     ElMessage.success('测试消息发送成功')
   } catch (err: any) {
     ElMessage.error(err.message || '发送失败')
@@ -155,7 +155,7 @@ async function handleTestDingtalk() {
 async function handleTestFeishu() {
   feishuTesting.value = true
   try {
-    await testFeishuNotify('这是一条来自 Qingcao_Tools 的测试消息')
+    await testFeishuNotify('这是一条来自 青草工具箱 的测试消息')
     ElMessage.success('测试消息发送成功')
   } catch (err: any) {
     ElMessage.error(err.message || '发送失败')

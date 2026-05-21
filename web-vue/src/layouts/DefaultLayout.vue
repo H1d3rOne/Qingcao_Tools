@@ -113,16 +113,22 @@ function getKeepAliveComponents(): string[] {
       class="sidebar transition-all duration-300 flex flex-col"
       :class="appStore.sidebarCollapsed ? 'w-16' : 'w-56'"
     >
-      <div class="logo h-16 flex items-center justify-center">
-        <div class="logo-icon w-9 h-9 rounded-xl flex items-center justify-center">
-          <span class="font-bold text-lg">Q</span>
+      <div class="logo h-16 flex items-center justify-center px-3">
+        <div class="logo-lockup flex items-center justify-center">
+          <div class="logo-icon w-12 h-12 rounded-2xl flex items-center justify-center">
+            <img
+              class="logo-image"
+              src="/qingcao-logo.svg"
+              alt="青草工具箱 Logo"
+            >
+          </div>
+          <span
+            v-show="!appStore.sidebarCollapsed"
+            class="logo-text ml-3 text-lg font-bold whitespace-nowrap"
+          >
+            青草工具箱
+          </span>
         </div>
-        <span
-          v-show="!appStore.sidebarCollapsed"
-          class="logo-text ml-3 text-lg font-bold whitespace-nowrap"
-        >
-          Qingcao_Tools
-        </span>
       </div>
 
       <nav class="flex-1 py-4 overflow-y-auto">
@@ -247,14 +253,38 @@ function getKeepAliveComponents(): string[] {
   border-bottom: 1px solid rgba(var(--app-border-rgb) / 0.5);
 }
 
+.logo-lockup {
+  min-width: 0;
+}
+
 .logo-icon {
-  background: linear-gradient(135deg, rgb(var(--primary-color-rgb)), rgb(var(--app-accent-soft-rgb)));
-  color: rgb(var(--utility-white-rgb));
-  box-shadow: 0 6px 20px rgba(var(--primary-color-rgb) / 0.3);
+  position: relative;
+  overflow: hidden;
+  background: transparent;
+  box-shadow: 0 12px 30px rgba(var(--primary-color-rgb) / 0.18);
+}
+
+.logo-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .logo-text {
-  color: rgb(var(--app-text-strong-rgb));
+  color: rgb(var(--primary-color-rgb));
+  background: linear-gradient(135deg, rgb(var(--primary-deep-rgb)) 0%, rgb(var(--primary-color-rgb)) 48%, rgb(var(--app-accent-alt-rgb)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-family: 'Yuanti SC', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
+  font-size: 1.18rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-shadow: 0 4px 14px rgba(var(--primary-color-rgb) / 0.18);
 }
 
 .module-title {

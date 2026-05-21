@@ -1,0 +1,42 @@
+# 青草工具箱 统一配置模板
+# 复制到 backend/config/config.yaml 后按需修改；真实 Cookie/API Key 请只保存在 backend/config/，不要提交。
+app:
+  name: 青草工具箱 API
+  version: 1.0.0
+  debug: false
+  api_prefix: /api/v1
+
+server:
+  host: 0.0.0.0
+  port: 5000
+
+database:
+  url: sqlite+aiosqlite:///./data.db
+
+redis:
+  url: redis://localhost:6379/0
+  enabled: false
+
+cookies:
+  douyin: ""
+  douyin_live: ""
+  quark: ""
+  xianyu: ""
+
+download:
+  path: ./datas/media
+  excel_path: ./datas/excel
+
+security:
+  secret_key: please-change-this-secret-key-in-production
+  access_token_expire_minutes: 1440
+
+request:
+  timeout: 30
+  max_retries: 3
+
+log:
+  path: ./logs
+  level: INFO
+  rotation: 10 MB
+  retention: 7 days

@@ -1,0 +1,11 @@
+{
+  "enabled": false,
+  "chat_keepalive_interval_seconds": 180,
+  "providers": [],
+  "active_provider_id": "",
+  "base_url": "https://api.openai.com/v1",
+  "api_key": "",
+  "model": "gpt-4.1-mini",
+  "system_prompt": "你是闲鱼客服助手，回复要简洁、礼貌、像真人卖家。",
+  "temperature": 0.3
+}

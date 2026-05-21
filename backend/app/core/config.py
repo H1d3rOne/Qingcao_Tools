@@ -9,10 +9,23 @@ from functools import lru_cache
 from typing import Optional, Any
 from pydantic import BaseModel
 
+from app.core.config_bootstrap import (
+    DEFAULT_BACKEND_CONFIG,
+    ensure_runtime_config,
+    get_runtime_config_dir,
+)
+
+
+# 启动早期先准备统一运行态配置目录：
+# - backend/config/：本地私有配置与运行态数据，gitignore；
+# - backend/config.example/：可提交模板；
+# - backend/app/config/：旧版配置位置，仅作为迁移兜底。
+RUNTIME_CONFIG_DIR = ensure_runtime_config()
+
 
 class AppConfig(BaseModel):
     """应用配置"""
-    name: str = "Qingcao_Tools API"
+    name: str = "青草工具箱 API"
     version: str = "1.0.0"
     debug: bool = False
     api_prefix: str = "/api/v1"
@@ -195,11 +208,14 @@ class Settings(BaseModel):
 def _find_config_file() -> Path:
     """查找配置文件"""
     # 按优先级查找配置文件
+    runtime_dir = get_runtime_config_dir()
     config_paths = [
-        Path(__file__).parent.parent / "config" / "config.yaml",
-        Path(__file__).parent.parent / "config" / "config.yml",
+        runtime_dir / "config.yaml",
+        runtime_dir / "config.yml",
         Path.cwd() / "config" / "config.yaml",
         Path.cwd() / "config" / "config.yml",
+        Path(__file__).parent.parent / "config" / "config.yaml",
+        Path(__file__).parent.parent / "config" / "config.yml",
         Path.cwd() / "config.yaml",
         Path.cwd() / "config.yml",
     ]
@@ -209,7 +225,7 @@ def _find_config_file() -> Path:
             return path
     
     # 返回默认路径
-    return Path(__file__).parent.parent / "config" / "config.yaml"
+    return runtime_dir / "config.yaml"
 
 
 def _load_yaml_config() -> dict:
@@ -218,17 +234,7 @@ def _load_yaml_config() -> dict:
     
     if not config_path.exists():
         # 创建默认配置文件
-        default_config = {
-            "app": {"name": "Qingcao_Tools API", "version": "1.0.0", "debug": False, "api_prefix": "/api/v1"},
-            "server": {"host": "0.0.0.0", "port": 5000},
-            "database": {"url": "sqlite+aiosqlite:///./data.db"},
-            "redis": {"url": "redis://localhost:6379/0", "enabled": False},
-            "cookies": {"douyin": "", "douyin_live": "", "quark": "", "xianyu": ""},
-            "download": {"path": "./datas/media", "excel_path": "./datas/excel"},
-            "security": {"secret_key": "your-secret-key-please-change-in-production", "access_token_expire_minutes": 1440},
-            "request": {"timeout": 30, "max_retries": 3},
-            "log": {"path": "./logs", "level": "INFO", "rotation": "10 MB", "retention": "7 days"}
-        }
+        default_config = DEFAULT_BACKEND_CONFIG
         
         # 确保目录存在
         config_path.parent.mkdir(parents=True, exist_ok=True)
