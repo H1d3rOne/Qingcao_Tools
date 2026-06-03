@@ -33,6 +33,7 @@ export interface WorkInfo {
   share_count: number
   collect_count: number
   play_count: number
+  cover?: string
   cover_url: string
   video_url: string
   video_qualities?: Record<string, VideoQuality>
@@ -89,6 +90,7 @@ export function downloadWork(url: string, saveType: 'media' | 'video' | 'image' 
     title: string
     author: string
     aweme_id: string
+    url?: string
     video_url?: string
     video_qualities?: Record<string, VideoQuality>
     images?: string[]
@@ -107,6 +109,7 @@ export function downloadVideo(url: string, saveType: 'media' | 'video' | 'image'
     title: string
     author: string
     aweme_id: string
+    url?: string
     video_url?: string
     video_qualities?: Record<string, VideoQuality>
     images?: string[]

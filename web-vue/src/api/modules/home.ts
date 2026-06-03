@@ -11,7 +11,7 @@ interface ApiResponse<T = any> {
 }
 
 // 首页推荐视频项
-interface FeedVideo {
+export interface FeedVideo {
   aweme_id: string
   desc: string
   author: string

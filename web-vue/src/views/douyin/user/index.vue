@@ -327,8 +327,7 @@ async function loadWorksBySecUid(secUid: string) {
   worksLoading.value = true
   try {
     const res = await getUserVideos({ sec_uid: secUid, count: 30 })
-    // 后端返回的是 ApiResponse<List[WorkResponse]>，所以 res.data 直接是作品数组
-    userWorks.value = res.data || []
+    userWorks.value = Array.isArray(res.data) ? res.data : (res.data?.data || [])
   } catch (err) {
     // console.error('获取作品失败:', err)
   } finally {

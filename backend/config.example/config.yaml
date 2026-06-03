@@ -2,7 +2,7 @@
 # 复制到 backend/config/config.yaml 后按需修改；真实 Cookie/API Key 请只保存在 backend/config/，不要提交。
 app:
   name: 青草工具箱 API
-  version: 1.0.0
+  version: 2.0.0
   debug: false
   api_prefix: /api/v1
 

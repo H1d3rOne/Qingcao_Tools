@@ -11,6 +11,7 @@ class SearchWorkRequest(BaseModel):
     keyword: str = Field(..., description="搜索关键词")
     offset: str = Field("0", description="分页偏移量")
     count: int = Field(25, ge=1, le=50, description="每页数量")
+    search_id: str = Field("", description="搜索ID，综合搜索翻页时使用首屏返回的search_id")
     sort_type: str = Field("0", description="排序: 0综合, 1最多点赞, 2最新")
     publish_time: str = Field("0", description="发布时间: 0不限, 1一天内, 7一周内, 180半年内")
     filter_duration: str = Field("", description="视频时长: 空/不限, 0-1一分钟内, 1-5一分钟到五分钟, 5-10000五分钟以上")
@@ -35,6 +36,7 @@ class SearchUserRequest(BaseModel):
     keyword: str = Field(..., description="搜索关键词")
     offset: str = Field("0", description="分页偏移量")
     count: int = Field(25, ge=1, le=50, description="每页数量")
+    search_id: str = Field("", description="搜索ID，用户搜索翻页时使用首屏返回的search_id")
 
 
 class SearchLiveRequest(BaseModel):

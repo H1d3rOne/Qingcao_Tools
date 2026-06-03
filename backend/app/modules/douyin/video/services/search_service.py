@@ -17,6 +17,7 @@ class SearchService:
         keyword: str,
         offset: str = "0",
         count: int = 25,
+        search_id: str = "",
         sort_type: str = "0",
         publish_time: str = "0",
         filter_duration: str = "",
@@ -24,14 +25,15 @@ class SearchService:
         content_type: str = ""
     ) -> SearchPageResult:
         result = await self.spider.search_works(
-            keyword, offset, count, sort_type, publish_time,
+            keyword, offset, count, search_id, sort_type, publish_time,
             filter_duration, search_range, content_type
         )
         return SearchPageResult(
             keyword=keyword,
             items=result["items"],
             has_more=result["has_more"],
-            next_offset=result["next_offset"]
+            next_offset=result["next_offset"],
+            search_id=result.get("search_id", "")
         )
 
     async def search_videos(
@@ -57,13 +59,20 @@ class SearchService:
             search_id=result.get("search_id", "")
         )
 
-    async def search_users(self, keyword: str, offset: str = "0", count: int = 25) -> SearchPageResult:
-        result = await self.spider.search_users(keyword, offset, count)
+    async def search_users(
+        self,
+        keyword: str,
+        offset: str = "0",
+        count: int = 25,
+        search_id: str = ""
+    ) -> SearchPageResult:
+        result = await self.spider.search_users(keyword, offset, count, search_id)
         return SearchPageResult(
             keyword=keyword,
             items=result["items"],
             has_more=result["has_more"],
-            next_offset=result["next_offset"]
+            next_offset=result["next_offset"],
+            search_id=result.get("search_id", "")
         )
 
     async def search_live(self, keyword: str, offset: str = "0", count: int = 25) -> SearchPageResult:

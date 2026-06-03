@@ -43,7 +43,7 @@ watch(() => route.params.id, async (newId) => {
 const coverUrl = computed(() => {
   const video = videoStore.currentVideo
   if (!video) return ''
-  return video.cover_url || video.cover?.url_list?.[0] || ''
+  return video.cover_url || (typeof video.cover === 'string' ? video.cover : video.cover?.url_list?.[0]) || ''
 })
 
 const videoUrl = computed(() => {

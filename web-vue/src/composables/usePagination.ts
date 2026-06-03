@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import type { Ref } from 'vue'
 
 interface PaginationOptions<T, P> {
-  fetchFn: (params: P) => Promise<{ data: { data: T[]; has_more: boolean; cursor: number } }>
+  fetchFn: (params: P) => Promise<{ data: any }>
   pageSize?: number
 }
 
@@ -28,9 +28,12 @@ export function usePagination<T, P extends Record<string, any>>(
         ...params,
         cursor: cursor.value,
         count: pageSize
-      } as P)
+      } as unknown as P)
 
-      const { data, has_more, cursor: newCursor } = res.data
+      const payload = res.data || {}
+      const data = (payload.data || payload.items || []) as T[]
+      const has_more = Boolean(payload.has_more)
+      const newCursor = Number(payload.cursor ?? payload.next_offset ?? 0)
 
       if (append) {
         list.value = [...list.value, ...data]

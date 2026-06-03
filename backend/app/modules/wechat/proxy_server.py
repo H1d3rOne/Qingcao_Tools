@@ -112,7 +112,15 @@ def get_network_services_macos() -> list[str]:
 
 
 class WechatProxyAddon:
-    def __init__(self):
+    def __init__(
+        self,
+        proxy_port: int = PROXY_PORT,
+        local_server_host: str = LOCAL_SERVER_HOST,
+        local_server_port: int = LOCAL_SERVER_PORT,
+    ):
+        self.proxy_port = proxy_port
+        self.local_server_host = local_server_host
+        self.local_server_port = local_server_port
         self.report_seen = {}
         self.report_ttl_seconds = 300
         self.max_report_seen = 5000
@@ -169,7 +177,7 @@ class WechatProxyAddon:
     def _forward_to_local_server(self, data: dict) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         req = urlrequest.Request(
-            f"http://{LOCAL_SERVER_HOST}:{LOCAL_SERVER_PORT}/",
+            f"http://{self.local_server_host}:{self.local_server_port}/",
             data=body,
             method="POST",
             headers={"Content-Type": "application/json"},
@@ -196,7 +204,7 @@ class WechatProxyAddon:
         if flow.request.pretty_host not in ("localhost", "127.0.0.1"):
             return
 
-        if flow.request.port != PROXY_PORT or not flow.request.path.startswith("/__shipinhao_report"):
+        if flow.request.port != self.proxy_port or not flow.request.path.startswith("/__shipinhao_report"):
             return
 
         flow.response = http.Response.make(200, b"ok", {"Content-Type": "text/plain"})
@@ -244,7 +252,7 @@ class WechatProxyAddon:
                                 }
                                 if(!window.__shipinhao_sent_keys[dedupeKey]){
                                     window.__shipinhao_sent_keys[dedupeKey] = 1;
-                                    fetch("http://127.0.0.1:8090/__shipinhao_report", {
+                                    fetch("__SHIPINHAO_REPORT_URL__", {
                                         method: "POST",
                                         mode: "no-cors",
                                         headers: {
@@ -256,6 +264,10 @@ class WechatProxyAddon:
                             }catch(e){}
                         };
                     '''
+                    inject_code = inject_code.replace(
+                        "__SHIPINHAO_REPORT_URL__",
+                        f"http://127.0.0.1:{self.proxy_port}/__shipinhao_report",
+                    )
                     content = re.sub(r"get\s*media\s*\(\)\s*\{", inject_code, content)
                     flow.response.content = content.encode("utf-8")
             except Exception as exc:
@@ -263,7 +275,17 @@ class WechatProxyAddon:
 
 
 class ProxyController:
-    def __init__(self):
+    def __init__(
+        self,
+        proxy_host: str = PROXY_HOST,
+        proxy_port: int = PROXY_PORT,
+        local_server_host: str = LOCAL_SERVER_HOST,
+        local_server_port: int = LOCAL_SERVER_PORT,
+    ):
+        self.proxy_host = proxy_host
+        self.proxy_port = proxy_port
+        self.local_server_host = local_server_host
+        self.local_server_port = local_server_port
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._master = None
@@ -318,9 +340,15 @@ class ProxyController:
         asyncio.set_event_loop(self._loop)
         try:
             _ensure_mitmproxy_imported()
-            opts = options.Options(listen_host="0.0.0.0", listen_port=PROXY_PORT)
+            opts = options.Options(listen_host="0.0.0.0", listen_port=self.proxy_port)
             master = DumpMaster(opts, loop=self._loop, with_termlog=False, with_dumper=False)
-            master.addons.add(WechatProxyAddon())
+            master.addons.add(
+                WechatProxyAddon(
+                    proxy_port=self.proxy_port,
+                    local_server_host=self.local_server_host,
+                    local_server_port=self.local_server_port,
+                )
+            )
             self._master = master
             self._system_proxy_enabled = self._enable_system_proxy()
             self._ready.set()
@@ -343,9 +371,37 @@ class ProxyController:
             enabled_services = []
             for service in services:
                 commands = [
-                    ["networksetup", "-setwebproxy", service, PROXY_HOST, str(PROXY_PORT)],
-                    ["networksetup", "-setsecurewebproxy", service, PROXY_HOST, str(PROXY_PORT)],
-                    ["networksetup", "-setproxybypassdomains", service, "localhost", "127.0.0.1", "::1", "local", "*.local"],
+                    ["networksetup", "-setwebproxy", service, self.proxy_host, str(self.proxy_port)],
+                    ["networksetup", "-setsecurewebproxy", service, self.proxy_host, str(self.proxy_port)],
+                    [
+                        "networksetup",
+                        "-setproxybypassdomains",
+                        service,
+                        "localhost",
+                        "127.0.0.1",
+                        "::1",
+                        "0.0.0.0",
+                        "local",
+                        "*.local",
+                        "10.*",
+                        "172.16.*",
+                        "172.17.*",
+                        "172.18.*",
+                        "172.19.*",
+                        "172.20.*",
+                        "172.21.*",
+                        "172.22.*",
+                        "172.23.*",
+                        "172.24.*",
+                        "172.25.*",
+                        "172.26.*",
+                        "172.27.*",
+                        "172.28.*",
+                        "172.29.*",
+                        "172.30.*",
+                        "172.31.*",
+                        "192.168.*",
+                    ],
                     ["networksetup", "-setwebproxystate", service, "on"],
                     ["networksetup", "-setsecurewebproxystate", service, "on"],
                 ]
@@ -358,7 +414,7 @@ class ProxyController:
         if current_platform == "windows":
             try:
                 subprocess.run(
-                    ["netsh", "winhttp", "set", "proxy", f"{PROXY_HOST}:{PROXY_PORT}"],
+                    ["netsh", "winhttp", "set", "proxy", f"{self.proxy_host}:{self.proxy_port}"],
                     check=True,
                     shell=True,
                 )
@@ -371,8 +427,16 @@ class ProxyController:
                     winreg.KEY_WRITE,
                 )
                 winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
-                winreg.SetValueEx(key, "ProxyServer", 0, winreg.REG_SZ, f"{PROXY_HOST}:{PROXY_PORT}")
-                winreg.SetValueEx(key, "ProxyOverride", 0, winreg.REG_SZ, "localhost;127.0.0.1;::1;<local>")
+                winreg.SetValueEx(key, "ProxyServer", 0, winreg.REG_SZ, f"{self.proxy_host}:{self.proxy_port}")
+                winreg.SetValueEx(
+                    key,
+                    "ProxyOverride",
+                    0,
+                    winreg.REG_SZ,
+                    "localhost;127.0.0.1;::1;0.0.0.0;10.*;172.16.*;172.17.*;172.18.*;172.19.*;"
+                    "172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;"
+                    "172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>",
+                )
                 winreg.CloseKey(key)
                 self._system_proxy_enabled = True
                 return True

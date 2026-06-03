@@ -3,7 +3,13 @@
 """
 from enum import Enum
 
-from app.utils.dy_util import generate_ree_key, generate_bd_ticket_client_data, generate_csrf_token
+from app.utils.dy_util import (
+    DEFAULT_DOUYIN_USER_AGENT,
+    generate_ree_key,
+    generate_bd_ticket_client_data,
+    generate_csrf_token,
+    get_douyin_browser_profile,
+)
 
 
 class HeaderType(Enum):
@@ -52,19 +58,23 @@ class HeaderBuilder:
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0"
 
     @staticmethod
-    def build(header_type):
+    def build(header_type, auth=None, *, profile=None):
+        use_profile = profile is not None or auth is not None
+        profile = profile or (get_douyin_browser_profile(auth) if use_profile else {})
         header = Header()
-        header.set_header('user-agent', HeaderBuilder.ua)
+        header.set_header('user-agent', profile.get('user_agent') or HeaderBuilder.ua)
         header.set_header('cache-control', 'no-cache')
         header.set_header('pragma', 'no-cache')
-        header.set_header('sec-ch-ua', '"Microsoft Edge";v="125", "Chromium";v="125", "Not.A/Brand";v="24"')
+        header.set_header('sec-ch-ua', profile.get('sec_ch_ua') or '"Microsoft Edge";v="125", "Chromium";v="125", "Not.A/Brand";v="24"')
         header.set_header('sec-ch-ua-mobile', '?0')
-        header.set_header('sec-ch-ua-platform', '"Windows"')
+        header.set_header('sec-ch-ua-platform', profile.get('sec_ch_ua_platform') or '"Windows"')
         header.set_header('sec-fetch-dest', 'empty')
         header.set_header('sec-fetch-mode', 'cors')
         header.set_header('sec-fetch-site', 'same-origin')
         header.set_header('priority', 'u=1, i')
         header.set_header('accept-language', 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6')
+        if auth and getattr(auth, 'cookie_str', ''):
+            header.set_header('cookie', auth.cookie_str)
         if header_type == HeaderType.POST:
             header.set_header('accept', '*/*')
             header.set_header('content-type', 'application/json; charset=UTF-8')
@@ -82,18 +92,18 @@ class HeaderBuilder:
                 'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
                 'cache-control': 'no-cache',
-                'cookie': '',
+                'cookie': getattr(auth, 'cookie_str', '') if auth else '',
                 'pragma': 'no-cache',
                 'priority': 'u=0, i',
-                'sec-ch-ua': '"Microsoft Edge";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+                'sec-ch-ua': profile.get('sec_ch_ua') or '"Microsoft Edge";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
                 'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
+                'sec-ch-ua-platform': profile.get('sec_ch_ua_platform') or '"Windows"',
                 'sec-fetch-dest': 'document',
                 'sec-fetch-mode': 'navigate',
                 'sec-fetch-site': 'none',
                 'sec-fetch-user': '?1',
                 'upgrade-insecure-requests': '1',
-                'user-agent': HeaderBuilder.ua
+                'user-agent': profile.get('user_agent') or HeaderBuilder.ua
             }
             header.headers.update(h)
         return header

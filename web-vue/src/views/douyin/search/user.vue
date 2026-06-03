@@ -15,8 +15,8 @@ async function handleSearch() {
   
   loading.value = true
   try {
-    const res = await searchUsers({ keyword: keyword.value.trim(), limit: 30 })
-    users.value = res.data.data || []
+    const res = await searchUsers({ keyword: keyword.value.trim(), count: 30 })
+    users.value = res.data.items || res.data.data || []
   } catch (error) {
     // console.error('搜索失败:', error)
   } finally {

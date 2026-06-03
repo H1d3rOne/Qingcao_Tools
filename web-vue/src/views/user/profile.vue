@@ -25,8 +25,10 @@ const {
   isEmpty: videosEmpty,
   loadMore: loadVideos, 
   reset: resetVideos 
-} = usePagination<Video, { sec_uid: string }>({
-  fetchFn: (params) => userStore.fetchUserVideos(params.sec_uid, params.cursor, params.count)
+} = usePagination<Video, { sec_uid: string; cursor?: number; count?: number }>({
+  fetchFn: async (params) => ({
+    data: await userStore.fetchUserVideos(params.sec_uid, params.cursor) || { data: [], has_more: false, cursor: 0 }
+  })
 })
 
 const secUid = computed(() => route.params.id as string)
@@ -56,6 +58,10 @@ async function handleLoadMore() {
 
 function handleVideoClick(video: Video) {
   router.push(`/video/${video.aweme_id}`)
+}
+
+function handleVideoDownload(video: Video) {
+  return download(video.aweme_id)
 }
 </script>
 
@@ -159,7 +165,7 @@ function handleVideoClick(video: Video) {
               :key="video.aweme_id"
               :video="video"
               @click="handleVideoClick"
-              @download="download"
+              @download="handleVideoDownload"
             />
           </div>
           

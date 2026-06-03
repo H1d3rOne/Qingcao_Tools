@@ -11019,15 +11019,51 @@ window.bdms || function() {
     window.bdms = n
 }();
 
-function get_ab(params, data) {
+function apply_env(env, userAgent) {
+    env = env || {};
+    if (userAgent) {
+        navigator.userAgent = userAgent;
+    }
+    if (env.browser_platform) {
+        navigator.platform = env.browser_platform;
+    }
+    if (env.cpu_core_num) {
+        navigator.hardwareConcurrency = Number(env.cpu_core_num);
+    }
+    if (env.device_memory) {
+        navigator.deviceMemory = Number(env.device_memory);
+    }
+
+    const screenWidth = Number(env.screen_width || screen.width || 1707);
+    const screenHeight = Number(env.screen_height || screen.height || 960);
+    screen.width = screenWidth;
+    screen.height = screenHeight;
+    screen.availWidth = Number(env.avail_width || screenWidth);
+    screen.availHeight = Number(env.avail_height || Math.max(screenHeight - 48, 0));
+
+    window.navigator = navigator;
+    window.screen = screen;
+    window.innerWidth = Number(env.inner_width || screenWidth);
+    window.innerHeight = Number(env.inner_height || Math.max(screenHeight - 151, 0));
+    window.outerWidth = Number(env.outer_width || screenWidth);
+    window.outerHeight = Number(env.outer_height || screen.availHeight);
+
+    if (window.document && window.document.body) {
+        window.document.body.clientWidth = Number(env.client_width || Math.max(screenWidth - 10, 0));
+        window.document.body.clientHeight = Number(env.client_height || window.innerHeight);
+    }
+}
+
+function get_ab(params, data, userAgent, env) {
+    userAgent = userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0";
+    apply_env(env, userAgent);
     return window.bdms.init._v[2].p[42].apply(null, [
         0,
         1,
         8,
         params,
         data,
-        // "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0",
+        userAgent,
     ]);
 }
 

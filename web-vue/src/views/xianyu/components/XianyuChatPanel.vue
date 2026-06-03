@@ -63,6 +63,7 @@ const sessionAiStateMap = ref<Record<string, boolean>>({})
 let wsClient: ReturnType<typeof createXianyuChatWebSocket> | null = null
 let refreshTimer: number | null = null
 let syncTimer: number | null = null
+let mounted = false
 
 const currentAccount = computed(() => {
   if (props.currentUser) {
@@ -147,6 +148,30 @@ const chatHealthTitle = computed(() => {
   }
 })
 
+function extractFirstUrl(text: string) {
+  const match = text.match(/https?:\/\/[^\s，。)）]+/)
+  return match?.[0] || ''
+}
+
+function updateChatHealthFromError(message: string) {
+  const captchaUrl = extractFirstUrl(message)
+  const lowered = message.toLowerCase()
+  const isRisk = Boolean(captchaUrl) || message.includes('风控') || lowered.includes('captcha') || lowered.includes('validate')
+  chatHealth.value = {
+    ok: false,
+    status: isRisk ? 'risk_blocked' : 'auth_invalid',
+    message,
+    captcha_url: captchaUrl,
+    shared_ws_connected: false,
+    cookie_configured: true,
+  }
+}
+
+function shouldPauseChatSync() {
+  const status = chatHealth.value?.status
+  return status === 'risk_blocked' || status === 'auth_invalid' || status === 'cookie_missing'
+}
+
 async function loadChatAiConfig() {
   try {
     const response = await getXianyuChatAiConfig()
@@ -228,8 +253,9 @@ function connectChatSocket() {
     },
     onError(message) {
       connectionStatus.value = 'error'
+      updateChatHealthFromError(message)
+      stopSyncPolling()
       ElMessage.warning(message)
-      void loadChatHealth(false)
     },
     onDisconnected() {
       if (connectionStatus.value !== 'error') {
@@ -249,8 +275,10 @@ function disconnectChatSocket() {
 function startSyncPolling() {
   stopSyncPolling()
   syncTimer = window.setInterval(async () => {
+    if (shouldPauseChatSync()) return
     if (conversationLoading.value || messageLoading.value || sending.value) return
-    await loadConversations(false)
+    const ok = await loadConversations(false)
+    if (!ok) return
     if (activeCid.value) {
       await loadMessages(activeCid.value, null, 'replace')
     }
@@ -270,7 +298,9 @@ function scheduleRefresh() {
   }
 
   refreshTimer = window.setTimeout(async () => {
-    await loadConversations(false)
+    if (shouldPauseChatSync()) return
+    const ok = await loadConversations(false)
+    if (!ok) return
     if (activeCid.value) {
       await loadMessages(activeCid.value, null, 'replace')
     }
@@ -426,11 +456,11 @@ async function loadConversations(
         } else if (!messages.value.length) {
           await loadMessages(preferredSession.cid, null, 'replace')
         }
-        return
+        return true
       }
     }
 
-    if (options.skipAutoSelect) return
+    if (options.skipAutoSelect) return true
 
     if (!activeCid.value || !sessions.value.some((item) => item.cid === activeCid.value)) {
       const firstSession = filteredSessions.value[0]
@@ -439,8 +469,13 @@ async function loadConversations(
         await loadMessages(firstSession.cid, null, 'replace')
       }
     }
+    return true
   } catch (err: any) {
-    ElMessage.error(err?.message || '获取会话列表失败')
+    const message = err?.message || '获取会话列表失败'
+    updateChatHealthFromError(message)
+    stopSyncPolling()
+    ElMessage.error(message)
+    return false
   } finally {
     conversationLoading.value = false
   }
@@ -573,13 +608,15 @@ function formatMessageText(message: XianyuChatMessage) {
 }
 
 async function handleRefreshAll() {
-  await Promise.all([
-    loadChatProfile(),
-    loadChatAiConfig(),
-    loadChatHealth(),
-    loadConversations(false),
-    activeCid.value ? loadMessages(activeCid.value, null, 'replace') : Promise.resolve(),
-  ])
+  await Promise.all([loadChatProfile(), loadChatAiConfig(), loadChatHealth()])
+  const ok = await loadConversations(false)
+  if (ok && activeCid.value) {
+    if (connectionStatus.value !== 'connected' && connectionStatus.value !== 'connecting') {
+      connectChatSocket()
+    }
+    startSyncPolling()
+    await loadMessages(activeCid.value, null, 'replace')
+  }
 }
 
 function openCaptchaUrl() {
@@ -594,18 +631,24 @@ watch(
     const normalizedCid = (cid || '').trim()
     if (!normalizedCid) return
     pendingPreferredCid.value = normalizedCid
+    if (!mounted) return
     await focusPreferredConversation(normalizedCid)
   },
   { immediate: true }
 )
 
 onMounted(async () => {
-  await Promise.all([loadChatProfile(), loadConversations(), loadChatAiConfig(), loadChatHealth()])
-  connectChatSocket()
-  startSyncPolling()
+  mounted = true
+  await Promise.all([loadChatProfile(), loadChatAiConfig(), loadChatHealth()])
+  const ok = await loadConversations()
+  if (ok) {
+    connectChatSocket()
+    startSyncPolling()
+  }
 })
 
 onBeforeUnmount(() => {
+  mounted = false
   if (refreshTimer !== null) {
     clearTimeout(refreshTimer)
   }

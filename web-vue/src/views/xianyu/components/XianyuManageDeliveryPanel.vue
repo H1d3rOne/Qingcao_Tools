@@ -43,6 +43,10 @@ const stats = computed(() => [
 
 const dialogTitle = computed(() => (editingRuleId.value ? '编辑发货规则' : '新建发货规则'))
 
+function getRuleMatchValue(rule: XianyuDeliveryRule) {
+  return rule.match_value || (rule.match_mode === 'item_id' ? rule.item_id : rule.keyword) || ''
+}
+
 function resetForm() {
   formState.name = ''
   formState.match_mode = 'keyword'
@@ -62,7 +66,7 @@ function openEditDialog(rule: XianyuDeliveryRule) {
   editingRuleId.value = rule.id
   formState.name = rule.name
   formState.match_mode = rule.match_mode
-  formState.match_value = rule.match_value
+  formState.match_value = getRuleMatchValue(rule)
   formState.delivery_text = rule.delivery_text
   formState.send_chat_text = rule.send_chat_text
   formState.send_dummy_ship = rule.send_dummy_ship
@@ -105,6 +109,8 @@ async function handleSubmit() {
       name,
       match_mode: formState.match_mode,
       match_value: matchValue,
+      item_id: formState.match_mode === 'item_id' ? matchValue : '',
+      keyword: formState.match_mode === 'keyword' ? matchValue : '',
       delivery_text: deliveryText,
       send_chat_text: formState.send_chat_text,
       send_dummy_ship: formState.send_dummy_ship,
@@ -219,7 +225,7 @@ onMounted(() => {
               <span class="mg-rule__mode">{{ matchModeLabel(rule.match_mode) }}</span>
             </div>
             <div class="mg-rule__summary">
-              <span class="mg-rule__summary-text">匹配 {{ rule.match_value }}</span>
+              <span class="mg-rule__summary-text">匹配 {{ getRuleMatchValue(rule) }}</span>
             </div>
             <div class="mg-rule__meta">
               <span class="mg-rule__summary-text">{{ rule.enabled ? '规则启用中' : '规则已停用' }}</span>
@@ -246,7 +252,7 @@ onMounted(() => {
           <div class="mg-rule__body-grid">
             <div class="mg-rule__match">
               <span class="mg-rule__match-label">匹配值</span>
-              <code>{{ rule.match_value }}</code>
+              <code>{{ getRuleMatchValue(rule) }}</code>
             </div>
             <div class="mg-rule__delivery">
               <span class="mg-rule__match-label">发货文本</span>

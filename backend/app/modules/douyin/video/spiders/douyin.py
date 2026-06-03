@@ -15,6 +15,7 @@ from app.modules.douyin.common.base import BaseSpider
 from app.modules.douyin.common.auth import DouyinAuth
 from app.modules.douyin.common.params import Params
 from app.modules.douyin.common.header import HeaderBuilder, HeaderType
+from app.modules.douyin.video.spiders.browser_search import get_browser_search_executor
 from app.core.config import settings
 
 
@@ -42,11 +43,83 @@ class DouyinSpider(BaseSpider):
                 url,
                 headers=headers,
                 cookies=self.auth.cookie,
-                params=params,
+                params=params or None,
                 verify=False
             )
-            return json.loads(resp.text)
+            return self._parse_search_response(resp)
         return await asyncio.to_thread(_do_request)
+
+    async def _search_stream_get(self, url: str, params: dict, headers: dict) -> dict:
+        """请求综合搜索 stream 接口并合并多行 JSON 响应。"""
+        def _do_request():
+            resp = req_lib.get(
+                url,
+                headers=headers,
+                cookies=self.auth.cookie,
+                params=params or None,
+                verify=False
+            )
+
+            chunks: list[dict] = []
+            for line in resp.text.splitlines():
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                try:
+                    chunks.append(json.loads(line))
+                except json.JSONDecodeError:
+                    logger.debug(f"忽略 stream 非法 JSON 行: {line[:120]}")
+
+            merged: dict = {"data": []}
+            for chunk in chunks:
+                if "status_code" not in chunk:
+                    continue
+                if "status_code" in chunk:
+                    merged["status_code"] = chunk.get("status_code")
+                for key in ("qc", "cursor", "has_more", "ad_info", "extra", "global_doodle_config", "search_nil_info"):
+                    if key in chunk:
+                        merged[key] = chunk.get(key)
+                if "log_pb" in chunk and "log_pb" not in merged:
+                    merged["log_pb"] = chunk.get("log_pb")
+                data = chunk.get("data")
+                if isinstance(data, list):
+                    merged["data"].extend(data)
+
+            if not chunks:
+                return self._parse_search_response(resp)
+            return merged
+
+        return await asyncio.to_thread(_do_request)
+
+    @staticmethod
+    def _parse_search_response(resp) -> dict:
+        """解析搜索响应，并把 BDTuring/空体转成明确错误。"""
+        text = resp.text or ""
+        headers = {str(k).lower(): v for k, v in resp.headers.items()}
+        bdturing = "x-vc-bdturing-parameters" in headers
+        content_type = resp.headers.get("content-type", "")
+
+        if not text.strip():
+            if bdturing:
+                raise ValueError("抖音搜索接口触发 BDTuring 风控空响应，请稍后重试或更新 Cookie/降低搜索频率")
+            raise ValueError(f"抖音搜索接口返回空响应: status={resp.status_code}, content-type={content_type}")
+
+        try:
+            return resp.json()
+        except Exception:
+            try:
+                return json.loads(text)
+            except Exception as exc:
+                preview = text[:300].replace("\n", " ")
+                if bdturing:
+                    raise ValueError(f"抖音搜索接口触发 BDTuring 风控响应: {preview}") from exc
+                raise ValueError(f"抖音搜索接口返回非 JSON 响应: status={resp.status_code}, content-type={content_type}, body={preview}") from exc
+
+    @staticmethod
+    def _is_search_verify_check(data: dict) -> bool:
+        """判断搜索接口是否命中 verify_check 空态/风控校验。"""
+        search_nil_info = data.get("search_nil_info") if isinstance(data, dict) else None
+        return bool(search_nil_info and search_nil_info.get("search_nil_type") == "verify_check")
 
     def _safe_json_parse(self, response: httpx.Response) -> dict:
         """安全解析 JSON 响应"""
@@ -461,27 +534,215 @@ class DouyinSpider(BaseSpider):
 
         return works[:limit]
     
+    def _build_search_headers(self, refer: str, *, accept: str | None = None):
+        """构建搜索请求头，UA / sec-ch-ua / 平台从 Cookie 指纹统一恢复。"""
+        from app.utils.dy_util import get_douyin_browser_profile
+
+        profile = get_douyin_browser_profile(self.auth)
+        headers = HeaderBuilder.build(HeaderType.GET, auth=self.auth, profile=profile)
+        headers.set_referer(refer)
+        if accept:
+            headers.set_header("accept", accept)
+        if profile.get("uifid"):
+            headers.set_header("uifid", profile["uifid"])
+        return headers, profile
+
+    def _add_search_runtime_params(
+        self,
+        params: Params,
+        profile: dict,
+        *,
+        update_version_code: str | None = None,
+        version_code: str | None = None,
+        version_name: str | None = None,
+        include_capabilities: bool = True,
+    ) -> None:
+        """追加浏览器运行态参数。
+
+        这些值不在各搜索接口里写死，统一来自 get_douyin_browser_profile：
+        Cookie 中的 __druidClientInfo / stream_recommend_feed_params / UIFID / s_v_web_id
+        会优先覆盖默认值，避免 UA、屏幕、CPU、网络等指纹相互矛盾。
+        """
+        params.add_param("update_version_code", update_version_code or profile["update_version_code"])
+        params.add_param("pc_client_type", profile["pc_client_type"])
+        if include_capabilities:
+            params.add_param("pc_libra_divert", profile["pc_libra_divert"])
+            params.add_param("support_h265", profile["support_h265"])
+            params.add_param("support_dash", profile["support_dash"])
+        params.add_param("version_code", version_code or profile["version_code"])
+        params.add_param("version_name", version_name or profile["version_name"])
+        params.add_param("cookie_enabled", profile["cookie_enabled"])
+        params.add_param("screen_width", profile["screen_width"])
+        params.add_param("screen_height", profile["screen_height"])
+        params.add_param("browser_language", profile["browser_language"])
+        params.add_param("browser_platform", profile["browser_platform"])
+        params.add_param("browser_name", profile["browser_name"])
+        params.add_param("browser_version", profile["browser_version"])
+        params.add_param("browser_online", profile["browser_online"])
+        params.add_param("engine_name", profile["engine_name"])
+        params.add_param("engine_version", profile["engine_version"])
+        params.add_param("os_name", profile["os_name"])
+        params.add_param("os_version", profile["os_version"])
+        params.add_param("cpu_core_num", profile["cpu_core_num"])
+        params.add_param("device_memory", profile["device_memory"])
+        params.add_param("platform", profile["platform"])
+        params.add_param("downlink", profile["downlink"])
+        params.add_param("effective_type", profile["effective_type"])
+        params.add_param("round_trip_time", profile["round_trip_time"])
+
+    def _add_search_auth_params(
+        self,
+        params: Params,
+        refer: str,
+        profile: dict,
+        *,
+        include_verify_fp: bool = True,
+    ) -> None:
+        params.with_web_id(self.auth, refer)
+        if profile.get("uifid"):
+            params.add_param("uifid", profile["uifid"])
+        if include_verify_fp and profile.get("verifyFp"):
+            params.add_param("verifyFp", profile["verifyFp"])
+            params.add_param("fp", profile["fp"])
+        params.add_param("msToken", profile["msToken"])
+
+    @staticmethod
+    def _merge_search_stream_text(text: str) -> dict:
+        """合并综合搜索 stream 接口返回的多行 JSON。"""
+        chunks: list[dict] = []
+        for line in (text or "").splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                chunks.append(json.loads(line))
+            except json.JSONDecodeError:
+                logger.debug(f"忽略 stream 非法 JSON 行: {line[:120]}")
+
+        if not chunks:
+            # 有些情况下首屏 stream 也会直接返回单个 JSON。
+            return json.loads(text)
+
+        merged: dict = {"data": []}
+        for chunk in chunks:
+            if not isinstance(chunk, dict) or "status_code" not in chunk:
+                continue
+            merged["status_code"] = chunk.get("status_code")
+            for key in (
+                "qc",
+                "cursor",
+                "has_more",
+                "ad_info",
+                "extra",
+                "global_doodle_config",
+                "search_nil_info",
+                "input_keyword",
+            ):
+                if key in chunk:
+                    merged[key] = chunk.get(key)
+            if "log_pb" in chunk and "log_pb" not in merged:
+                merged["log_pb"] = chunk.get("log_pb")
+            data = chunk.get("data")
+            if isinstance(data, list):
+                merged["data"].extend(data)
+
+        return merged
+
+    async def _search_browser_fetch(
+        self,
+        api_url: str,
+        params: Params,
+        refer: str,
+        profile: dict,
+        *,
+        stream: bool = False,
+    ) -> dict:
+        """在真实抖音页面里 fetch 搜索接口，由页面 SDK 自动生成 a_bogus。"""
+        from app.utils.dy_util import splice_url
+
+        query = splice_url(params.get())
+        unsigned_url = f"{api_url}?{query}" if query else api_url
+        result = await get_browser_search_executor().fetch_text(unsigned_url, refer, self.auth, profile)
+
+        status = result.get("status")
+        content_type = result.get("contentType") or ""
+        text = result.get("text") or ""
+        bdturing = bool(result.get("bdturing"))
+
+        if status and int(status) >= 400:
+            preview = text[:300].replace("\n", " ")
+            raise ValueError(f"抖音搜索接口 HTTP {status}: {preview}")
+
+        if not text.strip():
+            if bdturing:
+                raise ValueError("抖音搜索接口触发 BDTuring 风控空响应，请稍后重试或更新 Cookie/降低搜索频率")
+            raise ValueError(f"抖音搜索接口返回空响应: status={status}, content-type={content_type}")
+
+        try:
+            data = self._merge_search_stream_text(text) if stream else json.loads(text)
+        except Exception as exc:
+            preview = text[:300].replace("\n", " ")
+            if bdturing:
+                raise ValueError(f"抖音搜索接口触发 BDTuring 风控响应: {preview}") from exc
+            raise ValueError(f"抖音搜索接口返回非 JSON 响应: status={status}, content-type={content_type}, body={preview}") from exc
+
+        if isinstance(data, dict) and self._is_search_verify_check(data):
+            raise ValueError(f"抖音搜索接口触发风控校验（verify_check）：{data.get('search_nil_info', {})}")
+        return data
+
+    def _build_signed_search_url(self, api_url: str, params: Params, refer: str, profile: dict) -> str:
+        """生成搜索接口完整 signed_url，并保证签名 URL 就是最终发送 URL。"""
+        from app.utils.dy_util import generate_bdm_signed_url, splice_url
+
+        query = splice_url(params.get())
+        unsigned_url = f"{api_url}?{query}" if query else api_url
+        return generate_bdm_signed_url(
+            unsigned_url,
+            user_agent=profile["user_agent"],
+            env=profile,
+            page_url=refer,
+        )
+
+    @staticmethod
+    def _normalize_search_count(count: int, default: int = 10, maximum: int = 50) -> int:
+        try:
+            value = int(count or default)
+        except (TypeError, ValueError):
+            value = default
+        return max(1, min(value, maximum))
+
     async def search_works(
         self,
         keyword: str,
         offset: str = "0",
         count: int = 25,
+        search_id: str = "",
         sort_type: str = "0",
         publish_time: str = "0",
         filter_duration: str = "",
         search_range: str = "",
         content_type: str = ""
     ) -> dict:
-        """搜索作品（单页模式）"""
+        """综合搜索：首屏走 stream，翻页走 single。"""
         import uuid
         import urllib.parse
 
-        api = "/aweme/v1/web/general/search/single/"
+        is_first_page = str(offset) == "0"
+        api = "/aweme/v1/web/general/search/stream/" if is_first_page else "/aweme/v1/web/general/search/single/"
         refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
+        headers, profile = self._build_search_headers(refer, accept="*/*" if is_first_page else None)
 
+        filters_active = any([
+            sort_type != "0",
+            publish_time != "0",
+            bool(filter_duration),
+            search_range not in ("", "0"),
+            content_type not in ("", "0"),
+        ])
         filter_selected = ('{"sort_type":"%s","publish_time":"%s","filter_duration":"%s",'
                            '"search_range":"%s","content_type":"%s"}') % (
                            sort_type, publish_time, filter_duration, search_range, content_type)
+        page_count = min(self._normalize_search_count(count, default=10), 10)
 
         params = Params()
         params.add_param("device_platform", "webapp")
@@ -489,64 +750,45 @@ class DouyinSpider(BaseSpider):
         params.add_param("channel", "channel_pc_web")
         params.add_param("search_channel", "aweme_general")
         params.add_param("enable_history", "1")
-        params.add_param("filter_selected", filter_selected)
+        if filters_active:
+            params.add_param("filter_selected", filter_selected)
         params.add_param("keyword", keyword)
-        params.add_param("search_source", "tab_search")
+        params.add_param("search_source", "normal_search")
         params.add_param("query_correct_type", "1")
-        params.add_param("is_filter_search", "1")
+        params.add_param("is_filter_search", "1" if filters_active else "0")
         params.add_param("from_group_id", "")
+        params.add_param("disable_rs", "0")
         params.add_param("offset", offset)
-        params.add_param("count", str(count))
-        params.add_param("need_filter_settings", "1" if offset == "0" else "0")
+        params.add_param("count", str(page_count))
+        params.add_param("need_filter_settings", "1" if is_first_page else "0")
         params.add_param("list_type", "single")
-        params.add_param("update_version_code", "170400")
-        params.add_param("pc_client_type", "1")
-        params.add_param("version_code", "190600")
-        params.add_param("version_name", "19.6.0")
-        params.add_param("cookie_enabled", "true")
-        params.add_param("screen_width", "1707")
-        params.add_param("screen_height", "960")
-        params.add_param("browser_language", "zh-CN")
-        params.add_param("browser_platform", "Win32")
-        params.add_param("browser_name", "Edge")
-        params.add_param("browser_version", "125.0.0.0")
-        params.add_param("browser_online", "true")
-        params.add_param("engine_name", "Blink")
-        params.add_param("engine_version", "125.0.0.0")
-        params.add_param("os_name", "Windows")
-        params.add_param("os_version", "10")
-        params.add_param("cpu_core_num", "32")
-        params.add_param("device_memory", "8")
-        params.add_param("platform", "PC")
-        params.add_param("downlink", "10")
-        params.add_param("effective_type", "4g")
-        params.add_param("round_trip_time", "50")
-        params.with_web_id(self.auth, refer)
-        params.add_param("msToken", self.auth.msToken)
-        params.with_a_bogus()
+        params.add_param("pc_search_top_1_params", '{"enable_ai_search_top_1":1}')
+        if search_id and not is_first_page:
+            params.add_param("search_id", search_id)
+        api_url = f"{self.BASE_URL}{api}"
+        self._add_search_runtime_params(params, profile)
+        self._add_search_auth_params(params, refer, profile)
 
-        headers = HeaderBuilder.build(HeaderType.GET)
-        headers.set_referer(refer)
-
-        logger.info(f"搜索作品请求: keyword={keyword}, offset={offset}")
-        data = await self._search_get(f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get())
+        logger.info(f"搜索作品请求: keyword={keyword}, offset={offset}, browser_fetch=1")
+        data = await self._search_browser_fetch(api_url, params, refer, profile, stream=is_first_page)
         logger.info(f"搜索响应: status_code={data.get('status_code')}, has_more={data.get('has_more')}")
 
         search_nil_info = data.get("search_nil_info", {})
-        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
-            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+        if self._is_search_verify_check(data):
+            raise ValueError(f"抖音搜索接口触发风控校验（verify_check）：{search_nil_info}")
 
         items = data.get("data", [])
         works = []
         for item in items:
-            aweme_info = item.get("aweme_info", item)
+            aweme_info = item.get("aweme_info") or (item if item.get("aweme_id") else None)
             if aweme_info:
                 works.append(self._parse_work_info(aweme_info))
 
         has_more = data.get("has_more") == 1
-        next_offset = str(int(offset) + len(items))
+        next_offset = str(data.get("cursor") or (int(offset) + page_count))
+        next_search_id = search_id or data.get("log_pb", {}).get("impr_id", "")
 
-        return {"items": works, "has_more": has_more, "next_offset": next_offset}
+        return {"items": works, "has_more": has_more, "next_offset": next_offset, "search_id": next_search_id}
 
     async def search_videos(
         self,
@@ -565,6 +807,8 @@ class DouyinSpider(BaseSpider):
 
         api = "/aweme/v1/web/search/item/"
         refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=video"
+        headers, profile = self._build_search_headers(refer)
+        page_count = self._normalize_search_count(count, default=25)
 
         params = Params()
         params.add_param("device_platform", "webapp")
@@ -582,119 +826,75 @@ class DouyinSpider(BaseSpider):
         params.add_param("is_filter_search", "1")
         params.add_param("from_group_id", "")
         params.add_param("offset", offset)
-        params.add_param("count", str(count))
+        params.add_param("count", str(page_count))
         params.add_param("need_filter_settings", "1" if offset == "0" else "0")
         if search_id:
             params.add_param("search_id", search_id)
         params.add_param("list_type", "single")
-        params.add_param("update_version_code", "170400")
-        params.add_param("pc_client_type", "1")
-        params.add_param("version_code", "170400")
-        params.add_param("version_name", "17.4.0")
-        params.add_param("cookie_enabled", "true")
-        params.add_param("screen_width", "1707")
-        params.add_param("screen_height", "960")
-        params.add_param("browser_language", "zh-CN")
-        params.add_param("browser_platform", "Win32")
-        params.add_param("browser_name", "Edge")
-        params.add_param("browser_version", "125.0.0.0")
-        params.add_param("browser_online", "true")
-        params.add_param("engine_name", "Blink")
-        params.add_param("engine_version", "125.0.0.0")
-        params.add_param("os_name", "Windows")
-        params.add_param("os_version", "10")
-        params.add_param("cpu_core_num", "32")
-        params.add_param("device_memory", "8")
-        params.add_param("platform", "PC")
-        params.add_param("downlink", "10")
-        params.add_param("effective_type", "4g")
-        params.add_param("round_trip_time", "50")
-        params.with_web_id(self.auth, refer)
-        params.add_param("msToken", self.auth.msToken)
-        params.with_a_bogus()
+        api_url = f"{self.BASE_URL}{api}"
+        self._add_search_runtime_params(params, profile)
+        self._add_search_auth_params(params, refer, profile)
 
-        headers = HeaderBuilder.build(HeaderType.GET)
-        headers.set_referer(refer)
-
-        logger.info(f"搜索视频请求: keyword={keyword}, offset={offset}")
-        data = await self._search_get(f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get())
+        logger.info(f"搜索视频请求: keyword={keyword}, offset={offset}, browser_fetch=1")
+        data = await self._search_browser_fetch(api_url, params, refer, profile)
 
         search_nil_info = data.get("search_nil_info", {})
-        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
-            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+        if self._is_search_verify_check(data):
+            raise ValueError(f"抖音视频搜索接口触发风控校验（verify_check）：{search_nil_info}")
 
         new_search_id = data.get("log_pb", {}).get("impr_id", search_id)
 
         items = data.get("data", [])
         works = []
         for item in items:
-            aweme_info = item.get("aweme_info", item)
+            aweme_info = item.get("aweme_info") or (item if item.get("aweme_id") else None)
             if aweme_info:
                 works.append(self._parse_work_info(aweme_info))
 
         has_more = data.get("has_more") == 1
-        next_offset = str(int(offset) + len(items))
+        next_offset = str(data.get("cursor") or (int(offset) + len(items)))
 
         return {"items": works, "has_more": has_more, "next_offset": next_offset, "search_id": new_search_id}
 
-    async def search_users(self, keyword: str, offset: str = "0", count: int = 25) -> dict:
+    async def search_users(self, keyword: str, offset: str = "0", count: int = 10, search_id: str = "") -> dict:
         """搜索用户（单页模式）"""
         import uuid
         import urllib.parse
 
-        api = "/aweme/v1/web/discover/search"
-        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
+        api = "/aweme/v1/web/discover/search/"
+        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=user"
+        headers, profile = self._build_search_headers(refer)
+        # 真实 Web 用户搜索分页固定 10 条；前端也按 10 条翻页，避免 offset/count 与 search_id 不一致。
+        page_count = min(self._normalize_search_count(count, default=10), 10)
 
         params = Params()
         params.add_param("device_platform", "webapp")
         params.add_param("aid", "6383")
         params.add_param("channel", "channel_pc_web")
         params.add_param("search_channel", "aweme_user_web")
-        params.add_param("search_filter_value", '{"douyin_user_fans":[""],"douyin_user_type":[""]}')
         params.add_param("keyword", keyword)
-        params.add_param("search_source", "switch_tab")
+        params.add_param("search_source", "normal_search")
         params.add_param("query_correct_type", "1")
-        params.add_param("is_filter_search", "1")
+        params.add_param("is_filter_search", "0")
+        params.add_param("from_group_id", "")
+        params.add_param("disable_rs", "0")
         params.add_param("offset", offset)
-        params.add_param("count", str(count))
+        params.add_param("count", str(page_count))
         params.add_param("need_filter_settings", "1" if offset == "0" else "0")
         params.add_param("list_type", "single")
-        params.add_param("update_version_code", "170400")
-        params.add_param("pc_client_type", "1")
-        params.add_param("version_code", "190600")
-        params.add_param("version_name", "19.6.0")
-        params.add_param("cookie_enabled", "true")
-        params.add_param("screen_width", "1707")
-        params.add_param("screen_height", "960")
-        params.add_param("browser_language", "zh-CN")
-        params.add_param("browser_platform", "Win32")
-        params.add_param("browser_name", "Edge")
-        params.add_param("browser_version", "125.0.0.0")
-        params.add_param("browser_online", "true")
-        params.add_param("engine_name", "Blink")
-        params.add_param("engine_version", "125.0.0.0")
-        params.add_param("os_name", "Windows")
-        params.add_param("os_version", "10")
-        params.add_param("cpu_core_num", "32")
-        params.add_param("device_memory", "8")
-        params.add_param("platform", "PC")
-        params.add_param("downlink", "10")
-        params.add_param("effective_type", "4g")
-        params.add_param("round_trip_time", "50")
-        params.with_web_id(self.auth, refer)
-        params.add_param("msToken", self.auth.msToken)
-        params.with_a_bogus()
+        params.add_param("pc_search_top_1_params", '{"enable_ai_search_top_1":1}')
+        if search_id and str(offset) != "0":
+            params.add_param("search_id", search_id)
+        api_url = f"{self.BASE_URL}{api}"
+        self._add_search_runtime_params(params, profile)
+        self._add_search_auth_params(params, refer, profile)
 
-        headers = HeaderBuilder.build(HeaderType.GET)
-        headers.set_referer(refer)
-
-        logger.info(f"搜索用户请求: keyword={keyword}, offset={offset}")
-        response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
-        data = self._safe_json_parse(response)
+        logger.info(f"搜索用户请求: keyword={keyword}, offset={offset}, browser_fetch=1")
+        data = await self._search_browser_fetch(api_url, params, refer, profile)
 
         search_nil_info = data.get("search_nil_info", {})
-        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
-            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+        if self._is_search_verify_check(data):
+            raise ValueError(f"抖音用户搜索接口触发风控校验（verify_check）：{search_nil_info}")
 
         user_list = data.get("user_list", [])
         users = []
@@ -703,10 +903,11 @@ class DouyinSpider(BaseSpider):
             users.append(self._parse_user_info(user_info))
 
         has_more = data.get("has_more") == 1
-        next_offset = str(int(offset) + len(user_list))
+        next_offset = str(data.get("cursor") or (int(offset) + len(user_list)))
+        next_search_id = search_id or data.get("log_pb", {}).get("impr_id", "")
 
-        return {"items": users, "has_more": has_more, "next_offset": next_offset}
-    
+        return {"items": users, "has_more": has_more, "next_offset": next_offset, "search_id": next_search_id}
+
     async def search_live(self, keyword: str, offset: str = "0", count: int = 25) -> dict:
         """搜索直播（单页模式）"""
         import uuid
@@ -714,6 +915,8 @@ class DouyinSpider(BaseSpider):
 
         api = "/aweme/v1/web/live/search/"
         refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=live"
+        headers, profile = self._build_search_headers(refer)
+        page_count = self._normalize_search_count(count, default=25)
 
         params = Params()
         params.add_param("device_platform", "webapp")
@@ -726,45 +929,19 @@ class DouyinSpider(BaseSpider):
         params.add_param("is_filter_search", "0")
         params.add_param("from_group_id", "")
         params.add_param("offset", offset)
-        params.add_param("count", str(count))
+        params.add_param("count", str(page_count))
         params.add_param("need_filter_settings", "1" if offset == "0" else "0")
         params.add_param("list_type", "single")
-        params.add_param("update_version_code", "170400")
-        params.add_param("pc_client_type", "1")
-        params.add_param("version_code", "190600")
-        params.add_param("version_name", "19.6.0")
-        params.add_param("cookie_enabled", "true")
-        params.add_param("screen_width", "1707")
-        params.add_param("screen_height", "960")
-        params.add_param("browser_language", "zh-CN")
-        params.add_param("browser_platform", "Win32")
-        params.add_param("browser_name", "Edge")
-        params.add_param("browser_version", "125.0.0.0")
-        params.add_param("browser_online", "true")
-        params.add_param("engine_name", "Blink")
-        params.add_param("engine_version", "125.0.0.0")
-        params.add_param("os_name", "Windows")
-        params.add_param("os_version", "10")
-        params.add_param("cpu_core_num", "32")
-        params.add_param("device_memory", "8")
-        params.add_param("platform", "PC")
-        params.add_param("downlink", "10")
-        params.add_param("effective_type", "4g")
-        params.add_param("round_trip_time", "50")
-        params.with_web_id(self.auth, refer)
-        params.add_param("msToken", self.auth.msToken)
-        params.with_a_bogus()
+        api_url = f"{self.BASE_URL}{api}"
+        self._add_search_runtime_params(params, profile)
+        self._add_search_auth_params(params, refer, profile)
 
-        headers = HeaderBuilder.build(HeaderType.GET)
-        headers.set_referer(refer)
-
-        logger.info(f"搜索直播请求: keyword={keyword}, offset={offset}")
-        response = await self.request("GET", f"{self.BASE_URL}{api}", params=params.get(), headers=headers.get(), cookies=self.auth.cookie)
-        data = self._safe_json_parse(response)
+        logger.info(f"搜索直播请求: keyword={keyword}, offset={offset}, browser_fetch=1")
+        data = await self._search_browser_fetch(api_url, params, refer, profile)
 
         search_nil_info = data.get("search_nil_info", {})
-        if search_nil_info and search_nil_info.get("search_nil_type") == "verify_check":
-            raise ValueError("抖音需要验证码验证，请在浏览器中访问抖音网站完成验证后更新Cookie配置")
+        if self._is_search_verify_check(data):
+            raise ValueError(f"抖音直播搜索接口触发风控校验（verify_check）：{search_nil_info}")
 
         live_list = data.get("data", [])
         if not live_list:
@@ -792,7 +969,7 @@ class DouyinSpider(BaseSpider):
                 lives.append(live_info)
 
         has_more = data.get("has_more") == 1
-        next_offset = str(int(offset) + len(live_list))
+        next_offset = str(data.get("cursor") or (int(offset) + len(live_list)))
 
         return {"items": lives, "has_more": has_more, "next_offset": next_offset}
     

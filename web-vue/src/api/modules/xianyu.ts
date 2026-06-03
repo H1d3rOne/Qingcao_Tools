@@ -123,12 +123,12 @@ export interface XianyuMonitorTaskUpdate {
 
 export interface XianyuUserProfile {
   display_name: string
-  avatar: string
-  sold_count: number
-  purchase_count: number
-  followers: number
-  following: number
-  collection_count: number
+  avatar?: string
+  sold_count?: number
+  purchase_count?: number
+  followers?: number
+  following?: number
+  collection_count?: number
 }
 
 export interface XianyuDetailAttribute {
@@ -230,12 +230,25 @@ export interface XianyuDeliveryRule {
   enabled: boolean
   item_id: string
   keyword: string
-  match_mode: string
+  match_mode: 'item_id' | 'keyword'
+  match_value?: string
   delivery_text: string
   send_chat_text: boolean
   send_dummy_ship: boolean
   created_at: number
   updated_at: number
+}
+
+export interface XianyuDeliveryRulePayload {
+  name: string
+  match_mode: 'item_id' | 'keyword'
+  match_value?: string
+  item_id?: string
+  keyword?: string
+  enabled?: boolean
+  delivery_text: string
+  send_chat_text: boolean
+  send_dummy_ship: boolean
 }
 
 export interface XianyuDeliveryExecutionRecord {
@@ -610,11 +623,11 @@ export function listXianyuDeliveryRules() {
   return request.get<ApiResponse<XianyuDeliveryRule[]>>('/xianyu/manage/delivery-rules')
 }
 
-export function createXianyuDeliveryRule(payload: Omit<XianyuDeliveryRule, 'id' | 'created_at' | 'updated_at'>) {
+export function createXianyuDeliveryRule(payload: XianyuDeliveryRulePayload) {
   return request.post<ApiResponse<XianyuDeliveryRule>>('/xianyu/manage/delivery-rules', payload)
 }
 
-export function updateXianyuDeliveryRule(ruleId: string, payload: Partial<Omit<XianyuDeliveryRule, 'id' | 'created_at' | 'updated_at'>>) {
+export function updateXianyuDeliveryRule(ruleId: string, payload: Partial<XianyuDeliveryRulePayload>) {
   return request.put<ApiResponse<XianyuDeliveryRule>>(`/xianyu/manage/delivery-rules/${ruleId}`, payload)
 }
 

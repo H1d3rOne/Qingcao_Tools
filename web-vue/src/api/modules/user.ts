@@ -1,4 +1,5 @@
 import { request } from '../request'
+import type { VideoQuality } from './video'
 
 // API 响应类型
 interface ApiResponse<T = any> {
@@ -26,15 +27,9 @@ export interface UserInfo {
   following_count: number
   aweme_count: number
   favoriting_count: number
+  is_verify?: number
+  verify_info?: string
   unique_id: string
-}
-
-// 视频质量选项
-export interface VideoQuality {
-  quality_type: number  // 质量类型: 24=标清, 10=高清, 1=超清, 7=2K
-  url: string
-  width?: number
-  height?: number
 }
 
 // 用户作品
@@ -47,6 +42,10 @@ export interface UserWork {
   share_count: number
   play_count: number
   cover_url: string  // 封面URL
+  cover?: {
+    url_list: string[]
+    uri?: string
+  }
   video_url?: string // 视频URL
   video_qualities?: Record<string, VideoQuality>  // 不同清晰度的视频链接
   images?: string[]  // 图集
@@ -55,11 +54,13 @@ export interface UserWork {
 }
 
 // 作品列表响应
-interface UserWorksResponse {
+export interface UserWorksResponse {
   data: UserWork[]
   has_more: boolean
   cursor: number
 }
+
+export type UserWorksPayload = UserWork[] | UserWorksResponse
 
 // 获取用户信息（通过 URL）
 export function getUserInfo(url: string) {
@@ -78,7 +79,7 @@ export function getUserWorks(url: string, limit = 20) {
 
 // 获取用户作品列表（通过 sec_uid）- store 使用
 export function getUserVideos(params: { sec_uid: string; cursor?: number; count?: number }) {
-  return request.post<ApiResponse<UserWork[]>>('/douyin/user/works', params)
+  return request.post<ApiResponse<UserWorksPayload>>('/douyin/user/works', params)
 }
 
 // 获取用户喜欢列表 - store 使用

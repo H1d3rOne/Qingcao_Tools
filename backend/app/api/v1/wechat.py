@@ -8,9 +8,12 @@ from app.modules.wechat import (
     DownloadWechatVideoRequest,
     ListenerStatus,
     QueueWechatDownloadRequest,
+    UpdateWechatProxyConfigRequest,
     UpdateWechatDownloadDirRequest,
+    WechatCertificateStatus,
     WechatDownloadTaskItem,
     WechatDownloadTaskListResponse,
+    WechatProxyConfig,
     WechatService,
     WechatVideoListResponse,
 )
@@ -41,6 +44,45 @@ async def get_listener_status(service: WechatService = Depends(get_wechat_servic
     try:
         status = await service.get_listener_status()
         return ApiResponse(data=status)
+    except Exception as exc:
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/config", response_model=ApiResponse[WechatProxyConfig])
+async def get_proxy_config(service: WechatService = Depends(get_wechat_service)):
+    try:
+        config = await service.get_proxy_config()
+        return ApiResponse(data=config)
+    except Exception as exc:
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/config", response_model=ApiResponse[WechatProxyConfig])
+async def update_proxy_config(
+    request: UpdateWechatProxyConfigRequest,
+    service: WechatService = Depends(get_wechat_service),
+):
+    try:
+        config = await service.update_proxy_config(request.proxy_port, request.local_server_port)
+        return ApiResponse(data=config, message="端口配置已保存")
+    except Exception as exc:
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.get("/certificate/status", response_model=ApiResponse[WechatCertificateStatus])
+async def get_certificate_status(service: WechatService = Depends(get_wechat_service)):
+    try:
+        status = await service.get_certificate_status()
+        return ApiResponse(data=status)
+    except Exception as exc:
+        return ApiResponse(success=False, error=str(exc))
+
+
+@router.post("/certificate/install", response_model=ApiResponse[WechatCertificateStatus])
+async def install_certificate(service: WechatService = Depends(get_wechat_service)):
+    try:
+        status = await service.install_certificate()
+        return ApiResponse(data=status, message=status.message or "证书安装完成")
     except Exception as exc:
         return ApiResponse(success=False, error=str(exc))
 

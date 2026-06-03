@@ -1,7 +1,9 @@
 PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 8090
 LOCAL_SERVER_HOST = "127.0.0.1"
-LOCAL_SERVER_PORT = 3121
+# 后端 API 默认占用 3121，本地接收服务默认错开，避免抢占 /api 端口。
+LOCAL_SERVER_PORT = 3122
+MITMPROXY_CERT_BASENAME = "mitmproxy"
 
 
 def to_size(size) -> str:

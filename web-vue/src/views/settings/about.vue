@@ -1,8 +1,8 @@
 <script setup lang="ts">
 const appInfo = {
   name: '青草工具箱',
-  version: '1.0.0',
-  author: '青草团队',
+  version: '2.0.0',
+  author: 'H1d3rOne',
   description: '一款集成多种实用工具的工具箱应用，目前支持抖音解析、夸克网盘等功能。',
   features: [
     '抖音视频/用户/直播数据解析',
@@ -98,12 +98,16 @@ const appInfo = {
       <p>© 2024 {{ appInfo.author }}. All rights reserved.</p>
       <p class="mt-1">
         <a
-          href="#"
+          href="https://github.com/H1d3rOne/Qingcao_Tools"
+          target="_blank"
+          rel="noopener noreferrer"
           class="text-emerald-400 hover:text-emerald-300"
         >GitHub</a>
         <span class="mx-2">|</span>
         <a
-          href="#"
+          href="https://github.com/H1d3rOne/Qingcao_Tools/issues"
+          target="_blank"
+          rel="noopener noreferrer"
           class="text-emerald-400 hover:text-emerald-300"
         >问题反馈</a>
       </p>

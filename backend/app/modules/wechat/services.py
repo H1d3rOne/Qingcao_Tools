@@ -4,6 +4,7 @@ import certifi
 import json
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import threading
@@ -14,12 +15,21 @@ from typing import Callable, Dict, List, Optional, Union
 import requests
 import urllib3
 
-from app.modules.wechat.constants import LOCAL_SERVER_PORT, PROXY_HOST, PROXY_PORT, to_size
+from app.modules.wechat.constants import (
+    LOCAL_SERVER_HOST,
+    LOCAL_SERVER_PORT,
+    MITMPROXY_CERT_BASENAME,
+    PROXY_HOST,
+    PROXY_PORT,
+    to_size,
+)
 from app.modules.wechat.local_server import LocalVideoServer
 from app.modules.wechat.schemas import (
     ListenerStatus,
+    WechatCertificateStatus,
     WechatDownloadTaskItem,
     WechatDownloadTaskListResponse,
+    WechatProxyConfig,
     WechatVideoItem,
     WechatVideoListResponse,
 )
@@ -41,6 +51,10 @@ class WechatService:
         self.video_store_path = self.data_dir / "wechat_videos.jsonl"
         self.task_store_path = self.data_dir / "wechat_download_tasks.json"
         self.settings_store_path = self.data_dir / "wechat_settings.json"
+        self.proxy_host = PROXY_HOST
+        self.proxy_port = PROXY_PORT
+        self.local_server_host = LOCAL_SERVER_HOST
+        self.local_server_port = LOCAL_SERVER_PORT
 
         self._lock = threading.Lock()
         self._videos: Dict[str, dict] = {}
@@ -51,8 +65,8 @@ class WechatService:
         self._task_processing = False
         self._cancel_requests: set[str] = set()
 
-        self.local_server = LocalVideoServer("127.0.0.1", LOCAL_SERVER_PORT, self._ingest_video_payload)
         self._load_settings_from_store()
+        self.local_server = self._create_local_server()
         self._load_tasks_from_store()
         atexit.register(self.shutdown)
 
@@ -64,6 +78,18 @@ class WechatService:
 
     async def get_listener_status(self) -> ListenerStatus:
         return self.get_status()
+
+    async def get_proxy_config(self) -> WechatProxyConfig:
+        return self.get_config()
+
+    async def update_proxy_config(self, proxy_port: int, local_server_port: int) -> WechatProxyConfig:
+        return await asyncio.to_thread(self._update_proxy_config_sync, proxy_port, local_server_port)
+
+    async def get_certificate_status(self) -> WechatCertificateStatus:
+        return await asyncio.to_thread(self._get_certificate_status_sync)
+
+    async def install_certificate(self) -> WechatCertificateStatus:
+        return await asyncio.to_thread(self._install_certificate_sync)
 
     async def get_video_list(self) -> WechatVideoListResponse:
         items = [WechatVideoItem(**item) for item in self.list_videos()]
@@ -117,12 +143,20 @@ class WechatService:
             proxy_running=bool(controller and controller.is_running),
             local_server_running=self.local_server.is_running,
             system_proxy_enabled=bool(controller and controller.system_proxy_enabled),
-            proxy_host=PROXY_HOST,
-            proxy_port=PROXY_PORT,
-            local_server_port=LOCAL_SERVER_PORT,
+            proxy_host=self.proxy_host,
+            proxy_port=self.proxy_port,
+            local_server_port=self.local_server_port,
             video_count=video_count,
             download_dir=str(self.download_dir),
             last_error=self._last_error or (controller.last_error if controller else None),
+        )
+
+    def get_config(self) -> WechatProxyConfig:
+        return WechatProxyConfig(
+            proxy_host=self.proxy_host,
+            proxy_port=self.proxy_port,
+            local_server_host=self.local_server_host,
+            local_server_port=self.local_server_port,
         )
 
     def list_videos(self) -> List[dict]:
@@ -189,6 +223,215 @@ class WechatService:
         if not selected_path:
             return self.get_status(), False
         return self._set_download_dir_sync(selected_path), True
+
+    def _update_proxy_config_sync(self, proxy_port: int, local_server_port: int) -> WechatProxyConfig:
+        proxy_port = self._coerce_port(proxy_port, 0)
+        local_server_port = self._coerce_port(local_server_port, 0)
+        if not proxy_port or not local_server_port:
+            raise ValueError("端口必须在 1-65535 之间")
+        if proxy_port == local_server_port:
+            raise ValueError("mitm 代理端口不能和本地接收端口相同")
+        if self.local_server.is_running or (self.proxy_controller and self.proxy_controller.is_running):
+            raise ValueError("请先关闭监听，再修改端口配置")
+
+        with self._lock:
+            self.proxy_port = proxy_port
+            self.local_server_port = local_server_port
+            self.local_server = self._create_local_server()
+            self.proxy_controller = None
+            self._persist_settings_locked()
+
+        return self.get_config()
+
+    def _mitmproxy_cert_dir(self) -> Path:
+        return Path.home() / ".mitmproxy"
+
+    def _mitmproxy_ca_cert_path(self) -> Path:
+        return self._mitmproxy_cert_dir() / f"{MITMPROXY_CERT_BASENAME}-ca-cert.cer"
+
+    def _ensure_mitmproxy_certificate(self) -> Path:
+        cert_path = self._mitmproxy_ca_cert_path()
+        if cert_path.exists():
+            return cert_path
+
+        try:
+            from mitmproxy import certs
+
+            certs.CertStore.create_store(
+                self._mitmproxy_cert_dir(),
+                MITMPROXY_CERT_BASENAME,
+                2048,
+                organization=MITMPROXY_CERT_BASENAME,
+                cn=MITMPROXY_CERT_BASENAME,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"生成 mitmproxy CA 证书失败: {exc}") from exc
+
+        if not cert_path.exists():
+            raise RuntimeError("mitmproxy CA 证书生成失败，未找到证书文件")
+        return cert_path
+
+    def _is_certificate_trusted(self, cert_path: Path) -> bool:
+        system = platform.system()
+        if not cert_path.exists():
+            return False
+
+        if system == "Darwin":
+            result = subprocess.run(
+                ["security", "verify-cert", "-c", str(cert_path), "-p", "ssl"],
+                capture_output=True,
+                text=True,
+            )
+            return result.returncode == 0
+
+        if system == "Windows":
+            thumbprint = self._certificate_thumbprint_sha1(cert_path)
+            if not thumbprint:
+                return False
+            return self._windows_cert_store_has_thumbprint(thumbprint)
+
+        return False
+
+    def _certificate_thumbprint_sha1(self, cert_path: Path) -> str:
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.primitives import hashes
+
+            raw = cert_path.read_bytes()
+            try:
+                cert = x509.load_pem_x509_certificate(raw)
+            except ValueError:
+                cert = x509.load_der_x509_certificate(raw)
+            return cert.fingerprint(hashes.SHA1()).hex().upper()
+        except Exception:
+            return ""
+
+    def _windows_cert_store_has_thumbprint(self, thumbprint: str) -> bool:
+        script = (
+            "$thumb = '" + thumbprint + "'; "
+            "$stores = @('Cert:\\CurrentUser\\Root', 'Cert:\\LocalMachine\\Root'); "
+            "$found = $false; "
+            "foreach ($store in $stores) { "
+            "  $cert = Get-ChildItem -Path $store -ErrorAction SilentlyContinue | "
+            "    Where-Object { $_.Thumbprint -eq $thumb } | Select-Object -First 1; "
+            "  if ($cert) { $found = $true; break } "
+            "} "
+            "if ($found) { exit 0 } else { exit 1 }"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+
+    def _macos_login_keychain_path(self) -> Path:
+        candidates = [
+            Path.home() / "Library/Keychains/login.keychain-db",
+            Path.home() / "Library/Keychains/login.keychain",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[0]
+
+    def _get_certificate_status_sync(self, message: str = "") -> WechatCertificateStatus:
+        cert_path = self._mitmproxy_ca_cert_path()
+        system = platform.system()
+        architecture = platform.machine() or ""
+        supported = system in {"Darwin", "Windows"}
+        exists = cert_path.exists()
+        trusted = self._is_certificate_trusted(cert_path) if exists else False
+
+        if not message:
+            if not supported:
+                message = "当前系统暂不支持自动安装，请手动信任 mitmproxy CA 证书"
+            elif not exists:
+                message = "未生成 mitmproxy CA 证书，可点击安装自动生成"
+            elif trusted:
+                message = "证书已安装并信任"
+            else:
+                message = "证书文件已生成，但尚未被系统信任"
+
+        return WechatCertificateStatus(
+            platform=system,
+            architecture=architecture,
+            supported=supported,
+            certificate_exists=exists,
+            trusted=trusted,
+            certificate_path=str(cert_path),
+            message=message,
+        )
+
+    def _install_certificate_sync(self) -> WechatCertificateStatus:
+        cert_path = self._ensure_mitmproxy_certificate()
+        system = platform.system()
+
+        if self._is_certificate_trusted(cert_path):
+            return self._get_certificate_status_sync("证书已安装并信任")
+
+        if system == "Darwin":
+            login_keychain = self._macos_login_keychain_path()
+            user_command = [
+                "security",
+                "add-trusted-cert",
+                "-r",
+                "trustRoot",
+                "-p",
+                "ssl",
+                "-k",
+                str(login_keychain),
+                str(cert_path),
+            ]
+            result = subprocess.run(user_command, capture_output=True, text=True)
+            if result.returncode == 0:
+                return self._get_certificate_status_sync("证书已安装到登录钥匙串，请重启浏览器或重新打开视频号页面")
+
+            command = [
+                "security",
+                "add-trusted-cert",
+                "-d",
+                "-r",
+                "trustRoot",
+                "-p",
+                "ssl",
+                "-k",
+                "/Library/Keychains/System.keychain",
+                str(cert_path),
+            ]
+            result = subprocess.run(command, capture_output=True, text=True)
+            if result.returncode != 0:
+                joined_cmd = " ".join(shlex.quote(part) for part in command)
+                escaped = joined_cmd.replace("\\", "\\\\").replace('"', '\\"')
+                result = subprocess.run(
+                    ["osascript", "-e", f'do shell script "{escaped}" with administrator privileges'],
+                    capture_output=True,
+                    text=True,
+                )
+            if result.returncode != 0:
+                user_error = (result.stderr or result.stdout or "").strip()
+                system_error = (result.stderr or result.stdout or "").strip()
+                error_text = system_error or user_error or "安装证书失败"
+                if "no user interaction was possible" in error_text.lower():
+                    error_text = (
+                        "后台进程无法弹出管理员授权窗口。已尝试安装到登录钥匙串但未成功，"
+                        f"请手动打开证书文件并设置为始终信任：{cert_path}"
+                    )
+                raise RuntimeError(error_text)
+            return self._get_certificate_status_sync("证书安装完成，请重启浏览器或重新打开视频号页面")
+
+        if system == "Windows":
+            result = subprocess.run(
+                ["certutil", "-user", "-addstore", "-f", "Root", str(cert_path)],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                error_text = (result.stderr or result.stdout or "安装证书失败").strip()
+                raise RuntimeError(error_text)
+            return self._get_certificate_status_sync("证书已安装到当前用户 Root 证书库，请重启浏览器或重新打开视频号页面")
+
+        raise RuntimeError("当前系统暂不支持自动安装，请手动信任 mitmproxy CA 证书")
 
     def _open_directory_picker_sync(self) -> Optional[str]:
         system = platform.system()
@@ -262,15 +505,27 @@ class WechatService:
         except Exception:
             pass
 
+    def _create_local_server(self) -> LocalVideoServer:
+        return LocalVideoServer(self.local_server_host, self.local_server_port, self._ingest_video_payload)
+
     def _get_proxy_controller(self):
         if self.proxy_controller is None:
             from app.modules.wechat.proxy_server import ProxyController
-            self.proxy_controller = ProxyController()
+            self.proxy_controller = ProxyController(
+                proxy_host=self.proxy_host,
+                proxy_port=self.proxy_port,
+                local_server_host=self.local_server_host,
+                local_server_port=self.local_server_port,
+            )
         return self.proxy_controller
 
     def _start_listener_sync(self) -> ListenerStatus:
         self.clear_videos()
         self._last_error = None
+        if self.proxy_port == self.local_server_port:
+            raise ValueError("mitm 代理端口不能和本地接收端口相同")
+        if not self.local_server or self.local_server.port != self.local_server_port:
+            self.local_server = self._create_local_server()
         self.local_server.start()
         try:
             self._get_proxy_controller().start()
@@ -355,7 +610,14 @@ class WechatService:
             self.download_dir = self.data_dir
             return
 
-        path = (payload or {}).get("download_dir")
+        payload = payload or {}
+        self.proxy_port = self._coerce_port(payload.get("proxy_port"), PROXY_PORT)
+        self.local_server_port = self._coerce_port(payload.get("local_server_port"), LOCAL_SERVER_PORT)
+        if self.proxy_port == self.local_server_port:
+            self.proxy_port = PROXY_PORT
+            self.local_server_port = LOCAL_SERVER_PORT
+
+        path = payload.get("download_dir")
         if not path:
             self.download_dir = self.data_dir
             return
@@ -401,9 +663,22 @@ class WechatService:
 
     def _persist_settings_locked(self) -> None:
         temp_path = self.settings_store_path.with_suffix(".tmp")
-        payload = {"download_dir": str(self.download_dir)}
+        payload = {
+            "download_dir": str(self.download_dir),
+            "proxy_port": self.proxy_port,
+            "local_server_port": self.local_server_port,
+        }
         temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         temp_path.replace(self.settings_store_path)
+
+    def _coerce_port(self, value, fallback: int) -> int:
+        try:
+            port = int(value)
+        except (TypeError, ValueError):
+            return fallback
+        if port < 1 or port > 65535:
+            return fallback
+        return port
 
     def _persist_tasks_locked(self) -> None:
         items = sorted(self._tasks.values(), key=lambda item: item.get("created_at", 0), reverse=True)
