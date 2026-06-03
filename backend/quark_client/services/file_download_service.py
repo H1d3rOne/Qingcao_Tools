@@ -359,7 +359,7 @@ if __name__ == "__main__":
         print("\n❌ 未找到有效的 cookies")
         print("\n请先登录:")
         print("  1. 启动后端服务: cd backend && uvicorn app.main:app --reload")
-        print("  2. 讨问 http://localhost:3121 进行登录")
+        print("  2. 讨问 http://localhost:8000 进行登录")
         print("  3. 登录成功后再运行此测试")
         sys.exit(1)
     

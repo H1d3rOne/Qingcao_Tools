@@ -22,32 +22,10 @@ class ListenerStatus(BaseModel):
     system_proxy_enabled: bool = Field(default=False, description="系统代理是否已开启")
     proxy_host: str = Field(default="127.0.0.1")
     proxy_port: int = Field(default=8090)
-    local_server_port: int = Field(default=3122)
+    local_server_port: int = Field(default=8000)
     video_count: int = Field(default=0)
     download_dir: str = Field(default="")
     last_error: Optional[str] = Field(default=None)
-
-
-class WechatProxyConfig(BaseModel):
-    proxy_host: str = Field(default="127.0.0.1", description="mitm 代理监听地址")
-    proxy_port: int = Field(default=8090, ge=1, le=65535, description="mitm 代理端口")
-    local_server_host: str = Field(default="127.0.0.1", description="本地接收服务监听地址")
-    local_server_port: int = Field(default=3122, ge=1, le=65535, description="本地接收服务端口")
-
-
-class UpdateWechatProxyConfigRequest(BaseModel):
-    proxy_port: int = Field(..., ge=1, le=65535, description="mitm 代理端口")
-    local_server_port: int = Field(..., ge=1, le=65535, description="本地接收服务端口")
-
-
-class WechatCertificateStatus(BaseModel):
-    platform: str = Field(default="", description="当前系统")
-    architecture: str = Field(default="", description="系统架构")
-    supported: bool = Field(default=False, description="是否支持自动检测/安装")
-    certificate_exists: bool = Field(default=False, description="mitmproxy CA 文件是否存在")
-    trusted: bool = Field(default=False, description="证书是否已被系统信任")
-    certificate_path: str = Field(default="", description="证书文件路径")
-    message: str = Field(default="", description="状态说明")
 
 
 class WechatVideoListResponse(BaseModel):

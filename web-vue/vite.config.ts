@@ -24,13 +24,13 @@ export default defineConfig({
     }
   },
   server: {
-    port: 3120,
+    port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:3121',
+        target: 'http://localhost:5000',
         changeOrigin: true,
-        timeout: 300000,
-        ws: true,
+        timeout: 300000,  // 5分钟超时，用于 SSE 长连接
+        ws: true,  // 启用 WebSocket 代理
       }
     }
   }
