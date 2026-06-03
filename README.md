@@ -117,12 +117,26 @@ chmod +x start.sh
 
 `start.sh` 会自动完成：
 
-1. 停止已有的 `3120` / `3121` 端口服务；
-2. 初始化 `backend/config/` 运行态配置；
-3. 创建或复用后端虚拟环境；
-4. 补全后端依赖；
-5. 启动后端 `http://localhost:3121`；
-6. 启动前端 `http://localhost:3120`。
+1. 显示当前版本号；
+2. 停止已有的 `3120` / `3121` 端口服务；
+3. 初始化 `backend/config/` 运行态配置；
+4. 兼容迁移旧目录 `backend/app/config/config.yaml`；
+5. 从 `backend/config.example/` 补齐缺失的本地配置模板；
+6. 自动设置 `QINGCAO_CONFIG_DIR`、`XIANYU_CONFIG_DIR`、`QUARK_CONFIG_DIR`；
+7. 创建或复用后端虚拟环境 `.venv` / `venv`；
+8. 检测并补全后端依赖；
+9. 启动后端 `http://localhost:3121`，并通过日志/健康检查确认服务可用；
+10. 使用 `pnpm` 或 `npm` 安装前端依赖并启动前端 `http://localhost:3120`；
+11. 输出前端、后端、Swagger、ReDoc 地址以及日志文件路径。
+
+启动日志默认写入：
+
+```text
+/tmp/qingcao-backend.log
+/tmp/qingcao-frontend.log
+```
+
+如果后端启动失败，脚本会直接打印最近的后端日志，便于定位依赖、端口或配置问题。
 
 ### 方式二：手动启动
 
