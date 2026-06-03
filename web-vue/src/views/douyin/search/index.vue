@@ -8,7 +8,7 @@ import { usePagination } from '@/composables'
 import UserCard from '@/components/business/UserCard.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import type { User, SearchParams } from '@/types/api'
+import type { User, Author, SearchParams } from '@/types/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -55,7 +55,7 @@ async function handleLoadMore() {
   await loadMore({ keyword: keyword.value })
 }
 
-function handleUserClick(user: User) {
+function handleUserClick(user: User | Author) {
   router.push(`/user/${user.sec_uid}`)
 }
 </script>

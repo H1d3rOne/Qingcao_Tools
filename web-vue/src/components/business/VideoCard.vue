@@ -15,7 +15,12 @@ const emit = defineEmits<{
   download: [video: Video]
 }>()
 
-const coverUrl = computed(() => props.video.cover?.url_list?.[0] || '')
+const coverUrl = computed(() => {
+  if (typeof props.video.cover === 'string') {
+    return props.video.cover
+  }
+  return props.video.cover?.url_list?.[0] || props.video.cover_url || ''
+})
 const authorAvatar = computed(() => props.video.author?.avatar)
 const duration = computed(() => props.video.video?.duration || props.video.duration)
 

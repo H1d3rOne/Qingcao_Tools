@@ -13,10 +13,12 @@ export interface SearchVideo {
   aweme_id: string
   title: string
   desc: string
+  author?: string
   author_uid: string
   author_nickname: string
   author_avatar: string
   author_sec_uid: string
+  cover?: string
   cover_url: string
   video_url: string | null
   video_qualities?: Record<string, {
@@ -76,6 +78,7 @@ export interface SearchLive {
 // 分页搜索结果
 interface SearchPageResult<T> {
   keyword: string
+  data?: T[]
   items: T[]
   has_more: boolean
   next_offset: string
@@ -87,6 +90,7 @@ export function searchVideos(params: {
   keyword: string
   offset?: string
   count?: number
+  search_id?: string
   sort_type?: string
   publish_time?: string
   filter_duration?: string
@@ -111,7 +115,14 @@ export function searchVideoSearch(params: {
 }
 
 // 搜索用户
-export function searchUsers(params: { keyword: string; offset?: string; count?: number }) {
+export function searchUsers(params: {
+  keyword: string
+  offset?: string
+  cursor?: number
+  count?: number
+  limit?: number
+  search_id?: string
+}) {
   return request.post<ApiResponse<SearchPageResult<SearchUser>>>('/douyin/search/user', params)
 }
 

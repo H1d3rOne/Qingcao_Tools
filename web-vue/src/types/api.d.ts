@@ -18,13 +18,13 @@ export interface Video {
   aweme_id: string
   desc: string
   create_time: number
-  cover?: Cover
+  cover?: Cover | string
   cover_url?: string  // 后端返回的封面URL
   video?: VideoInfo
   video_url?: string  // 后端返回的视频URL
   video_qualities?: Record<string, VideoQuality>
   images?: string[]   // 后端返回的图片列表
-  statistics: Statistics
+  statistics?: Statistics
   author?: Author
   author_uid?: string
   author_nickname?: string
@@ -47,7 +47,7 @@ export interface VideoQuality {
 
 export interface Cover {
   url_list: string[]
-  uri: string
+  uri?: string
 }
 
 export interface VideoInfo {
@@ -155,6 +155,10 @@ export interface Author {
   nickname: string
   avatar?: string
   signature?: string
+  follower_count?: number
+  following_count?: number
+  aweme_count?: number
+  favoriting_count?: number
   is_verify?: number
   verify_info?: string
   unique_id?: string

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Bell, ChatDotRound, Link, Search, Setting } from '@element-plus/icons-vue'
@@ -178,9 +178,9 @@ const userDisplayStats = computed(() => {
   if (!xianyuUser.value) return []
 
   return [
-    { label: '卖出', value: formatCompactCount(xianyuUser.value.sold_count) },
-    { label: '买到', value: formatCompactCount(xianyuUser.value.purchase_count) },
-    { label: '收藏', value: formatCompactCount(xianyuUser.value.collection_count) }
+    { label: '卖出', value: formatCompactCount(xianyuUser.value.sold_count || 0) },
+    { label: '买到', value: formatCompactCount(xianyuUser.value.purchase_count || 0) },
+    { label: '收藏', value: formatCompactCount(xianyuUser.value.collection_count || 0) }
   ]
 })
 
@@ -230,7 +230,7 @@ function formatCompactCount(value: number) {
   return String(value)
 }
 
-function getBottomTabButtonStyle(tabKey: string) {
+function getBottomTabButtonStyle(tabKey: string): CSSProperties {
   const isActive = activeBottomTab.value === tabKey
 
   return {
@@ -242,7 +242,7 @@ function getBottomTabButtonStyle(tabKey: string) {
   }
 }
 
-function getBottomTabLabelStyle(tabKey: string) {
+function getBottomTabLabelStyle(tabKey: string): CSSProperties {
   const isActive = activeBottomTab.value === tabKey
 
   return {
@@ -254,7 +254,7 @@ function getBottomTabLabelStyle(tabKey: string) {
   }
 }
 
-function getBottomTabHintStyle(tabKey: string) {
+function getBottomTabHintStyle(tabKey: string): CSSProperties {
   const isActive = activeBottomTab.value === tabKey
 
   return {
@@ -594,7 +594,7 @@ watch(activeBottomTab, () => {
                   <span>已登录</span>
                 </div>
                 <div class="user-card__meta">
-                  粉丝 {{ formatCompactCount(xianyuUser.followers) }} · 关注 {{ formatCompactCount(xianyuUser.following) }}
+                  粉丝 {{ formatCompactCount(xianyuUser.followers || 0) }} · 关注 {{ formatCompactCount(xianyuUser.following || 0) }}
                 </div>
                 <div class="user-card__stats">
                   <div

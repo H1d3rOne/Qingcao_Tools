@@ -3,6 +3,21 @@ import { ref, computed } from 'vue'
 import type { User, Video } from '@/types/api'
 import { getUserInfoBySecUid, getUserVideos, getUserLikes } from '@/api'
 
+function normalizeWorksPayload(payload: any) {
+  if (Array.isArray(payload)) {
+    return {
+      data: payload,
+      has_more: false,
+      cursor: 0
+    }
+  }
+  return {
+    data: payload?.data || [],
+    has_more: Boolean(payload?.has_more),
+    cursor: Number(payload?.cursor || 0)
+  }
+}
+
 export const useUserStore = defineStore('user', () => {
   // State
   const currentUser = ref<User | null>(null)
@@ -51,16 +66,18 @@ export const useUserStore = defineStore('user', () => {
         count: 24 
       })
       
+      const payload = normalizeWorksPayload(res.data)
+
       if (append) {
-        userVideos.value = [...userVideos.value, ...res.data.data]
+        userVideos.value = [...userVideos.value, ...payload.data]
       } else {
-        userVideos.value = res.data.data
+        userVideos.value = payload.data
       }
       
-      videosHasMore.value = res.data.has_more
-      videosCursor.value = res.data.cursor
+      videosHasMore.value = payload.has_more
+      videosCursor.value = payload.cursor
       
-      return res.data
+      return payload
     } finally {
       videosLoading.value = false
     }

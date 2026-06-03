@@ -21,7 +21,7 @@ async function handleSearch() {
   
   try {
     const res = await getLiveInfo(inputRoomId.value.trim())
-    liveInfo.value = res.data
+    liveInfo.value = res
     success('查询成功')
   } catch (err) {
     console.error('查询失败:', err)

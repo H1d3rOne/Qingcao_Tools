@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Cellphone, Download, Search, VideoPlay } from '@element-plus/icons-vue'
+import { Cellphone, CircleCheck, Download, Lock, Search, Setting, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cancelWechatDownloadTask,
@@ -8,20 +8,26 @@ import {
   deleteWechatDownloadTask,
   getWechatDownloadTasks,
   getWechatDownloadTaskPreviewUrl,
+  getWechatCertificateStatus,
   getWechatListenerStatus,
+  getWechatProxyConfig,
   getWechatVideos,
+  installWechatCertificate,
   openWechatDownloadTaskDir,
   queueWechatVideoDownload,
   retryWechatDownloadTask,
   selectWechatDownloadDir,
   startWechatListener,
   stopWechatListener,
+  updateWechatProxyConfig,
+  type WechatCertificateStatus,
   type WechatDownloadTaskItem,
   type WechatListenerStatus,
+  type WechatProxyConfig,
   type WechatVideoItem
 } from '@/api/modules/wechat'
 
-type TopTab = 'wechat' | 'tasks'
+type TopTab = 'wechat' | 'tasks' | 'config'
 type TaskStatus = 'pending' | 'downloading' | 'completed' | 'failed'
 
 const loading = ref(false)
@@ -41,6 +47,11 @@ const openingTaskId = ref('')
 const deletingTaskId = ref('')
 const batchDeletingTask = ref(false)
 const clearingVideos = ref(false)
+const configLoading = ref(false)
+const savingConfig = ref(false)
+const checkingCertificate = ref(false)
+const installingCertificate = ref(false)
+const certificateInstallError = ref('')
 const videoPage = ref(1)
 const videoPageSize = ref(6)
 const taskPage = ref(1)
@@ -56,10 +67,29 @@ const status = ref<WechatListenerStatus>({
   system_proxy_enabled: false,
   proxy_host: '127.0.0.1',
   proxy_port: 8090,
-  local_server_port: 8000,
+  local_server_port: 3122,
   video_count: 0,
   download_dir: '',
   last_error: null
+})
+const proxyConfig = ref<WechatProxyConfig>({
+  proxy_host: '127.0.0.1',
+  proxy_port: 8090,
+  local_server_host: '127.0.0.1',
+  local_server_port: 3122
+})
+const configForm = ref({
+  proxy_port: 8090,
+  local_server_port: 3122
+})
+const certificateStatus = ref<WechatCertificateStatus>({
+  platform: '',
+  architecture: '',
+  supported: false,
+  certificate_exists: false,
+  trusted: false,
+  certificate_path: '',
+  message: ''
 })
 
 let pollTimer: number | undefined
@@ -111,6 +141,59 @@ const videoTabCount = computed(() => {
 
 const taskTabCount = computed(() => {
   return tasks.value.length
+})
+
+const certificateTagType = computed(() => {
+  if (certificateStatus.value.trusted) {
+    return 'success'
+  }
+  if (certificateStatus.value.certificate_exists) {
+    return 'warning'
+  }
+  return 'info'
+})
+
+const certificateTagLabel = computed(() => {
+  if (certificateStatus.value.trusted) {
+    return '已信任'
+  }
+  if (certificateStatus.value.certificate_exists) {
+    return '未信任'
+  }
+  return '未生成'
+})
+
+const certificatePlatformText = computed(() => {
+  const system = certificateStatus.value.platform
+  const arch = certificateStatus.value.architecture
+  if (!system) return '-'
+  if (system === 'Darwin') {
+    if (arch === 'arm64') return 'macOS Apple Silicon'
+    if (arch === 'x86_64' || arch === 'AMD64') return 'macOS Apple Intel'
+    return `macOS ${arch || ''}`.trim()
+  }
+  if (system === 'Windows') {
+    return `Windows ${arch || ''}`.trim()
+  }
+  return `${system} ${arch || ''}`.trim()
+})
+
+const manualCertificateSteps = computed(() => {
+  const certPath = certificateStatus.value.certificate_path || '~/.mitmproxy/mitmproxy-ca-cert.cer'
+  if (certificateStatus.value.platform === 'Windows') {
+    return [
+      `打开证书文件：${certPath}`,
+      '选择“安装证书”，存储位置选择“当前用户”。',
+      '选择“将所有的证书都放入下列存储”，浏览并选择“受信任的根证书颁发机构”。',
+      '完成导入后重启浏览器或重新打开视频号页面。'
+    ]
+  }
+  return [
+    `打开证书文件：${certPath}`,
+    '加入“登录”钥匙串或“系统”钥匙串。',
+    '在钥匙串中双击 mitmproxy 证书，将“使用此证书时”改为“始终信任”。',
+    '重启浏览器或重新打开视频号页面。'
+  ]
 })
 
 const paginatedVideos = computed(() => {
@@ -337,6 +420,44 @@ async function loadStatus() {
   status.value = response.data
 }
 
+function syncConfigForm(config: WechatProxyConfig) {
+  proxyConfig.value = config
+  configForm.value = {
+    proxy_port: config.proxy_port,
+    local_server_port: config.local_server_port
+  }
+  status.value.proxy_port = config.proxy_port
+  status.value.local_server_port = config.local_server_port
+}
+
+async function loadConfig(showLoading = false) {
+  if (showLoading) {
+    configLoading.value = true
+  }
+  try {
+    const response = await getWechatProxyConfig()
+    syncConfigForm(response.data)
+  } finally {
+    if (showLoading) {
+      configLoading.value = false
+    }
+  }
+}
+
+async function loadCertificateStatus(showLoading = false) {
+  if (showLoading) {
+    checkingCertificate.value = true
+  }
+  try {
+    const response = await getWechatCertificateStatus()
+    certificateStatus.value = response.data
+  } finally {
+    if (showLoading) {
+      checkingCertificate.value = false
+    }
+  }
+}
+
 async function loadVideos() {
   const response = await getWechatVideos()
   videos.value = response.data.items
@@ -427,6 +548,89 @@ async function toggleListener() {
     ElMessage.error(getErrorMessage(error, '操作失败'))
   } finally {
     loading.value = false
+  }
+}
+
+async function handleSaveConfig() {
+  if (status.value.listening) {
+    ElMessage.warning('请先关闭监听，再修改端口配置')
+    return
+  }
+  if (configForm.value.proxy_port === configForm.value.local_server_port) {
+    ElMessage.warning('mitm 代理端口不能和本地接收端口相同')
+    return
+  }
+
+  savingConfig.value = true
+  try {
+    const response = await updateWechatProxyConfig(
+      configForm.value.proxy_port,
+      configForm.value.local_server_port
+    )
+    syncConfigForm(response.data)
+    await loadStatus()
+    ElMessage.success(response.message || '端口配置已保存')
+  } catch (error: unknown) {
+    console.error(error)
+    ElMessage.error(getErrorMessage(error, '保存端口配置失败'))
+  } finally {
+    savingConfig.value = false
+  }
+}
+
+async function handleCheckCertificate() {
+  checkingCertificate.value = true
+  try {
+    await loadCertificateStatus()
+    if (certificateStatus.value.trusted) {
+      certificateInstallError.value = ''
+    }
+    if (certificateStatus.value.trusted) {
+      ElMessage.success(certificateStatus.value.message || '证书已信任')
+    } else {
+      ElMessage.info(certificateStatus.value.message || '证书尚未信任')
+    }
+  } catch (error: unknown) {
+    console.error(error)
+    ElMessage.error(getErrorMessage(error, '检测证书失败'))
+  } finally {
+    checkingCertificate.value = false
+  }
+}
+
+async function handleInstallCertificate() {
+  if (!certificateStatus.value.supported && certificateStatus.value.platform) {
+    ElMessage.warning('当前系统暂不支持自动安装证书')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      '安装 mitmproxy CA 证书需要系统授权。安装后请重启浏览器或重新打开视频号页面，确定继续吗？',
+      '安装证书',
+      {
+        type: 'warning',
+        confirmButtonText: '安装证书',
+        cancelButtonText: '取消'
+      }
+    )
+  } catch {
+    return
+  }
+
+  installingCertificate.value = true
+  certificateInstallError.value = ''
+  try {
+    const response = await installWechatCertificate()
+    certificateStatus.value = response.data
+    certificateInstallError.value = ''
+    ElMessage.success(response.message || response.data.message || '证书安装完成')
+  } catch (error: unknown) {
+    console.error(error)
+    certificateInstallError.value = getErrorMessage(error, '安装证书失败')
+    ElMessage.error('安装证书失败，请按页面提示手动安装')
+  } finally {
+    installingCertificate.value = false
   }
 }
 
@@ -710,6 +914,13 @@ watch(activeTaskStatusTab, () => {
   selectedTaskIds.value = []
 })
 
+watch(activeTab, tab => {
+  if (tab === 'config') {
+    void loadConfig()
+    void loadCertificateStatus()
+  }
+})
+
 watch(filteredVideos, items => {
   const maxPage = Math.max(1, Math.ceil(items.length / videoPageSize.value))
   if (videoPage.value > maxPage) {
@@ -745,6 +956,7 @@ watch(tasks, items => {
 onMounted(async () => {
   try {
     await refreshPage(true)
+    await Promise.all([loadConfig(), loadCertificateStatus()])
     if (shouldKeepPolling()) {
       startPolling()
     }
@@ -1332,6 +1544,203 @@ onBeforeUnmount(() => {
           <el-empty :description="`暂无${taskStatusLabel(activeTaskStatusTab)}任务`" />
         </div>
       </el-tab-pane>
+
+      <el-tab-pane name="config">
+        <template #label>
+          <div class="top-tab-label">
+            <el-icon size="20">
+              <Setting />
+            </el-icon>
+            <span>配置</span>
+          </div>
+        </template>
+
+        <div class="wechat-panel config-panel">
+          <div class="config-hero">
+            <div>
+              <div class="config-eyebrow">
+                监听链路配置
+              </div>
+              <h3>端口与证书</h3>
+              <p>
+                页面数据先进入 mitm 代理，再转发给本地接收服务。端口修改后需要重新开启监听才会生效。
+              </p>
+            </div>
+
+            <el-tag
+              size="large"
+              :type="status.listening ? 'success' : 'info'"
+              effect="dark"
+            >
+              {{ status.listening ? '监听运行中' : '监听未开启' }}
+            </el-tag>
+          </div>
+
+          <div class="config-grid">
+            <section class="config-card port-config-card">
+              <div class="config-card-head">
+                <div>
+                  <h4>端口配置</h4>
+                  <p>配置 mitm 代理端口和 local_server 接收端口。</p>
+                </div>
+                <el-button
+                  text
+                  :loading="configLoading"
+                  @click="loadConfig(true)"
+                >
+                  重新读取
+                </el-button>
+              </div>
+
+              <el-form
+                class="config-form"
+                label-position="top"
+              >
+                <div class="config-form-grid">
+                  <el-form-item label="mitm 代理端口">
+                    <el-input-number
+                      v-model="configForm.proxy_port"
+                      :min="1"
+                      :max="65535"
+                      :step="1"
+                      controls-position="right"
+                      :disabled="status.listening"
+                    />
+                    <div class="form-tip">
+                      页面注入脚本会请求 {{ proxyConfig.proxy_host }}:{{ configForm.proxy_port }}
+                    </div>
+                  </el-form-item>
+
+                  <el-form-item label="local_server 接收端口">
+                    <el-input-number
+                      v-model="configForm.local_server_port"
+                      :min="1"
+                      :max="65535"
+                      :step="1"
+                      controls-position="right"
+                      :disabled="status.listening"
+                    />
+                    <div class="form-tip">
+                      mitm 会 POST 到 {{ proxyConfig.local_server_host }}:{{ configForm.local_server_port }}/
+                    </div>
+                  </el-form-item>
+                </div>
+
+                <div
+                  v-if="configForm.proxy_port === configForm.local_server_port"
+                  class="config-warning"
+                >
+                  <el-icon>
+                    <WarningFilled />
+                  </el-icon>
+                  mitm 代理端口不能和 local_server 接收端口相同。
+                </div>
+
+                <div
+                  v-if="status.listening"
+                  class="config-warning"
+                >
+                  <el-icon>
+                    <WarningFilled />
+                  </el-icon>
+                  监听运行中不能修改端口，请先关闭监听。
+                </div>
+
+                <div class="config-actions">
+                  <el-button
+                    type="primary"
+                    :loading="savingConfig"
+                    :disabled="status.listening || configForm.proxy_port === configForm.local_server_port"
+                    @click="handleSaveConfig"
+                  >
+                    保存配置
+                  </el-button>
+                </div>
+              </el-form>
+            </section>
+          </div>
+
+          <section class="config-card certificate-card">
+            <div class="config-card-head">
+              <div>
+                <h4>mitmproxy 证书</h4>
+                <p>视频号是 HTTPS 页面，证书未信任时页面可能打不开。</p>
+              </div>
+              <el-tag
+                :type="certificateTagType"
+                effect="dark"
+              >
+                {{ certificateTagLabel }}
+              </el-tag>
+            </div>
+
+            <div class="certificate-body">
+              <div
+                class="certificate-icon"
+                :class="{ 'is-trusted': certificateStatus.trusted }"
+              >
+                <el-icon size="30">
+                  <CircleCheck v-if="certificateStatus.trusted" />
+                  <Lock v-else />
+                </el-icon>
+              </div>
+
+              <div class="certificate-info">
+                <div class="certificate-message">
+                  {{ certificateStatus.message || '点击检测证书状态' }}
+                </div>
+                <div class="certificate-path">
+                  {{ certificateStatus.certificate_path || '~/.mitmproxy/mitmproxy-ca-cert.cer' }}
+                </div>
+                <div class="certificate-meta">
+                  <span>系统：{{ certificatePlatformText }}</span>
+                  <span>证书文件：{{ certificateStatus.certificate_exists ? '已生成' : '未生成' }}</span>
+                </div>
+              </div>
+
+              <div class="certificate-actions">
+                <el-button
+                  plain
+                  :loading="checkingCertificate"
+                  @click="handleCheckCertificate"
+                >
+                  检测证书
+                </el-button>
+                <el-button
+                  type="primary"
+                  :loading="installingCertificate"
+                  @click="handleInstallCertificate"
+                >
+                  安装/信任证书
+                </el-button>
+              </div>
+            </div>
+
+            <div
+              v-if="certificateInstallError"
+              class="manual-cert-tip"
+            >
+              <div class="manual-cert-title">
+                <el-icon>
+                  <WarningFilled />
+                </el-icon>
+                自动安装失败，请手动安装证书
+              </div>
+              <div class="manual-cert-error">
+                {{ certificateInstallError }}
+              </div>
+              <ol>
+                <li
+                  v-for="step in manualCertificateSteps"
+                  :key="step"
+                >
+                  {{ step }}
+                </li>
+              </ol>
+            </div>
+          </section>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <div
@@ -1501,6 +1910,212 @@ onBeforeUnmount(() => {
 .status-label {
   font-size: 12px;
   color: rgb(var(--app-text-muted-rgb));
+}
+
+.config-panel {
+  gap: 18px;
+}
+
+.config-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(var(--primary-color-rgb) / 0.18);
+  background:
+    radial-gradient(circle at top left, rgba(var(--primary-color-rgb) / 0.14), transparent 36%),
+    linear-gradient(135deg, rgba(var(--app-surface-alt-rgb) / 0.95), rgba(var(--app-surface-rgb) / 0.88));
+}
+
+.config-eyebrow {
+  color: rgb(var(--primary-color-rgb));
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.config-hero h3,
+.config-card h4 {
+  margin: 0;
+  color: rgb(var(--app-text-strong-rgb));
+}
+
+.config-hero h3 {
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.config-hero p,
+.config-card-head p {
+  margin: 6px 0 0;
+  color: rgb(var(--app-text-muted-rgb));
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.config-card {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(var(--app-border-rgb) / 0.6);
+  background: rgba(var(--app-surface-alt-rgb) / 0.72);
+  box-shadow:
+    0 1px 2px rgba(var(--app-shadow-rgb) / 0.04),
+    0 12px 28px rgba(var(--app-shadow-rgb) / 0.06);
+}
+
+.config-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.config-card h4 {
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.config-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.config-form :deep(.el-input-number) {
+  width: 100%;
+}
+
+.form-tip {
+  margin-top: 8px;
+  color: rgb(var(--app-text-subtle-rgb));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.config-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(245 158 11 / 0.1);
+  border: 1px solid rgba(245 158 11 / 0.22);
+  color: rgb(251 191 36);
+  font-size: 13px;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.certificate-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.certificate-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(251 191 36);
+  background: rgba(245 158 11 / 0.12);
+  border: 1px solid rgba(245 158 11 / 0.24);
+}
+
+.certificate-icon.is-trusted {
+  color: rgb(var(--primary-color-rgb));
+  background: rgba(var(--primary-color-rgb) / 0.12);
+  border-color: rgba(var(--primary-color-rgb) / 0.24);
+}
+
+.certificate-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.certificate-message {
+  color: rgb(var(--app-text-strong-rgb));
+  font-weight: 700;
+}
+
+.certificate-path {
+  color: rgb(var(--app-text-muted-rgb));
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.certificate-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: rgb(var(--app-text-subtle-rgb));
+  font-size: 12px;
+}
+
+.certificate-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.manual-cert-tip {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(245 158 11 / 0.1);
+  border: 1px solid rgba(245 158 11 / 0.22);
+  color: rgb(var(--app-text-rgb));
+}
+
+.manual-cert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgb(251 191 36);
+  font-weight: 750;
+}
+
+.manual-cert-error {
+  margin-top: 8px;
+  color: rgb(252 165 165);
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.manual-cert-tip ol {
+  margin: 10px 0 0 18px;
+  padding: 0;
+  color: rgb(var(--app-text-muted-rgb));
+  font-size: 13px;
+  line-height: 1.8;
 }
 
 .video-item,
@@ -1827,6 +2442,10 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr 1fr;
   }
 
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
   .toolbar-search {
     grid-column: 1 / -1;
   }
@@ -1852,6 +2471,22 @@ onBeforeUnmount(() => {
 
   .panel-actions {
     width: 100%;
+    justify-content: flex-start;
+  }
+
+  .config-hero,
+  .config-card-head,
+  .certificate-body {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .config-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .certificate-actions {
     justify-content: flex-start;
   }
 

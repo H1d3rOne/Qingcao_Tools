@@ -78,6 +78,8 @@ const pagination = ref({
 })
 const sentinelRef = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
+let searchRequestSeq = 0
+let activeLoadingSeq = 0
 
 // 当前悬停的作品ID
 const hoveredVideoId = ref<string | null>(null)
@@ -577,6 +579,10 @@ function resetPagination() {
   pagination.value = { offset: '0', hasMore: false, searchId: '', loadingMore: false }
 }
 
+function isCurrentSearch(seq: number, type: string, kw: string) {
+  return seq === searchRequestSeq && type === activeType.value && kw === keyword.value.trim()
+}
+
 async function handleSearch() {
   if (!keyword.value.trim()) {
     error('请输入搜索关键词')
@@ -590,37 +596,56 @@ async function handleSearch() {
   videoResults.value = []
   userResults.value = []
   liveResults.value = []
+  if (observer) observer.disconnect()
 
+  const seq = ++searchRequestSeq
+  activeLoadingSeq = seq
+  let failed = false
   try {
-    await fetchPage()
+    await fetchPage(seq)
+  } catch (err) {
+    failed = true
+    pagination.value.hasMore = false
+    console.warn('抖音搜索失败:', err)
   } finally {
-    loading.value = false
-    await nextTick()
-    setupObserver()
+    if (seq === activeLoadingSeq) {
+      loading.value = false
+    }
+    if (seq === searchRequestSeq) {
+      if (!failed) {
+        await nextTick()
+        setupObserver()
+      }
+    }
   }
 }
 
-async function fetchPage() {
+async function fetchPage(seq = searchRequestSeq) {
   const { offset, searchId } = pagination.value
+  const requestType = activeType.value
+  const requestKeyword = keyword.value.trim()
 
-  if (activeType.value === 'general') {
+  if (requestType === 'general') {
     const res = await searchVideos({
-      keyword: keyword.value,
+      keyword: requestKeyword,
       offset,
-      count: 25,
+      count: 10,
+      search_id: searchId,
       sort_type: searchFilters.value.sortType,
       publish_time: searchFilters.value.publishTime,
       filter_duration: searchFilters.value.filterDuration,
       search_range: searchFilters.value.searchRange,
       content_type: searchFilters.value.contentType
     })
+    if (!isCurrentSearch(seq, requestType, requestKeyword)) return
     const data = res.data
     videoResults.value.push(...(data?.items || []))
     pagination.value.hasMore = data?.has_more ?? false
     pagination.value.offset = data?.next_offset ?? '0'
-  } else if (activeType.value === 'video') {
+    pagination.value.searchId = data?.search_id ?? ''
+  } else if (requestType === 'video') {
     const res = await searchVideoSearch({
-      keyword: keyword.value,
+      keyword: requestKeyword,
       offset,
       count: 25,
       search_id: searchId,
@@ -629,19 +654,23 @@ async function fetchPage() {
       filter_duration: searchFilters.value.filterDuration,
       search_range: searchFilters.value.searchRange
     })
+    if (!isCurrentSearch(seq, requestType, requestKeyword)) return
     const data = res.data
     videoResults.value.push(...(data?.items || []))
     pagination.value.hasMore = data?.has_more ?? false
     pagination.value.offset = data?.next_offset ?? '0'
     pagination.value.searchId = data?.search_id ?? ''
-  } else if (activeType.value === 'user') {
-    const res = await searchUsers({ keyword: keyword.value, offset, count: 25 })
+  } else if (requestType === 'user') {
+    const res = await searchUsers({ keyword: requestKeyword, offset, count: 10, search_id: searchId })
+    if (!isCurrentSearch(seq, requestType, requestKeyword)) return
     const data = res.data
     userResults.value.push(...(data?.items || []))
     pagination.value.hasMore = data?.has_more ?? false
     pagination.value.offset = data?.next_offset ?? '0'
-  } else if (activeType.value === 'live') {
-    const res = await searchLive({ keyword: keyword.value, offset, count: 25 })
+    pagination.value.searchId = data?.search_id ?? ''
+  } else if (requestType === 'live') {
+    const res = await searchLive({ keyword: requestKeyword, offset, count: 25 })
+    if (!isCurrentSearch(seq, requestType, requestKeyword)) return
     const data = res.data
     liveResults.value.push(...(data?.items || []))
     pagination.value.hasMore = data?.has_more ?? false
@@ -652,8 +681,12 @@ async function fetchPage() {
 async function loadMore() {
   if (pagination.value.loadingMore || !pagination.value.hasMore) return
   pagination.value.loadingMore = true
+  const seq = searchRequestSeq
   try {
-    await fetchPage()
+    await fetchPage(seq)
+  } catch (err) {
+    pagination.value.hasMore = false
+    console.warn('抖音搜索加载更多失败:', err)
   } finally {
     pagination.value.loadingMore = false
   }
@@ -683,6 +716,9 @@ function removeHistory(word: string) {
 
 // 切换 tab 时重置分页并断开 observer
 watch(activeType, () => {
+  searchRequestSeq++
+  activeLoadingSeq = 0
+  loading.value = false
   if (observer) observer.disconnect()
   resetPagination()
   videoResults.value = []

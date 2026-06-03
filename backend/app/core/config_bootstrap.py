@@ -23,7 +23,7 @@ LEGACY_APP_CONFIG_DIR = APP_ROOT / "config"
 DEFAULT_BACKEND_CONFIG: dict = {
     "app": {
         "name": "青草工具箱 API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "debug": False,
         "api_prefix": "/api/v1",
     },

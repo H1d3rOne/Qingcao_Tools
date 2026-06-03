@@ -58,6 +58,13 @@ function handlePaste() {
     inputUrl.value = text
   })
 }
+
+function getWorkCover(work: UserWork) {
+  if (typeof work.cover === 'string') {
+    return work.cover
+  }
+  return work.cover?.url_list?.[0] || work.cover_url
+}
 </script>
 
 <template>
@@ -167,7 +174,7 @@ function handlePaste() {
         >
           <div class="aspect-[9/16] relative">
             <img
-              :src="work.cover"
+              :src="getWorkCover(work)"
               :alt="work.desc"
               class="w-full h-full object-cover"
               loading="lazy"

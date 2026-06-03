@@ -31,13 +31,13 @@ async function handleSearch() {
   try {
     if (activeType.value === 'video') {
       const res = await searchVideos({ keyword: keyword.value, count: 50 })
-      videoResults.value = res.data.data || []
+      videoResults.value = res.data.items || res.data.data || []
     } else if (activeType.value === 'user') {
       const res = await searchUsers({ keyword: keyword.value, count: 30 })
-      userResults.value = res.data.data || []
+      userResults.value = res.data.items || res.data.data || []
     } else if (activeType.value === 'live') {
       const res = await searchLive({ keyword: keyword.value, count: 20 })
-      liveResults.value = res.data.data || []
+      liveResults.value = res.data.items || res.data.data || []
     }
   } catch (err: any) {
     console.error('搜索失败:', err)

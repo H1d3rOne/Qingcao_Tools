@@ -142,7 +142,6 @@ function initFlvPlayer(url: string) {
     isLive: true,
     hasAudio: true,
     hasVideo: true,
-    enableStashBuffer: false,
   }, {
     enableWorker: true,
     enableStashBuffer: false,

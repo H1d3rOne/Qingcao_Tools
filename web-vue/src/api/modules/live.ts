@@ -9,6 +9,21 @@ export interface LiveRoomInfo {
   owner?: {
     nickname: string
     avatar: string
+    sec_uid?: string
+    uid?: string
+    follow_count?: number
+    follower_count?: number
+    total_likes?: number
+    signature?: string
+    verified?: boolean
+    verify_type?: number
+    city?: string
+    province?: string
+    country?: string
+    location?: string
+    gender?: number
+    age?: number
+    display_id?: string
   }
   stream_url?: {
     rtmp: string
@@ -69,6 +84,7 @@ export interface LiveMessage {
   room_info?: LiveRoomInfo
   message?: string
   display_long?: string
+  timestamp?: number
 }
 
 // WebSocket 连接回调

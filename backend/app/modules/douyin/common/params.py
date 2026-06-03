@@ -1,14 +1,53 @@
 """
 请求参数构建器
 """
-from app.utils.dy_util import generate_webid, generate_msToken, splice_url, generate_a_bogus, generate_fake_webid
+from app.utils.dy_util import (
+    generate_webid,
+    generate_msToken,
+    splice_url,
+    generate_a_bogus,
+    generate_fake_webid,
+    get_douyin_browser_profile,
+)
 
 
 class Params:
     def __init__(self):
         self.params = {}
 
-    def with_platform(self):
+    def with_platform(self, auth=None, *, include_search_capabilities=False):
+        if auth is None:
+            params = {
+                'device_platform': 'webapp',
+                'aid': '6383',
+                'channel': 'channel_pc_web',
+                'pc_client_type': '1',
+                'update_version_code': '170400',
+                'version_code': '170400',
+                'version_name': '17.4.0',
+                'cookie_enabled': 'true',
+                'screen_width': '1707',
+                'screen_height': '960',
+                'browser_language': 'zh-CN',
+                'browser_platform': 'Win32',
+                'browser_name': 'Edge',
+                'browser_version': '125.0.0.0',
+                'browser_online': 'true',
+                'engine_name': 'Blink',
+                'engine_version': '125.0.0.0',
+                'os_name': 'Windows',
+                'os_version': '10',
+                'cpu_core_num': '32',
+                'device_memory': '8',
+                'platform': 'PC',
+                'downlink': '10',
+                'effective_type': '4g',
+                'round_trip_time': '100',
+            }
+            self.params.update(params)
+            return self
+
+        profile = get_douyin_browser_profile(auth)
         params = {
             'device_platform': 'webapp',
             'aid': '6383',
@@ -17,25 +56,31 @@ class Params:
             'update_version_code': '170400',
             'version_code': '170400',
             'version_name': '17.4.0',
-            'cookie_enabled': 'true',
-            'screen_width': '1707',
-            'screen_height': '960',
-            'browser_language': 'zh-CN',
-            'browser_platform': 'Win32',
-            'browser_name': 'Edge',
-            'browser_version': '125.0.0.0',
-            'browser_online': 'true',
-            'engine_name': 'Blink',
-            'engine_version': '125.0.0.0',
-            'os_name': 'Windows',
-            'os_version': '10',
-            'cpu_core_num': '32',
-            'device_memory': '8',
-            'platform': 'PC',
-            'downlink': '10',
-            'effective_type': '4g',
-            'round_trip_time': '100',
+            'cookie_enabled': profile['cookie_enabled'],
+            'screen_width': profile['screen_width'],
+            'screen_height': profile['screen_height'],
+            'browser_language': profile['browser_language'],
+            'browser_platform': profile['browser_platform'],
+            'browser_name': profile['browser_name'],
+            'browser_version': profile['browser_version'],
+            'browser_online': profile['browser_online'],
+            'engine_name': profile['engine_name'],
+            'engine_version': profile['engine_version'],
+            'os_name': profile['os_name'],
+            'os_version': profile['os_version'],
+            'cpu_core_num': profile['cpu_core_num'],
+            'device_memory': profile['device_memory'],
+            'platform': profile['platform'],
+            'downlink': profile['downlink'],
+            'effective_type': profile['effective_type'],
+            'round_trip_time': profile['round_trip_time'],
         }
+        if include_search_capabilities:
+            params.update({
+                'pc_libra_divert': profile['pc_libra_divert'],
+                'support_h265': profile['support_h265'],
+                'support_dash': profile['support_dash'],
+            })
         self.params.update(params)
         return self
 
@@ -48,13 +93,35 @@ class Params:
         self.params['webid'] = webid
         return self
 
-    def with_a_bogus(self, data=None):
+    def with_a_bogus(
+        self,
+        data=None,
+        user_agent=None,
+        env=None,
+        auth=None,
+        *,
+        url=None,
+        page_url=None,
+        use_bdm=False,
+    ):
+        if (user_agent is None or env is None) and auth is not None:
+            profile = get_douyin_browser_profile(auth)
+            user_agent = user_agent or profile.get('user_agent')
+            env = env or profile
         query = splice_url(self.get())
         if data is not None:
             data = splice_url(data)
         else:
             data = ''
-        abogus = generate_a_bogus(query, data)
+        abogus = generate_a_bogus(
+            query,
+            data,
+            user_agent=user_agent,
+            env=env,
+            url=url,
+            page_url=page_url,
+            use_bdm=use_bdm,
+        )
         self.add_param('a_bogus', abogus)
         return self
 

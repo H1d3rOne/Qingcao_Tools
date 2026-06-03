@@ -40,7 +40,7 @@ const authorAvatar = ref('')
 
 watch(() => videoStore.currentVideo, (video) => {
   if (video) {
-    coverUrl.value = video.cover?.url_list?.[0] || ''
+    coverUrl.value = (typeof video.cover === 'string' ? video.cover : video.cover?.url_list?.[0]) || video.cover_url || ''
     videoUrl.value = video.video?.play_addr?.url_list?.[0] || ''
     authorAvatar.value = video.author?.avatar || ''
   }

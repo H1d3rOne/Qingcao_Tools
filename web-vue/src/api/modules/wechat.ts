@@ -20,6 +20,23 @@ export interface WechatListenerStatus {
   last_error?: string | null
 }
 
+export interface WechatProxyConfig {
+  proxy_host: string
+  proxy_port: number
+  local_server_host: string
+  local_server_port: number
+}
+
+export interface WechatCertificateStatus {
+  platform: string
+  architecture: string
+  supported: boolean
+  certificate_exists: boolean
+  trusted: boolean
+  certificate_path: string
+  message: string
+}
+
 export interface WechatVideoItem {
   id: string
   description: string
@@ -72,6 +89,27 @@ export function startWechatListener() {
 
 export function stopWechatListener() {
   return request.post<ApiResponse<WechatListenerStatus>>('/wechat/listener/stop')
+}
+
+export function getWechatProxyConfig() {
+  return request.get<ApiResponse<WechatProxyConfig>>('/wechat/config')
+}
+
+export function updateWechatProxyConfig(proxyPort: number, localServerPort: number) {
+  return request.post<ApiResponse<WechatProxyConfig>>('/wechat/config', {
+    proxy_port: proxyPort,
+    local_server_port: localServerPort
+  })
+}
+
+export function getWechatCertificateStatus() {
+  return request.get<ApiResponse<WechatCertificateStatus>>('/wechat/certificate/status')
+}
+
+export function installWechatCertificate() {
+  return request.post<ApiResponse<WechatCertificateStatus>>('/wechat/certificate/install', undefined, {
+    timeout: 180000
+  })
 }
 
 export function getWechatVideos() {

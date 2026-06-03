@@ -27,6 +27,7 @@ async def search_works(
             request.keyword,
             request.offset,
             request.count,
+            request.search_id,
             request.sort_type,
             request.publish_time,
             request.filter_duration,
@@ -75,7 +76,7 @@ async def search_users(
     """搜索用户"""
     try:
         logger.info(f"搜索用户: keyword={request.keyword}, offset={request.offset}, count={request.count}")
-        result = await service.search_users(request.keyword, request.offset, request.count)
+        result = await service.search_users(request.keyword, request.offset, request.count, request.search_id)
         return ApiResponse(data=result)
     except Exception as e:
         logger.error(f"搜索用户失败: {e}")

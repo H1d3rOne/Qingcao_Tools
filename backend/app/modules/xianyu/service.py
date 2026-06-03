@@ -449,10 +449,12 @@ class XianyuService:
         self._peer_info_semaphore = asyncio.Semaphore(3)  # 同时最多 3 个并发
         self._chat_session_info_semaphore = asyncio.Semaphore(2)
         self._conversation_item_cache: dict[str, dict[str, str]] = {}
-        # login.token 熔断器：连续 N 次 FAIL_SYS_USER_VALIDATE 后暂停一段时间不再请求
+        # login.token 熔断器：命中 FAIL_SYS_USER_VALIDATE/RGV587 后立即暂停一段时间不再请求。
+        # 这里宁可让用户手动刷新/稍后重试，也不要在页面轮询、后台监听重连时连续打 login.token，
+        # 否则会把一次风控扩大成多次风控。
         self._login_token_fail_count: int = 0
         self._login_token_block_until: float = 0.0
-        self._login_token_fail_threshold: int = 3
+        self._login_token_fail_threshold: int = 1
         self._login_token_block_seconds: float = 300.0  # 5 分钟
 
     @property
@@ -1569,38 +1571,17 @@ class XianyuService:
                 cookie_configured=True,
             )
 
-        # 共享 ws 未连接时，实际探测一次聊天 WS；否则 login.token / /reg 风控不会暴露给前端。
-        probe_client = None
-        try:
-            probe_client = await self.open_chat_ws_client()
-            return XianyuChatHealthStatus(
-                ok=True,
-                status="ok",
-                message="闲鱼聊天链路正常。",
-                shared_ws_connected=bool(probe_client and probe_client.is_connected()),
-                cookie_configured=True,
-            )
-        except Exception as exc:
-            error_text = str(exc)
-            status = "error"
-            captcha_url = self._extract_first_url(error_text)
-            lowered = error_text.lower()
-            if "captcha" in lowered or "风控" in error_text or "verify" in lowered or "validate" in lowered:
-                status = "risk_blocked"
-                message = f"闲鱼请求被风控拦截：{error_text}"
-            elif "session_expired" in lowered or "auth" in lowered or "token" in lowered or "登录" in error_text or "鉴权" in error_text:
-                status = "auth_invalid"
-                message = error_text if "闲鱼" in error_text else f"闲鱼登录态可能已失效：{error_text}"
-            else:
-                message = f"聊天链路诊断失败：{error_text}"
-            return XianyuChatHealthStatus(
-                ok=False,
-                status=status,
-                message=message,
-                captcha_url=captcha_url,
-                shared_ws_connected=False,
-                cookie_configured=True,
-            )
+        # 不在健康检测里主动创建聊天 WS。
+        # 聊天 WS 建连会请求 login.token；页面初始化、会话列表和 WebSocket 如果并发调用，
+        # 会短时间多次命中 login.token，极易触发 FAIL_SYS_USER_VALIDATE / RGV587 风控。
+        # 健康检测只返回当前被动状态，真正的鉴权错误由打开聊天 WS 的唯一链路暴露。
+        return XianyuChatHealthStatus(
+            ok=True,
+            status="ok",
+            message="Cookie 已配置，当前未检测到共享聊天连接；打开聊天页后会建立连接。",
+            shared_ws_connected=False,
+            cookie_configured=True,
+        )
 
     async def list_chat_conversations(self, offset: int = 0, limit: int = 20) -> XianyuChatConversationPage:
         """获取聊天会话列表"""
@@ -3061,9 +3042,9 @@ class XianyuService:
                     "deviceId": device_id,
                 },
                 extra_params={
-                    # 对齐 XianYuApis 的 login.token 参数，减少与网页 IM 链路的指纹差异。
-                    "spm_pre": "a21ybx.item.want.1.14ad3da6ALVq3n",
-                    "log_id": "14ad3da6ALVq3n",
+                    # 对齐 XianYuApis 当前 login.token 参数，减少与网页 IM 链路的指纹差异。
+                    "spm_pre": "a21ybx.home.sidebar.2.4c053da6oKH21u",
+                    "log_id": "4c053da6oKH21u",
                 },
             )
         except ValueError as exc:
