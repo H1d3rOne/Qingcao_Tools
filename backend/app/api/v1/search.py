@@ -9,8 +9,7 @@ from app.modules.douyin.video.schemas.search import (
     SearchWorkRequest, SearchVideoRequest, SearchUserRequest, SearchLiveRequest, SearchPageResult
 )
 from app.modules.douyin.video.services.search_service import SearchService
-from app.api.deps import get_search_service
-from app.modules.douyin.common.auth import auth
+from app.api.deps import get_douyin_cookie_missing_response, get_search_service
 
 router = APIRouter(prefix="/search", tags=["搜索"])
 
@@ -21,6 +20,10 @@ async def search_works(
     service: SearchService = Depends(get_search_service)
 ):
     """搜索作品"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         logger.info(f"搜索作品: keyword={request.keyword}, offset={request.offset}, count={request.count}")
         result = await service.search_works(
@@ -48,6 +51,10 @@ async def search_videos(
     service: SearchService = Depends(get_search_service)
 ):
     """搜索视频"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         logger.info(f"搜索视频: keyword={request.keyword}, offset={request.offset}, count={request.count}")
         result = await service.search_videos(
@@ -74,6 +81,10 @@ async def search_users(
     service: SearchService = Depends(get_search_service)
 ):
     """搜索用户"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         logger.info(f"搜索用户: keyword={request.keyword}, offset={request.offset}, count={request.count}")
         result = await service.search_users(request.keyword, request.offset, request.count, request.search_id)
@@ -89,6 +100,10 @@ async def search_live(
     service: SearchService = Depends(get_search_service)
 ):
     """搜索直播"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         logger.info(f"搜索直播: keyword={request.keyword}, offset={request.offset}, count={request.count}")
         result = await service.search_live(request.keyword, request.offset, request.count)

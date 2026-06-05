@@ -11,7 +11,12 @@ from fastapi.responses import StreamingResponse
 
 from loguru import logger
 
-from app.api.deps import get_current_auth
+from app.api.deps import (
+    DOUYIN_COOKIE_MISSING_MESSAGE,
+    get_current_live_auth,
+    get_douyin_cookie_missing_response,
+    is_douyin_live_cookie_configured,
+)
 from app.modules.douyin.common.auth import DouyinAuth
 from app.modules.douyin.live.spiders.live import DouyinLiveSpider, live_stream_cache
 from app.modules.douyin.live.schemas.live import (
@@ -29,13 +34,17 @@ active_connections: dict[str, list[WebSocket]] = {}
 @router.post("/info", response_model=ApiResponse[LiveRoomInfo])
 async def get_live_room_info(
     request: LiveInfoRequest,
-    auth: DouyinAuth = Depends(get_current_auth)
+    auth: DouyinAuth = Depends(get_current_live_auth)
 ):
     """获取直播间信息 - 只支持直播链接
     
     Args:
         request.input: 抖音直播链接，如 https://live.douyin.com/802236344116
     """
+    missing_cookie = get_douyin_cookie_missing_response(live=True)
+    if missing_cookie:
+        return missing_cookie
+
     spider = DouyinLiveSpider(request.input, auth)
     try:
         room_info = await spider.get_room_info()
@@ -76,7 +85,6 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
     - error: {'type': 'error', 'message': '...'}
     - disconnected: {'type': 'disconnected'}
     """
-    from app.modules.douyin.common.auth import auth as global_auth
     from urllib.parse import unquote
     
     # 解码 URL
@@ -84,6 +92,14 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
     logger.info(f"WebSocket 连接请求: {live_url}")
     
     await websocket.accept()
+
+    if not is_douyin_live_cookie_configured():
+        await websocket.send_json({
+            'type': 'error',
+            'message': DOUYIN_COOKIE_MISSING_MESSAGE
+        })
+        await websocket.close()
+        return
     
     spider: Optional[DouyinLiveSpider] = None
     message_queue: list = []
@@ -96,7 +112,7 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
     
     try:
         # 1. 获取房间信息
-        spider = DouyinLiveSpider(live_url, global_auth)
+        spider = DouyinLiveSpider(live_url, get_current_live_auth())
         spider.set_message_callback(on_message)
         
         room_info = await spider.get_room_info()

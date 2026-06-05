@@ -54,6 +54,13 @@ class DouyinAuth:
     
     def prepare_auth(self, cookie_str: str):
         """准备认证信息"""
+        if not (cookie_str or "").strip():
+            self.cookie = {}
+            self.cookie_str = ""
+            self.msToken = None
+            self.verifyFp = None
+            return
+
         self.cookie = self._parse_cookies(cookie_str)
         self.cookie_str = cookie_str
         

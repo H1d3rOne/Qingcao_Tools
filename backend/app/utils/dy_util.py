@@ -18,13 +18,11 @@ from functools import partial
 subprocess.Popen = partial(subprocess.Popen, encoding="utf-8")
 import execjs
 
-# 获取脚本文件目录
-SCRIPTS_DIR = Path(__file__).parent.parent / "modules" / "douyin" / "scripts"
-NODE_MODULES = SCRIPTS_DIR.parent.parent.parent.parent / "node_modules"
-
-# 如果 node_modules 不存在，使用上级目录
-if not NODE_MODULES.exists():
-    NODE_MODULES = Path(__file__).parent.parent.parent / "node_modules"
+# 获取脚本文件目录。execjs 的 cwd 指向 backend 根目录，确保 Node 能按
+# backend/node_modules 解析 require('jsrsasign')，避免 Windows 下从 stdin
+# 执行脚本时出现错误的模块查找路径。
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = BACKEND_ROOT / "app" / "modules" / "douyin" / "scripts"
 
 # 加载 JS 文件
 dy_path = SCRIPTS_DIR / 'dy_ab.js'
@@ -32,8 +30,8 @@ sign_path = SCRIPTS_DIR / 'dy_live_sign.js'
 bdm_signer_path = SCRIPTS_DIR / 'bdm_sign_vm.js'
 bdm_live_path = SCRIPTS_DIR / 'bdm_live.js'
 
-dy_js = execjs.compile(open(dy_path, 'r', encoding='utf-8').read(), cwd=str(NODE_MODULES) if NODE_MODULES.exists() else None)
-sign_js = execjs.compile(open(sign_path, 'r', encoding='utf-8').read(), cwd=str(NODE_MODULES) if NODE_MODULES.exists() else None)
+dy_js = execjs.compile(open(dy_path, 'r', encoding='utf-8').read(), cwd=str(BACKEND_ROOT))
+sign_js = execjs.compile(open(sign_path, 'r', encoding='utf-8').read(), cwd=str(BACKEND_ROOT))
 
 
 def trans_cookies(cookies_str):

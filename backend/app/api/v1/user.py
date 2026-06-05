@@ -7,7 +7,7 @@ from app.modules.base.schemas import ApiResponse
 from app.modules.douyin.video.schemas.user import UserInfoRequest, UserWorksRequest, UserResponse
 from app.modules.douyin.video.schemas.work import WorkResponse
 from app.modules.douyin.video.services.user_service import UserService
-from app.api.deps import get_user_service
+from app.api.deps import get_douyin_cookie_missing_response, get_user_service
 from typing import List
 
 router = APIRouter(prefix="/user", tags=["用户"])
@@ -19,6 +19,10 @@ async def get_user_info(
     service: UserService = Depends(get_user_service)
 ):
     """获取用户信息"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         # 支持 url 或 sec_uid 参数
         if request.url:
@@ -38,6 +42,10 @@ async def get_user_works(
     service: UserService = Depends(get_user_service)
 ):
     """获取用户作品列表"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         # 支持 url 或 sec_uid 参数
         if request.url:

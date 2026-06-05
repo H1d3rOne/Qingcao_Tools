@@ -214,8 +214,11 @@ class DouyinLiveSpider:
         headers = {
             'authority': 'webcast.amemv.com',
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-            'cookie': '_tea_utm_cache_1128={%22utm_source%22:%22copy%22%2C%22utm_medium%22:%22android%22%2C%22utm_campaign%22:%22client_share%22}',
         }
+
+        cookie_str = (getattr(self.auth, 'cookie_str', '') or settings.DY_LIVE_COOKIES or settings.DY_COOKIES).strip()
+        if cookie_str:
+            headers['cookie'] = cookie_str
         
         params = {
             'type_id': '0',
@@ -328,8 +331,8 @@ class DouyinLiveSpider:
         """同步获取直播间信息
         
         两种方案:
-        1. 优先使用 Web API（不需要登录 cookies，只需要 ttwid）
-        2. 如果失败，从网页解析 room_id（需要登录 cookies）
+        1. 优先使用 Web API（使用已配置 Cookie）
+        2. 如果失败，从网页解析 room_id（使用已配置 Cookie）
         """
         # Step 1: 提取 web_rid
         web_rid = self._get_web_rid(self.live_url)
@@ -365,7 +368,7 @@ class DouyinLiveSpider:
         """通过 Web API 直接获取直播间信息（推荐方式）
         
         使用 live.douyin.com/webcast/room/web/enter/ API
-        不需要登录 cookies，只需要 ttwid
+        使用已配置 Cookie，不再使用硬编码 ttwid 兜底
         """
         api_url = "https://live.douyin.com/webcast/room/web/enter/"
         
@@ -399,9 +402,12 @@ class DouyinLiveSpider:
         if hasattr(self.auth, 'cookie') and self.auth.cookie:
             cookies.update(self.auth.cookie)
         
-        # 确保有 ttwid
+        if not cookies:
+            logger.warning("未配置抖音 Cookie，无法请求直播 Web API")
+            return {}
+
         if 'ttwid' not in cookies:
-            cookies['ttwid'] = '1|R8eyZ8ZAu15L_lzLuZDMhd8WlDWPKNLSeDzRJ7LoU3A|1773434637|b33ad715025847cf830655c55330edcbba6712b4752c3def17c4d661e2a94dbc'
+            logger.warning("Cookie 中缺少 ttwid，继续使用已有 Cookie 请求直播 Web API")
         
         try:
             response = requests.get(api_url, params=params, headers=headers, cookies=cookies, timeout=10)
@@ -780,7 +786,13 @@ class DouyinLiveSpider:
         cookies = {}
         if hasattr(self.auth, 'cookie') and self.auth.cookie:
             cookies.update(self.auth.cookie)
-        ttwid = cookies.get('ttwid', '1|R8eyZ8ZAu15L_lzLuZDMhd8WlDWPKNLSeDzRJ7LoU3A|1773434637|b33ad715025847cf830655c55330edcbba6712b4752c3def17c4d661e2a94dbc')
+        ttwid = cookies.get('ttwid', '')
+        if not ttwid:
+            message = "Cookie 中缺少 ttwid，无法建立弹幕连接"
+            logger.error(message)
+            if self.message_callback:
+                self.message_callback({'type': 'error', 'message': message})
+            return
         
         # 构建参数
         params = Params()

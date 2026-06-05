@@ -41,6 +41,7 @@ const { error, success } = useNotification()
 const inputUrl = ref('')
 const loading = ref(false)
 const liveInfo = ref<LiveRoomInfo | null>(null)
+const searchError = ref('')
 
 // 检查是否从搜索页面跳转过来
 const isFromSearch = ref(false)
@@ -82,6 +83,32 @@ function copyStreamUrl() {
     navigator.clipboard.writeText(currentStreamUrl.value)
     success('视频流地址已复制')
   }
+}
+
+function clearSearchError() {
+  if (searchError.value) {
+    searchError.value = ''
+  }
+}
+
+function showSearchError(message: string) {
+  searchError.value = message
+  error(message)
+}
+
+function getSearchErrorMessage(err: any, fallback = '查询失败，请检查输入是否正确') {
+  const responseData = err?.response?.data
+  const rawMessage =
+    responseData?.error ||
+    responseData?.message ||
+    responseData?.detail ||
+    err?.error ||
+    err?.message ||
+    fallback
+
+  return typeof rawMessage === 'string' && rawMessage.trim()
+    ? rawMessage.trim()
+    : fallback
 }
 
 function openStreamUrl() {
@@ -340,10 +367,11 @@ function getBadgeDisplay(badgeList?: BadgeImage[]): string {
 
 async function handleSearch() {
   if (!inputUrl.value.trim()) {
-    error('请输入直播间链接')
+    showSearchError('请输入直播间链接')
     return
   }
 
+  clearSearchError()
   inputUrl.value = extractUrl(inputUrl.value)
   const liveUrl = inputUrl.value.trim()
   
@@ -352,7 +380,7 @@ async function handleSearch() {
     if (/^\d+$/.test(liveUrl)) {
       inputUrl.value = `https://live.douyin.com/${liveUrl}`
     } else {
-      error('请输入正确的抖音直播链接')
+      showSearchError('请输入正确的抖音直播链接')
       return
     }
   }
@@ -402,17 +430,17 @@ async function handleSearch() {
       isMonitoring.value = true
     } else if (res.status === 4) {
       // console.log('直播间未开播')
-      error('主播未开播,无法获取实时弹幕。请等待主播开播后再试!')
+      showSearchError('主播未开播,无法获取实时弹幕。请等待主播开播后再试!')
     } else {
       // console.log('直播间状态异常:', res.status)
-      error('直播间状态异常,请稍后重试')
+      showSearchError('直播间状态异常,请稍后重试')
     }
   } catch (err: any) {
-    const errorMsg = err?.message || err?.error || '查询失败，请检查输入是否正确'
+    const errorMsg = getSearchErrorMessage(err)
     if (errorMsg.includes('timeout')) {
-      error('请求超时，请稍后重试')
+      showSearchError('请求超时，请稍后重试')
     } else {
-      error(errorMsg)
+      showSearchError(errorMsg)
     }
     // console.error('查询失败:', err)
   } finally {
@@ -646,12 +674,13 @@ onUnmounted(() => {
         </div>
         
         <div class="search-input-wrapper">
-          <div class="search-input-container">
+          <div class="search-input-container" :class="{ 'has-error': searchError }">
             <el-input
               v-model="inputUrl"
               placeholder="输入抖音直播链接，如 https://live.douyin.com/802236344116"
               size="large"
               clearable
+              @input="clearSearchError"
               @keyup.enter="handleSearch"
               class="search-input"
             >
@@ -669,6 +698,7 @@ onUnmounted(() => {
               <span v-else>搜索中...</span>
             </el-button>
           </div>
+          <p v-if="searchError" class="search-error-text" role="alert">{{ searchError }}</p>
         </div>
         
         <div class="search-features">
@@ -1057,6 +1087,22 @@ onUnmounted(() => {
   border: 1px solid rgba(var(--app-border-rgb) / 0.72);
   background: rgba(var(--app-bg-rgb) / 0.74);
   box-shadow: inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.3);
+}
+
+.search-input-container.has-error {
+  border-color: rgba(245, 108, 108, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--utility-white-rgb) / 0.3),
+    0 0 0 3px rgba(245, 108, 108, 0.12);
+}
+
+.search-error-text {
+  margin: 10px 12px 0;
+  color: #f56c6c;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  word-break: break-word;
 }
 
 .search-input {

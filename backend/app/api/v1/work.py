@@ -13,7 +13,7 @@ from app.modules.douyin.video.schemas.work import (
 )
 from app.modules.douyin.video.services.work_service import WorkService
 from app.modules.douyin.video.services.stats_service import stats_tracker
-from app.api.deps import get_work_service
+from app.api.deps import get_douyin_cookie_missing_response, get_work_service
 
 router = APIRouter(prefix="/work", tags=["作品"])
 
@@ -24,6 +24,10 @@ async def get_work_info(
     service: WorkService = Depends(get_work_service)
 ):
     """获取作品信息"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         # 支持 url 或 aweme_id 参数
         if request.url:
@@ -47,6 +51,10 @@ async def get_work_comments(
     service: WorkService = Depends(get_work_service)
 ):
     """获取作品评论"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         # 支持 url 或 aweme_id 参数
         if request.url:
@@ -69,6 +77,10 @@ async def download_work(
     service: WorkService = Depends(get_work_service)
 ):
     """下载作品 - 返回下载链接"""
+    missing_cookie = get_douyin_cookie_missing_response()
+    if missing_cookie:
+        return missing_cookie
+
     try:
         # 支持 url 或 aweme_id 参数
         if request.url:
