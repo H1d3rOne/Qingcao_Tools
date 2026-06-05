@@ -119,14 +119,21 @@ def parse_cookie_string(cookie_string: str, domain: str = ".goofish.com", path: 
     return cookies
 
 
+def _load_cookie_json(cookie_file: Path) -> Any:
+    try:
+        with open(cookie_file, "r", encoding="utf-8-sig") as file:
+            return json.load(file)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
 def load_xianyu_cookie_payload(
     config_dir: Optional[Path] = None,
-) -> Optional[dict[str, Any]]:
+) -> Optional[Any]:
     cookie_file = get_xianyu_cookie_file(config_dir)
     if not cookie_file.exists():
         return None
-    with open(cookie_file, "r", encoding="utf-8") as file:
-        return json.load(file)
+    return _load_cookie_json(cookie_file)
 
 
 def load_xianyu_cookie_string(
@@ -135,6 +142,10 @@ def load_xianyu_cookie_string(
     payload = load_xianyu_cookie_payload(config_dir=config_dir)
     if not payload:
         return None
+
+    if not isinstance(payload, Mapping):
+        cookie_string = cookie_collection_to_string(payload)
+        return cookie_string or None
 
     cookie_string = str(payload.get("cookie_string", "")).strip()
     if cookie_string:

@@ -153,3 +153,18 @@ def test_normalize_xianyu_cookie_input_accepts_json_payload():
     normalized = normalize_xianyu_cookie_input(payload)
 
     assert normalized == "cna=test-cna; cookie2=cookie2-value; unb=123456"
+
+
+def test_load_xianyu_cookie_string_ignores_invalid_json(tmp_path: Path):
+    (tmp_path / XIANYU_COOKIE_FILE_NAME).write_text("{broken", encoding="utf-8")
+
+    assert load_xianyu_cookie_string(config_dir=tmp_path) is None
+
+
+def test_load_xianyu_cookie_string_accepts_legacy_list_payload(tmp_path: Path):
+    (tmp_path / XIANYU_COOKIE_FILE_NAME).write_text(
+        '[{"name": "cna", "value": "test-cna"}]',
+        encoding="utf-8",
+    )
+
+    assert load_xianyu_cookie_string(config_dir=tmp_path) == "cna=test-cna"

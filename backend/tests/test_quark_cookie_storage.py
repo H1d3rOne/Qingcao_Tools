@@ -127,3 +127,18 @@ def test_quark_service_logout_clears_saved_cookie_file_even_without_client(tmp_p
 
     assert result["success"] is True
     assert load_quark_cookie_string(config_dir=tmp_path, include_legacy=False) is None
+
+
+def test_load_quark_cookie_string_ignores_invalid_json(tmp_path):
+    (tmp_path / QUARK_COOKIE_FILE_NAME).write_text("{broken", encoding="utf-8")
+
+    assert load_quark_cookie_string(config_dir=tmp_path, include_legacy=False) is None
+
+
+def test_load_quark_cookie_string_accepts_legacy_list_payload(tmp_path):
+    (tmp_path / QUARK_COOKIE_FILE_NAME).write_text(
+        '[{"name": "__pus", "value": "pus-value"}]',
+        encoding="utf-8",
+    )
+
+    assert load_quark_cookie_string(config_dir=tmp_path, include_legacy=False) == "__pus=pus-value"

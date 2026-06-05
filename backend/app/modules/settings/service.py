@@ -2,6 +2,8 @@
 设置服务
 """
 import yaml
+from loguru import logger
+
 from app.core.config import settings as app_settings, _find_config_file
 from app.core.config_bootstrap import backup_runtime_file
 from app.modules.settings.schemas import CookieInfo, StatusResponse, XianyuCookieValue
@@ -141,14 +143,22 @@ class SettingsService:
 
     def _get_quark_cookie_value(self) -> str:
         """获取夸克 Cookie，优先读取专用存储文件。"""
-        cookie_string = load_quark_cookie_string()
+        try:
+            cookie_string = load_quark_cookie_string()
+        except Exception as exc:
+            logger.warning(f"读取夸克 Cookie 配置失败，已按未配置处理: {exc}")
+            cookie_string = None
         if cookie_string:
             return cookie_string
         return (app_settings.cookies.quark or "").strip()
 
     def _get_xianyu_cookie_value(self) -> str:
         """获取闲鱼 Cookie，优先读取专用存储文件。"""
-        cookie_string = load_xianyu_cookie_string()
+        try:
+            cookie_string = load_xianyu_cookie_string()
+        except Exception as exc:
+            logger.warning(f"读取闲鱼 Cookie 配置失败，已按未配置处理: {exc}")
+            cookie_string = None
         if cookie_string:
             return cookie_string
         return (app_settings.cookies.xianyu or "").strip()

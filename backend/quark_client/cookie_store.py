@@ -80,10 +80,18 @@ def merge_cookie_strings(base_cookie_string: str, incoming_cookie_string: str) -
     return cookie_mapping_to_string(merged)
 
 
+def _load_cookie_json(cookie_file: Path) -> Any:
+    try:
+        with open(cookie_file, "r", encoding="utf-8-sig") as file:
+            return json.load(file)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
 def load_quark_cookie_payload(
     config_dir: Optional[Path] = None,
     include_legacy: bool = True,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[Any]:
     candidates = [get_quark_cookie_file(config_dir)]
     if include_legacy:
         candidates.append(get_legacy_cookie_file(config_dir))
@@ -91,8 +99,9 @@ def load_quark_cookie_payload(
     for cookie_file in candidates:
         if not cookie_file.exists():
             continue
-        with open(cookie_file, "r", encoding="utf-8") as file:
-            return json.load(file)
+        payload = _load_cookie_json(cookie_file)
+        if payload:
+            return payload
     return None
 
 
@@ -103,6 +112,10 @@ def load_quark_cookie_string(
     payload = load_quark_cookie_payload(config_dir=config_dir, include_legacy=include_legacy)
     if not payload:
         return None
+
+    if not isinstance(payload, Mapping):
+        cookie_string = cookie_collection_to_string(payload)
+        return cookie_string or None
 
     cookie_string = str(payload.get("cookie_string", "")).strip()
     if cookie_string:
