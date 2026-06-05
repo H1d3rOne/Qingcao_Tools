@@ -47,7 +47,7 @@
 - Pydantic v2
 - SQLAlchemy Async + SQLite
 - httpx / requests / websockets
-- Node.js 辅助依赖：jsrsasign / sdenv（抖音签名等）
+- Node.js 辅助依赖：jsrsasign / sdenv（抖音签名等，sdenv 为抖音直播弹幕可选依赖）
 - Playwright（可选，用于浏览器自动化等场景）
 - mitmproxy、websocket-client、BeautifulSoup、lxml 等辅助依赖
 - pytest / pytest-asyncio
@@ -113,6 +113,8 @@
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
+| Visual Studio C++ Build Tools | Windows 可选 | 仅 Windows 需要抖音直播实时弹幕时安装，并勾选 `Desktop development with C++` |
+| Xcode Command Line Tools | macOS 可选 | 仅 macOS 编译抖音直播实时弹幕依赖失败时安装 |
 | 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
 可用以下命令确认版本：
@@ -146,7 +148,10 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-npm ci
+
+# 后端 JS 依赖（二选一）
+npm ci --omit=optional  # 不需要抖音直播实时弹幕
+# npm ci                # 需要抖音直播实时弹幕，会安装可选 sdenv；macOS 编译失败时先执行 xcode-select --install
 
 cd ../web-vue
 pnpm install
@@ -168,7 +173,12 @@ cd backend
 py -3.11 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
-npm ci
+
+rem 后端 JS 依赖（二选一）
+rem 不需要抖音直播实时弹幕：
+npm ci --omit=optional
+rem 需要抖音直播实时弹幕：先安装 Visual Studio C++ Build Tools，并勾选 Desktop development with C++
+rem npm ci
 
 cd ..\web-vue
 pnpm install
@@ -513,7 +523,42 @@ npm ci
 
 如果未配置抖音 Cookie，正常应提示“抖音 Cookie 未配置，请先在设置页面配置抖音 Cookie”，而不是这个 Node 模块缺失错误。
 
-### 5. 功能提示未配置 Cookie
+### 5. Windows 执行 `npm ci` 提示 `sdenv` / `node-gyp` / Visual Studio
+
+`sdenv` 是抖音直播弹幕 WebSocket 签名用的可选 JS 依赖，Windows 下可能需要编译原生模块。抖音视频解析主要需要 `jsrsasign`，直播链接解析/播放也不依赖 `sdenv`。
+
+如果日志同时有 `EPERM: operation not permitted, rmdir node_modules`，通常是目录被后端、Node、编辑器或杀毒软件占用。先关闭相关进程，再清理后重装：
+
+```bat
+cd backend
+taskkill /F /IM node.exe 2>nul
+rmdir /s /q node_modules
+npm ci
+```
+
+当前版本已将 `sdenv` 标记为可选依赖；如果只用抖音视频解析或直播链接解析/播放，`npm ci` 即使跳过 `sdenv` 也不影响使用。
+
+如果完全不想触发 `sdenv` 编译，可以只安装必需依赖：
+
+```bat
+cd backend
+npm ci --omit=optional
+```
+
+这样抖音视频解析和直播链接解析/播放可用，但抖音直播实时弹幕不可用。若需要实时弹幕，再安装 Visual Studio Build Tools，并勾选 `Desktop development with C++` 后重新执行 `npm ci`。
+
+Visual Studio C++ Build Tools 安装方式：
+
+- 图形界面：访问 <https://visualstudio.microsoft.com/visual-cpp-build-tools/>，下载 Build Tools for Visual Studio，安装时勾选 `Desktop development with C++`。
+- 命令行：用管理员 PowerShell 执行：
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+安装完成后重新打开终端，再到 `backend` 目录执行 `npm ci`。
+
+### 6. 功能提示未配置 Cookie
 
 先到前端“系统设置”配置对应平台 Cookie：
 
@@ -522,7 +567,7 @@ npm ci
 - 夸克网盘：配置夸克 Cookie 或使用夸克登录；
 - 闲鱼工具：配置闲鱼 Cookie。
 
-### 6. 前端无法访问后端
+### 7. 前端无法访问后端
 
 确认后端运行在 `3121`，前端 Vite 代理会将 `/api` 转发到：
 
@@ -532,7 +577,7 @@ http://localhost:3121
 
 如果端口被占用，可先关闭占用 `3120` / `3121` 的旧进程，或直接使用一键启动脚本让脚本清理端口后重新启动。
 
-### 7. 配置或 AI 供应商“不见了”
+### 8. 配置或 AI 供应商“不见了”
 
 优先检查：
 
@@ -542,14 +587,14 @@ backend/config/xianyu_ai_config.json.bak
 backend/config/config.yaml
 ```
 
-### 8. Cookie 鉴权失败
+### 9. Cookie 鉴权失败
 
 - 重新登录平台后更新 Cookie；
 - 闲鱼当前前端入口以 Cookie 登录为主；
 - 避免频繁切换账号或短时间高频请求；
 - 若提示风控或登录失效，等待一段时间后重新登录并更新配置。
 
-### 9. Playwright 相关功能不可用
+### 10. Playwright 相关功能不可用
 
 安装浏览器依赖：
 

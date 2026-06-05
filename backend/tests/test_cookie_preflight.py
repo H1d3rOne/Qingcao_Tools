@@ -40,6 +40,15 @@ def test_douyin_js_dependency_error_is_user_friendly():
     assert str(exc_info.value) == "后端 JS 依赖未安装（缺少 jsrsasign），请在 backend 目录执行 npm ci 后重启后端"
 
 
+def test_douyin_live_optional_js_dependency_error_is_user_friendly():
+    raw_error = "Error: Cannot find module 'sdenv'"
+
+    with pytest.raises(RuntimeError) as exc_info:
+        dy_util._raise_friendly_js_error(Exception(raw_error))
+
+    assert str(exc_info.value) == "抖音直播弹幕 JS 依赖未安装（缺少 sdenv），直播链接解析/播放不受影响；如需实时弹幕，请按 README 常见问题处理后重启后端"
+
+
 def test_quark_files_routes_require_cookie(monkeypatch):
     monkeypatch.setattr(deps, "load_quark_cookie_string", lambda *args, **kwargs: "")
     monkeypatch.setattr(deps.settings.cookies, "quark", "", raising=False)

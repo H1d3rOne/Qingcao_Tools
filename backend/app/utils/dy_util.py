@@ -36,6 +36,11 @@ _sign_js = None
 
 def _format_node_dependency_message(module_name=None):
     module_hint = f"（缺少 {module_name}）" if module_name else ""
+    if module_name and "sdenv" in module_name:
+        return (
+            f"抖音直播弹幕 JS 依赖未安装{module_hint}，"
+            "直播链接解析/播放不受影响；如需实时弹幕，请按 README 常见问题处理后重启后端"
+        )
     return f"后端 JS 依赖未安装{module_hint}，请在 backend 目录执行 npm ci 后重启后端"
 
 
