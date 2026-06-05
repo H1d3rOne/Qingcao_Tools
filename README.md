@@ -47,7 +47,7 @@
 - Pydantic v2
 - SQLAlchemy Async + SQLite
 - httpx / requests / websockets
-- Node.js 辅助依赖：jsrsasign / sdenv（抖音签名等，sdenv 为抖音直播弹幕可选依赖）
+- Node.js 辅助依赖：jsrsasign（抖音签名等）
 - Playwright（可选，用于浏览器自动化等场景）
 - mitmproxy、websocket-client、BeautifulSoup、lxml 等辅助依赖
 - pytest / pytest-asyncio
@@ -113,8 +113,6 @@
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
-| Visual Studio C++ Build Tools | Windows 可选 | 仅 Windows 需要抖音直播实时弹幕时安装，并勾选 `Desktop development with C++` |
-| Xcode Command Line Tools | macOS 可选 | 仅 macOS 编译抖音直播实时弹幕依赖失败时安装 |
 | 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
 可用以下命令确认版本：
@@ -149,9 +147,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
-# 后端 JS 依赖（二选一）
-npm ci --omit=optional  # 不需要抖音直播实时弹幕
-# npm ci                # 需要抖音直播实时弹幕，会安装可选 sdenv；macOS 编译失败时先执行 xcode-select --install
+npm ci
 
 cd ../web-vue
 pnpm install
@@ -174,11 +170,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
 
-rem 后端 JS 依赖（二选一）
-rem 不需要抖音直播实时弹幕：
-npm ci --omit=optional
-rem 需要抖音直播实时弹幕：先安装 Visual Studio C++ Build Tools，并勾选 Desktop development with C++
-rem npm ci
+npm ci
 
 cd ..\web-vue
 pnpm install
@@ -523,9 +515,7 @@ npm ci
 
 如果未配置抖音 Cookie，正常应提示“抖音 Cookie 未配置，请先在设置页面配置抖音 Cookie”，而不是这个 Node 模块缺失错误。
 
-### 5. Windows 执行 `npm ci` 提示 `sdenv` / `node-gyp` / Visual Studio
-
-`sdenv` 是抖音直播弹幕 WebSocket 签名用的可选 JS 依赖，Windows 下可能需要编译原生模块。抖音视频解析主要需要 `jsrsasign`，直播链接解析/播放也不依赖 `sdenv`。
+### 5. Windows 执行 `npm ci` 提示 `EPERM`
 
 如果日志同时有 `EPERM: operation not permitted, rmdir node_modules`，通常是目录被后端、Node、编辑器或杀毒软件占用。先关闭相关进程，再清理后重装：
 
@@ -535,28 +525,6 @@ taskkill /F /IM node.exe 2>nul
 rmdir /s /q node_modules
 npm ci
 ```
-
-当前版本已将 `sdenv` 标记为可选依赖；如果只用抖音视频解析或直播链接解析/播放，`npm ci` 即使跳过 `sdenv` 也不影响使用。
-
-如果完全不想触发 `sdenv` 编译，可以只安装必需依赖：
-
-```bat
-cd backend
-npm ci --omit=optional
-```
-
-这样抖音视频解析和直播链接解析/播放可用，但抖音直播实时弹幕不可用。若需要实时弹幕，再安装 Visual Studio Build Tools，并勾选 `Desktop development with C++` 后重新执行 `npm ci`。
-
-Visual Studio C++ Build Tools 安装方式：
-
-- 图形界面：访问 <https://visualstudio.microsoft.com/visual-cpp-build-tools/>，下载 Build Tools for Visual Studio，安装时勾选 `Desktop development with C++`。
-- 命令行：用管理员 PowerShell 执行：
-
-```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
-```
-
-安装完成后重新打开终端，再到 `backend` 目录执行 `npm ci`。
 
 ### 6. 功能提示未配置 Cookie
 

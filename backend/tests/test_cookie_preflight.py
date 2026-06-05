@@ -40,13 +40,26 @@ def test_douyin_js_dependency_error_is_user_friendly():
     assert str(exc_info.value) == "后端 JS 依赖未安装（缺少 jsrsasign），请在 backend 目录执行 npm ci 后重启后端"
 
 
-def test_douyin_live_optional_js_dependency_error_is_user_friendly():
-    raw_error = "Error: Cannot find module 'sdenv'"
+def test_douyin_live_signature_does_not_require_sdenv(monkeypatch):
+    dy_util._sign_js = None
+    captured = {}
 
-    with pytest.raises(RuntimeError) as exc_info:
-        dy_util._raise_friendly_js_error(Exception(raw_error))
+    class FakeContext:
+        def call(self, function_name, *args):
+            assert function_name == "sign"
+            return "mock-signature"
 
-    assert str(exc_info.value) == "抖音直播弹幕 JS 依赖未安装（缺少 sdenv），直播链接解析/播放不受影响；如需实时弹幕，请按 README 常见问题处理后重启后端"
+    def fake_compile_js(script_path, *module_names):
+        captured["module_names"] = module_names
+        return FakeContext()
+
+    monkeypatch.setattr(dy_util, "_compile_js", fake_compile_js)
+
+    try:
+        assert dy_util.generate_signature("room-id", "user-id") == "mock-signature"
+        assert captured["module_names"] == ()
+    finally:
+        dy_util._sign_js = None
 
 
 def test_quark_files_routes_require_cookie(monkeypatch):
