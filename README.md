@@ -22,7 +22,6 @@
 - [技术栈](#技术栈)
 - [项目结构](#项目结构)
 - [快速开始](#快速开始)
-- [配置说明](#配置说明)
 - [功能模块说明](#功能模块说明)
 - [常用开发命令](#常用开发命令)
 - [接口与访问地址](#接口与访问地址)
@@ -279,76 +278,6 @@ npm run dev -- --host 0.0.0.0 --port 3120
 
 首次使用各功能前，请先到前端“系统设置”配置对应 Cookie / API Key；未配置时页面会提示“未配置 Cookie”。
 
-## 配置说明
-
-项目使用统一的本地运行态配置目录，方便 clone 后初始化，也避免真实 Cookie、API Key、设备指纹等敏感数据误提交。
-
-| 路径 | 说明 |
-| ---- | ---- |
-| `backend/config.example/` | 可提交的安全模板，不包含真实账号信息 |
-| `backend/config/` | 本机私有运行态配置，已被 `.gitignore` 忽略 |
-| `backend/app/config/` | 旧版配置目录，仅用于迁移兼容 |
-
-首次启动时会自动从 `backend/config.example/` 初始化缺失文件到 `backend/config/`。也可以手动复制：
-
-macOS / Linux / WSL2：
-
-```bash
-mkdir -p backend/config
-cp -R backend/config.example/. backend/config/
-```
-
-Windows：
-
-```bat
-if not exist backend\config mkdir backend\config
-xcopy backend\config.example backend\config\ /E /I /Y
-```
-
-常用配置文件：
-
-```text
-backend/config/config.yaml                    # 全局 YAML 配置
-backend/config/quark_cookies.json             # 夸克 Cookie
-backend/config/xianyu_cookies.json            # 闲鱼 Cookie
-backend/config/xianyu_fingerprint.json        # 闲鱼指纹信息
-backend/config/xianyu_chat_devices.json       # 闲鱼聊天 deviceId 映射
-backend/config/xianyu_ai_config.json          # 闲鱼 AI 供应商配置
-backend/config/xianyu_ai_sessions.json        # 闲鱼会话 AI 开关状态
-backend/config/xianyu_monitor_tasks.json      # 闲鱼监控任务
-backend/config/xianyu_manage_items.json       # 闲鱼商品管理缓存
-backend/config/xianyu_delivery_rules.json     # 闲鱼自动发货规则
-backend/config/xianyu_delivery_runtime.json   # 闲鱼自动发货运行态
-```
-
-关键配置写入时会维护同名 `.bak`，例如：
-
-```text
-backend/config/xianyu_ai_config.json.bak
-backend/config/xianyu_monitor_tasks.json.bak
-```
-
-如果配置意外丢失，可以优先检查同目录 `.bak` 文件。
-
-### 环境变量
-
-| 环境变量 | 说明 |
-| -------- | ---- |
-| `QINGCAO_CONFIG_DIR` | 覆盖统一运行态配置目录 |
-| `QINGCAO_CONFIG_EXAMPLE_DIR` | 覆盖配置模板目录 |
-| `XIANYU_CONFIG_DIR` | 覆盖闲鱼模块配置目录，默认跟随 `QINGCAO_CONFIG_DIR` |
-| `QUARK_CONFIG_DIR` | 覆盖夸克模块配置目录，默认跟随 `QINGCAO_CONFIG_DIR` |
-
-### Cookie 配置建议
-
-推荐在前端“系统设置”或对应模块登录页配置 Cookie / 登录状态。未配置 Cookie 时，对应功能会在使用前提示未配置。手动获取 Cookie 的通用方式：
-
-1. 浏览器打开对应平台并登录；
-2. 按 `F12` 打开开发者工具；
-3. 切换到 Network/网络面板并刷新页面；
-4. 找到任意已登录请求，在 Request Headers 中复制完整 `Cookie`；
-5. 粘贴到系统设置对应字段。
-
 ## 功能模块说明
 
 ### 抖音解析
@@ -544,39 +473,34 @@ Windows：
 
 ```bat
 cd backend
-.venv\Scripts\python -m pip install --upgrade pip
-.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m pip install --upgrade pip
+.\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-如果虚拟环境损坏，可以删除后重建：
+### 2. Windows 安装 `mitmproxy` 报错
 
-```bash
-# macOS / Linux / WSL2
-rm -rf backend/.venv
-cd backend
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+优先确认使用的是 Python 64 位版本。`mitmproxy` 相关依赖在 Windows 下使用 32 位 Python、Microsoft Store Python 或损坏虚拟环境时容易安装失败。
 
 ```bat
-REM Windows
-rmdir /s /q backend\.venv
-cd backend
-py -3.11 -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
+py -0p
+py -3.11-64 -c "import platform, struct; print(platform.architecture(), struct.calcsize('P') * 8)"
 ```
 
-### 2. Windows 提示 `greenlet library is required` 或 `_greenlet` DLL 加载失败
+如果不是 64 位，安装 python.org 的 Python `3.11.x` x64 后重建虚拟环境：
 
-通常是 Python / 虚拟环境 / wheel 架构不匹配。推荐处理方式：
+```bat
+cd backend
+rmdir /s /q .venv
+py -3.11-64 -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip setuptools wheel
+.\.venv\Scripts\python -m pip install -r requirements.txt
+```
 
-1. 安装 Python `3.11.x` 64 位；
-2. 删除 `backend\.venv`；
-3. 用 `py -3.11 -m venv .venv` 重建虚拟环境；
-4. 重新执行 `pip install -r requirements.txt`。
+### 3. Windows 提示 `greenlet library is required` 或 `_greenlet` DLL 加载失败
 
-### 3. 抖音解析提示 `Cannot find module 'jsrsasign'`
+通常也是 Python / 虚拟环境 / wheel 架构不匹配。处理方式同上：安装 Python `3.11.x` x64，删除 `backend\.venv` 后重新安装依赖。
+
+### 4. 抖音解析提示 `Cannot find module 'jsrsasign'`
 
 这是后端 JS 辅助依赖未安装，不是 Cookie 配置问题。执行：
 
@@ -587,7 +511,7 @@ npm ci
 
 执行后重新启动后端。
 
-### 4. 功能提示未配置 Cookie
+### 5. 功能提示未配置 Cookie
 
 先到前端“系统设置”配置对应平台 Cookie：
 
@@ -596,9 +520,7 @@ npm ci
 - 夸克网盘：配置夸克 Cookie 或使用夸克登录；
 - 闲鱼工具：配置闲鱼 Cookie。
 
-配置会写入 `backend/config/`，不会写入 `backend/config.example/`。
-
-### 5. 前端无法访问后端
+### 6. 前端无法访问后端
 
 确认后端运行在 `3121`，前端 Vite 代理会将 `/api` 转发到：
 
@@ -608,7 +530,7 @@ http://localhost:3121
 
 如果端口被占用，可先关闭占用 `3120` / `3121` 的旧进程，或直接使用一键启动脚本让脚本清理端口后重新启动。
 
-### 6. 配置或 AI 供应商“不见了”
+### 7. 配置或 AI 供应商“不见了”
 
 优先检查：
 
@@ -618,17 +540,14 @@ backend/config/xianyu_ai_config.json.bak
 backend/config/config.yaml
 ```
 
-确认没有把 `QINGCAO_CONFIG_DIR` / `XIANYU_CONFIG_DIR` 指到其他目录。
-
-### 7. Cookie 鉴权失败
+### 8. Cookie 鉴权失败
 
 - 重新登录平台后更新 Cookie；
 - 闲鱼当前前端入口以 Cookie 登录为主；
 - 避免频繁切换账号或短时间高频请求；
-- 若提示风控或登录失效，等待一段时间后重新登录并更新配置；
-- 闲鱼聊天链路命中风控后会暂停自动轮询/重复建连，避免持续触发 `login.token`。
+- 若提示风控或登录失效，等待一段时间后重新登录并更新配置。
 
-### 8. Playwright 相关功能不可用
+### 9. Playwright 相关功能不可用
 
 安装浏览器依赖：
 
@@ -644,7 +563,7 @@ Windows：
 
 ```bat
 cd backend
-.venv\Scripts\python -m playwright install chromium
+.\.venv\Scripts\python -m playwright install chromium
 ```
 
 ## 版本与变更

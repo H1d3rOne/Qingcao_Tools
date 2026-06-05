@@ -60,13 +60,6 @@
             >
               登录
             </el-button>
-            <el-button
-              text
-              :disabled="cookieSubmitting"
-              @click="fillSavedCookie"
-            >
-              从本地已保存 Cookie 填充
-            </el-button>
           </el-form-item>
         </el-form>
       </div>
@@ -128,21 +121,6 @@ const loginByCookie = async () => {
   }
 }
 
-const fillSavedCookie = async () => {
-  try {
-    const response = await getFullXianyuCookie()
-    const savedCookie = response.data?.cookie?.trim() || ''
-    if (!savedCookie) {
-      ElMessage.warning('本地未保存闲鱼 Cookie')
-      return
-    }
-    cookieForm.cookie = savedCookie
-    ElMessage.success('已填充本地保存的 Cookie')
-  } catch (err: unknown) {
-    ElMessage.error(err instanceof Error ? err.message : '读取本地 Cookie 失败')
-  }
-}
-
 onMounted(async () => {
   if (!userStore.initialized) {
     await userStore.init()
@@ -172,8 +150,7 @@ const tryAutoLogin = async () => {
     })
     if (!loginRes.success) {
       autoLoginStatus.value = 'failed'
-      autoLoginMessage.value = `已保存的 Cookie 登录失败：${loginRes.message || 'Cookie 可能已失效'}，请重新粘贴 Cookie 登录`
-      cookieForm.cookie = savedCookie
+      autoLoginMessage.value = `设置中保存的闲鱼 Cookie 登录失败：${loginRes.message || 'Cookie 可能已失效'}，请在下方重新粘贴 Cookie 登录`
       return
     }
     await userStore.checkAuthStatus()
