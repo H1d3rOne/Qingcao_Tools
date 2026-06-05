@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_xianyu_service
+from app.api.deps import get_xianyu_service, require_xianyu_cookie
 from app.main import app
 
 
@@ -97,6 +97,7 @@ class FakeManageService:
 
 def test_manage_item_routes_roundtrip():
     app.dependency_overrides[get_xianyu_service] = lambda: FakeManageService()
+    app.dependency_overrides[require_xianyu_cookie] = lambda: None
     client = TestClient(app)
 
     assert client.get("/api/v1/xianyu/manage/items").status_code == 200

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 
 const api = axios.create({
   baseURL: '/api/v1/quark',
@@ -19,11 +20,29 @@ api.interceptors.request.use(
 )
 
 api.interceptors.response.use(
-  response => response.data,
-  error => Promise.reject(error)
+  response => {
+    const data = response.data
+    if (data?.success === false) {
+      const message = formatApiDetail(data.detail || data.error || data.message) || '请求失败'
+      ElMessage.error(message)
+      const apiError = new Error(message) as Error & { response?: any }
+      apiError.response = response
+      return Promise.reject(apiError)
+    }
+    return data
+  },
+  error => {
+    const responseData = error.response?.data || {}
+    const message = formatApiDetail(
+      responseData.detail || responseData.error || responseData.message
+    ) || error.message || '请求失败'
+    ElMessage.error(message)
+    error.message = message
+    return Promise.reject(error)
+  }
 )
 
-const formatApiDetail = (detail: any): string => {
+function formatApiDetail(detail: any): string {
   if (!detail) return ''
   if (typeof detail === 'string') return detail
   if (Array.isArray(detail)) {

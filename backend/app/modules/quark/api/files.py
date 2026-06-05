@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query, File, UploadFile, Form, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form, Body
 from typing import Optional, List
 
 from pydantic import BaseModel
 
+from app.api.deps import require_quark_cookie
 from app.modules.quark.schemas import (
     FileListRequest,
     FileListResponse,
@@ -18,7 +19,11 @@ from app.modules.quark.schemas import (
 )
 from app.modules.quark.services import quark_service
 
-router = APIRouter(prefix="/files", tags=["文件管理"])
+router = APIRouter(
+    prefix="/files",
+    tags=["文件管理"],
+    dependencies=[Depends(require_quark_cookie)],
+)
 
 
 # 分享转存请求模型

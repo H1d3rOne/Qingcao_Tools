@@ -284,6 +284,16 @@ async function handleLogout() {
   router.push('/xianyu/login')
 }
 
+function showXianyuAuthHint(message: string) {
+  if (message.includes('未配置')) {
+    ElMessage.error(message)
+    return
+  }
+  if (message.includes('过期') || message.includes('FAIL_SYS_USER_VALIDATE') || message.includes('Cookie')) {
+    ElMessage.warning('闲鱼登录已过期，请前往设置页重新配置 Cookie')
+  }
+}
+
 async function openItemDetail(itemId: string) {
   currentDetailItemId.value = itemId
   detailVisible.value = true
@@ -298,9 +308,7 @@ async function openItemDetail(itemId: string) {
   } catch (err: any) {
     const msg = err?.message || '获取宝贝详情失败'
     detailError.value = msg
-    if (msg.includes('过期') || msg.includes('FAIL_SYS_USER_VALIDATE') || msg.includes('Cookie')) {
-      ElMessage.warning('闲鱼登录已过期，请前往设置页重新配置 Cookie')
-    }
+    showXianyuAuthHint(msg)
   } finally {
     detailLoading.value = false
   }
@@ -397,9 +405,7 @@ async function runSearch(page: number) {
     searchItems.value = []
     searchFilters.value = []
 
-    if (msg.includes('过期') || msg.includes('FAIL_SYS_USER_VALIDATE') || msg.includes('Cookie')) {
-      ElMessage.warning('闲鱼登录已过期，请前往设置页重新配置 Cookie')
-    }
+    showXianyuAuthHint(msg)
   } finally {
     searching.value = false
   }

@@ -476,7 +476,7 @@ async function handleTestAi() {
                     {{ liveConfigured ? '已配置' : '未配置' }}
                   </el-tag>
                 </div>
-                <p class="config-item__desc">用于直播间查询和直播数据获取，可按需配置。</p>
+                <p class="config-item__desc">用于直播间查询和直播数据获取，未配置时直播功能会提示未配置 Cookie。</p>
                 <el-input
                   v-model="liveCookieInput"
                   type="textarea"

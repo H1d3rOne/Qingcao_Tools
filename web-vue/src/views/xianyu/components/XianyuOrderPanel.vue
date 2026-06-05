@@ -57,6 +57,16 @@ const stats = computed(() => [
   { label: '每页', value: String(pageSize.value) },
 ])
 
+function showXianyuAuthHint(message: string) {
+  if (message.includes('未配置')) {
+    ElMessage.error(message)
+    return
+  }
+  if (message.includes('过期') || message.includes('Cookie') || message.includes('FAIL_SYS_USER_VALIDATE')) {
+    ElMessage.warning('闲鱼登录已过期，请前往设置页重新配置 Cookie')
+  }
+}
+
 async function loadOrders(page = currentPage.value) {
   loading.value = true
   errorMessage.value = ''
@@ -76,9 +86,7 @@ async function loadOrders(page = currentPage.value) {
     errorMessage.value = msg
     orders.value = []
     pageMeta.value = { total: 0, has_more: false }
-    if (msg.includes('过期') || msg.includes('Cookie') || msg.includes('FAIL_SYS_USER_VALIDATE')) {
-      ElMessage.warning('闲鱼登录已过期，请前往设置页重新配置 Cookie')
-    }
+    showXianyuAuthHint(msg)
   } finally {
     loading.value = false
   }

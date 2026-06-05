@@ -52,6 +52,7 @@ def test_xianyu_chat_ws_invokes_ai_handler_for_pushes(monkeypatch):
 
     fake_service = FakeService()
     monkeypatch.setattr(xianyu_api, 'get_xianyu_service', lambda: fake_service)
+    monkeypatch.setattr(xianyu_api, 'is_xianyu_cookie_configured', lambda: True)
 
     client = TestClient(app)
     with client.websocket_connect('/api/v1/xianyu/chat/ws') as websocket:
@@ -77,6 +78,7 @@ def test_xianyu_chat_ws_does_not_close_shared_client(monkeypatch):
 
     fake_service = FakeSharedService()
     monkeypatch.setattr(xianyu_api, 'get_xianyu_service', lambda: fake_service)
+    monkeypatch.setattr(xianyu_api, 'is_xianyu_cookie_configured', lambda: True)
 
     client = TestClient(app)
     with client.websocket_connect('/api/v1/xianyu/chat/ws') as websocket:
@@ -117,6 +119,7 @@ def test_xianyu_chat_ws_relays_pushes_from_shared_subscription(monkeypatch):
 
     fake_service = FakeSharedService()
     monkeypatch.setattr(xianyu_api, 'get_xianyu_service', lambda: fake_service)
+    monkeypatch.setattr(xianyu_api, 'is_xianyu_cookie_configured', lambda: True)
 
     client = TestClient(app)
     with client.websocket_connect('/api/v1/xianyu/chat/ws') as websocket:

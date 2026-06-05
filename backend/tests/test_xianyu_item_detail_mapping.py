@@ -49,7 +49,7 @@ def test_map_item_detail_supports_reference_item_and_seller_shape():
     assert detail.original_price == "¥256"
     assert detail.desc == "这是一个测试详情"
     assert len(detail.images) == 2
-    assert detail.images[0] == "//img1.test/a.jpg" or detail.images[0] == "https:////img1.test/a.jpg"
+    assert detail.images[0] == "https://img1.test/a.jpg"
     assert detail.seller_name == "测试卖家"
     assert detail.seller_item_count == 9
     assert detail.seller_user_id == '2218736549452'

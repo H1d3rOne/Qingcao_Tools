@@ -4,7 +4,8 @@
 from functools import lru_cache
 from typing import AsyncGenerator, Optional
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -19,9 +20,13 @@ from app.modules.settings import SettingsService
 from app.modules.quark.services.quark_service import QuarkService
 from app.modules.wechat import WechatService
 from app.modules.xianyu import XianyuService
+from quark_client.cookie_store import load_quark_cookie_string
+from xianyu_client.cookie_store import load_xianyu_cookie_string
 
 
 DOUYIN_COOKIE_MISSING_MESSAGE = "抖音 Cookie 未配置，请先在设置页面配置抖音 Cookie"
+QUARK_COOKIE_MISSING_MESSAGE = "夸克 Cookie 未配置，请先在设置页面配置夸克 Cookie"
+XIANYU_COOKIE_MISSING_MESSAGE = "闲鱼 Cookie 未配置，请先在设置页面配置闲鱼 Cookie"
 
 
 def _has_cookie_value(value: Optional[str]) -> bool:
@@ -39,12 +44,58 @@ def is_douyin_live_cookie_configured() -> bool:
     return _has_cookie_value(settings.DY_LIVE_COOKIES) or is_douyin_cookie_configured()
 
 
+def get_quark_cookie_value() -> str:
+    """获取当前可用的夸克 Cookie，优先读取专用存储文件。"""
+    try:
+        cookie_string = load_quark_cookie_string()
+    except Exception as exc:
+        logger.warning(f"读取夸克 Cookie 配置失败，已按未配置处理: {exc}")
+        cookie_string = None
+    if cookie_string:
+        return cookie_string
+    return (settings.QUARK_COOKIES or "").strip()
+
+
+def is_quark_cookie_configured() -> bool:
+    """检查夸克 Cookie 是否已配置。"""
+    return _has_cookie_value(get_quark_cookie_value())
+
+
+def get_xianyu_cookie_value() -> str:
+    """获取当前可用的闲鱼 Cookie，优先读取专用存储文件。"""
+    try:
+        cookie_string = load_xianyu_cookie_string()
+    except Exception as exc:
+        logger.warning(f"读取闲鱼 Cookie 配置失败，已按未配置处理: {exc}")
+        cookie_string = None
+    if cookie_string:
+        return cookie_string
+    return (settings.XIANYU_COOKIES or "").strip()
+
+
+def is_xianyu_cookie_configured() -> bool:
+    """检查闲鱼 Cookie 是否已配置。"""
+    return _has_cookie_value(get_xianyu_cookie_value())
+
+
 def get_douyin_cookie_missing_response(*, live: bool = False) -> Optional[ApiResponse]:
     """返回统一的抖音 Cookie 未配置响应；已配置时返回 None。"""
     configured = is_douyin_live_cookie_configured() if live else is_douyin_cookie_configured()
     if configured:
         return None
     return ApiResponse(success=False, error=DOUYIN_COOKIE_MISSING_MESSAGE)
+
+
+def require_quark_cookie() -> None:
+    """需要夸克 Cookie 的接口前置校验。"""
+    if not is_quark_cookie_configured():
+        raise HTTPException(status_code=400, detail=QUARK_COOKIE_MISSING_MESSAGE)
+
+
+def require_xianyu_cookie() -> None:
+    """需要闲鱼 Cookie 的接口前置校验。"""
+    if not is_xianyu_cookie_configured():
+        raise HTTPException(status_code=400, detail=XIANYU_COOKIE_MISSING_MESSAGE)
 
 
 @lru_cache()

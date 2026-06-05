@@ -88,11 +88,11 @@ const features = [
         <h1 class="welcome-title">抖音数据解析工具</h1>
         <p class="welcome-desc">专业的抖音内容解析与数据采集工具，支持视频、用户、直播等多种数据解析</p>
         <div class="welcome-tags">
-          <el-tag :type="status?.cookie_configured ? 'success' : 'warning'" size="small">
+          <el-tag :type="status?.cookie_configured ? 'success' : 'danger'" size="small">
             Cookie: {{ status?.cookie_configured ? '已配置' : '未配置' }}
           </el-tag>
-          <el-tag v-if="status?.live_cookie_configured" type="success" size="small">
-            直播Cookie: 已配置
+          <el-tag :type="status?.live_cookie_configured ? 'success' : 'danger'" size="small">
+            直播Cookie: {{ status?.live_cookie_configured ? '已配置' : '未配置' }}
           </el-tag>
         </div>
       </div>

@@ -5,6 +5,9 @@ from app.main import app
 
 
 class FakeXianyuAiService:
+    async def ensure_chat_ai_listener(self):
+        return True
+
     def get_chat_ai_config(self):
         return {
             'enabled': True,

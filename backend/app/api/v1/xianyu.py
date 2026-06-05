@@ -7,7 +7,12 @@ import contextlib
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from loguru import logger
 
-from app.api.deps import get_xianyu_service
+from app.api.deps import (
+    XIANYU_COOKIE_MISSING_MESSAGE,
+    get_xianyu_service,
+    is_xianyu_cookie_configured,
+    require_xianyu_cookie,
+)
 from app.modules.base.schemas import ApiResponse
 from app.modules.xianyu import (
     XianyuAuthCheckLoginRequest,
@@ -21,6 +26,7 @@ from app.modules.xianyu import (
     XianyuBrowserLoginStartResponse,
     XianyuBrowserLoginStatusResponse,
     XianyuChatAiConfig,
+    XianyuChatAiConfigUpdateRequest,
     XianyuChatAiProvider,
     XianyuChatAiProviderCreateRequest,
     XianyuChatAiProviderUpdateRequest,
@@ -70,7 +76,26 @@ from app.modules.xianyu import (
     XianyuUserProfile,
 )
 
-router = APIRouter(prefix="/xianyu", tags=["闲鱼"])
+
+class XianyuAPIRouter(APIRouter):
+    """为需要登录态的闲鱼 HTTP 功能自动追加 Cookie 前置校验。"""
+
+    cookie_free_prefixes = (
+        "/auth/",
+        "/chat/ai/",
+    )
+
+    def _requires_cookie(self, path: str) -> bool:
+        return not any(path.startswith(prefix) for prefix in self.cookie_free_prefixes)
+
+    def add_api_route(self, path, endpoint, **kwargs):
+        dependencies = list(kwargs.pop("dependencies", []) or [])
+        if self._requires_cookie(path):
+            dependencies.insert(0, Depends(require_xianyu_cookie))
+        return super().add_api_route(path, endpoint, dependencies=dependencies, **kwargs)
+
+
+router = XianyuAPIRouter(prefix="/xianyu", tags=["闲鱼"])
 
 
 @router.get("/auth/qrcode", response_model=XianyuAuthLoginResponse)
@@ -741,6 +766,16 @@ async def get_xianyu_chat_ai_config(
     return ApiResponse(data=service.get_chat_ai_config())
 
 
+@router.post("/chat/ai/config", response_model=ApiResponse[XianyuChatAiConfig])
+async def update_xianyu_chat_ai_config(
+    request: XianyuChatAiConfigUpdateRequest,
+    service: XianyuService = Depends(get_xianyu_service),
+):
+    if request.enabled and not is_xianyu_cookie_configured():
+        return ApiResponse(success=False, error=XIANYU_COOKIE_MISSING_MESSAGE)
+    return ApiResponse(data=service.update_chat_ai_config(request))
+
+
 @router.get("/chat/ai/diagnose", response_model=ApiResponse[dict])
 async def diagnose_xianyu_chat_ai(
     service: XianyuService = Depends(get_xianyu_service),
@@ -769,6 +804,8 @@ async def set_xianyu_chat_ai_enabled(
     enabled: bool = Query(..., description="是否启用"),
     service: XianyuService = Depends(get_xianyu_service),
 ):
+    if enabled and not is_xianyu_cookie_configured():
+        return ApiResponse(success=False, error=XIANYU_COOKIE_MISSING_MESSAGE)
     return ApiResponse(data=service.set_chat_ai_enabled(enabled))
 
 
@@ -910,8 +947,13 @@ async def websocket_xianyu_chat_proxy(
     websocket: WebSocket,
 ):
     """闲鱼聊天实时推送代理"""
-    service = get_xianyu_service()
     await websocket.accept()
+    if not is_xianyu_cookie_configured():
+        await websocket.send_json({"type": "error", "message": XIANYU_COOKIE_MISSING_MESSAGE})
+        await websocket.close()
+        return
+
+    service = get_xianyu_service()
     chat_client = None
     subscriber = None
     relay_task: asyncio.Task | None = None
@@ -964,7 +1006,7 @@ async def websocket_xianyu_chat_proxy(
     finally:
         if relay_task:
             relay_task.cancel()
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await relay_task
         if chat_client and subscriber:
             with contextlib.suppress(Exception):
