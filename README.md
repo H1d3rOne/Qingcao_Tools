@@ -500,9 +500,9 @@ py -3.11-64 -m venv .venv
 
 通常也是 Python / 虚拟环境 / wheel 架构不匹配。处理方式同上：安装 Python `3.11.x` x64，删除 `backend\.venv` 后重新安装依赖。
 
-### 4. 抖音解析提示 `Cannot find module 'jsrsasign'`
+### 4. 抖音视频解析提示 `Cannot find module 'jsrsasign'`
 
-这是后端 JS 辅助依赖未安装，不是 Cookie 配置问题。执行：
+这是后端抖音签名脚本依赖未安装，常见于首次部署、换电脑部署或删除过 `backend/node_modules`。执行：
 
 ```bash
 cd backend
@@ -510,6 +510,8 @@ npm ci
 ```
 
 执行后重新启动后端。
+
+如果未配置抖音 Cookie，正常应提示“抖音 Cookie 未配置，请先在设置页面配置抖音 Cookie”，而不是这个 Node 模块缺失错误。
 
 ### 5. 功能提示未配置 Cookie
 

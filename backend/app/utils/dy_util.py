@@ -30,8 +30,72 @@ sign_path = SCRIPTS_DIR / 'dy_live_sign.js'
 bdm_signer_path = SCRIPTS_DIR / 'bdm_sign_vm.js'
 bdm_live_path = SCRIPTS_DIR / 'bdm_live.js'
 
-dy_js = execjs.compile(open(dy_path, 'r', encoding='utf-8').read(), cwd=str(BACKEND_ROOT))
-sign_js = execjs.compile(open(sign_path, 'r', encoding='utf-8').read(), cwd=str(BACKEND_ROOT))
+_dy_js = None
+_sign_js = None
+
+
+def _format_node_dependency_message(module_name=None):
+    module_hint = f"（缺少 {module_name}）" if module_name else ""
+    return f"后端 JS 依赖未安装{module_hint}，请在 backend 目录执行 npm ci 后重启后端"
+
+
+def _extract_missing_node_module(message):
+    match = re.search(r"Cannot find module ['\"]([^'\"]+)['\"]", message or "")
+    return match.group(1) if match else None
+
+
+def _ensure_node_modules(*module_names):
+    missing = [
+        module_name for module_name in module_names
+        if not (BACKEND_ROOT / "node_modules" / module_name).exists()
+    ]
+    if missing:
+        raise RuntimeError(_format_node_dependency_message(", ".join(missing)))
+
+
+def _raise_friendly_js_error(exc):
+    message = str(exc)
+    missing_module = _extract_missing_node_module(message)
+    if missing_module or "MODULE_NOT_FOUND" in message:
+        raise RuntimeError(_format_node_dependency_message(missing_module)) from exc
+    if (
+        "Could not find an available JavaScript runtime" in message
+        or "No such file or directory: 'node'" in message
+        or "No such file or directory: \"node\"" in message
+    ):
+        raise RuntimeError("未找到 Node.js，请先安装 Node.js，并在 backend 目录执行 npm ci 后重启后端") from exc
+    raise exc
+
+
+def _compile_js(script_path, *module_names):
+    if not script_path.exists():
+        raise RuntimeError(f"抖音 JS 脚本缺失: {script_path}")
+    _ensure_node_modules(*module_names)
+    try:
+        return execjs.compile(script_path.read_text(encoding="utf-8"), cwd=str(BACKEND_ROOT))
+    except Exception as exc:
+        _raise_friendly_js_error(exc)
+
+
+def _get_dy_js():
+    global _dy_js
+    if _dy_js is None:
+        _dy_js = _compile_js(dy_path, "jsrsasign")
+    return _dy_js
+
+
+def _get_sign_js():
+    global _sign_js
+    if _sign_js is None:
+        _sign_js = _compile_js(sign_path, "sdenv")
+    return _sign_js
+
+
+def _call_js(get_context, function_name, *args):
+    try:
+        return get_context().call(function_name, *args)
+    except Exception as exc:
+        _raise_friendly_js_error(exc)
 
 
 def trans_cookies(cookies_str):
@@ -49,7 +113,7 @@ def trans_cookies(cookies_str):
 
 # 私信传obj, 其他的拼接
 def generate_req_sign(e, priK):
-    sign = dy_js.call('get_req_sign', e, priK)
+    sign = _call_js(_get_dy_js, 'get_req_sign', e, priK)
     return sign
 
 
@@ -331,18 +395,27 @@ def _run_bdm_signer(full_url, *, data="", user_agent=None, env=None, page_url=No
     if data:
         args.append(f"--body={data}")
 
-    result = subprocess.run(
-        args,
-        cwd=str(SCRIPTS_DIR),
-        env=proc_env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            args,
+            cwd=str(SCRIPTS_DIR),
+            env=proc_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("未找到 Node.js，请先安装 Node.js，并在 backend 目录执行 npm ci 后重启后端") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("bdms 生成 a_bogus 超时，请稍后重试") from exc
+
     stdout = result.stdout or ""
     stderr = result.stderr or ""
     if result.returncode != 0:
         detail = (stderr or stdout or "signer failed").strip()
+        missing_module = _extract_missing_node_module(detail)
+        if missing_module or "MODULE_NOT_FOUND" in detail:
+            raise RuntimeError(_format_node_dependency_message(missing_module))
         raise RuntimeError(f"bdms 生成 a_bogus 失败: {detail[:500]}")
 
     signed_match = re.search(r"^signed_url\s*=\s*(.+)$", stdout, re.MULTILINE)
@@ -403,17 +476,17 @@ def generate_a_bogus(query, data="", user_agent=None, env=None, *, url=None, pag
             page_url=page_url,
         )
     if user_agent is None and env is None:
-        return dy_js.call('get_ab', query, data)
-    return dy_js.call('get_ab', query, data, user_agent or DEFAULT_DOUYIN_USER_AGENT, env or {})
+        return _call_js(_get_dy_js, 'get_ab', query, data)
+    return _call_js(_get_dy_js, 'get_ab', query, data, user_agent or DEFAULT_DOUYIN_USER_AGENT, env or {})
 
 
 def generate_signature(roomId, user_unique_id):
-    return sign_js.call('sign', roomId, user_unique_id)
+    return _call_js(_get_sign_js, 'sign', roomId, user_unique_id)
 
 
 # 传递私钥
 def generate_ree_key(prik):
-    ree_key = dy_js.call('get_ree_key', prik)
+    ree_key = _call_js(_get_dy_js, 'get_ree_key', prik)
     return ree_key
 
 

@@ -1,12 +1,19 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api import deps
 from app.api.v1 import xianyu as xianyu_api
 from app.main import app
+from app.utils import dy_util
 
 
 def test_douyin_work_reports_missing_cookie_before_parsing(monkeypatch):
     monkeypatch.setattr(deps.settings.cookies, "douyin", "", raising=False)
+    monkeypatch.setattr(
+        dy_util,
+        "_get_dy_js",
+        lambda: pytest.fail("缺少抖音 Cookie 时不应进入 JS 签名逻辑"),
+    )
 
     client = TestClient(app)
     response = client.post(
@@ -18,6 +25,19 @@ def test_douyin_work_reports_missing_cookie_before_parsing(monkeypatch):
     payload = response.json()
     assert payload["success"] is False
     assert payload["error"] == deps.DOUYIN_COOKIE_MISSING_MESSAGE
+
+
+def test_douyin_js_dependency_error_is_user_friendly():
+    raw_error = (
+        "Error: Cannot find module 'jsrsasign'\n"
+        "Require stack:\n"
+        "- C:\\Projects\\Qingcao_Tools\\backend\\[stdin]"
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        dy_util._raise_friendly_js_error(Exception(raw_error))
+
+    assert str(exc_info.value) == "后端 JS 依赖未安装（缺少 jsrsasign），请在 backend 目录执行 npm ci 后重启后端"
 
 
 def test_quark_files_routes_require_cookie(monkeypatch):
