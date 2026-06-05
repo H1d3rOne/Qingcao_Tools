@@ -112,19 +112,22 @@ if exist ".venv\Scripts\python.exe" (
 set "PYTHON_BIN=%PROJECT_ROOT%\backend\%VENV_DIR%\Scripts\python.exe"
 echo 使用虚拟环境: backend\%VENV_DIR%
 
-"%PYTHON_BIN%" -c "import uvicorn" >nul 2>nul
+"%PYTHON_BIN%" -m pip --version >nul 2>nul
 if errorlevel 1 (
-  echo 检测到后端依赖未安装，正在补全...
-  "%PYTHON_BIN%" -m pip --version >nul 2>nul
-  if errorlevel 1 (
-    "%PYTHON_BIN%" -m ensurepip --upgrade >nul 2>nul
-  )
-  "%PYTHON_BIN%" -m pip install -r requirements.txt -q
+  "%PYTHON_BIN%" -m ensurepip --upgrade >nul 2>nul
 )
 
-"%PYTHON_BIN%" -c "import uvicorn" >nul 2>nul
+echo 安装/同步后端依赖...
+"%PYTHON_BIN%" -m pip install -r requirements.txt -q --timeout 120 --retries 5
 if errorlevel 1 (
-  echo ❌ 后端依赖安装不完整：当前虚拟环境缺少 uvicorn
+  echo ❌ 后端依赖安装失败，请检查 requirements.txt、Python 版本和网络后重试
+  echo 💡 请执行: cd backend ^&^& "%PYTHON_BIN%" -m pip install -r requirements.txt
+  exit /b 1
+)
+
+"%PYTHON_BIN%" -c "import importlib.util, sys; modules='fastapi starlette uvicorn pydantic pydantic_settings multipart sqlalchemy aiosqlite requests urllib3 httpx httpcore h11 certifi websockets websocket aiofiles yaml openpyxl bs4 lxml google.protobuf execjs qrcode retry tenacity playwright mitmproxy cryptography loguru rich typer tqdm pytest pytest_asyncio'.split(); missing=[m for m in modules if importlib.util.find_spec(m) is None]; print('Missing backend modules: ' + ', '.join(missing), file=sys.stderr) if missing else None; sys.exit(1 if missing else 0)" >nul
+if errorlevel 1 (
+  echo ❌ 后端依赖安装不完整，请重新执行后端依赖安装
   echo 💡 请执行: cd backend ^&^& "%PYTHON_BIN%" -m pip install -r requirements.txt
   exit /b 1
 )

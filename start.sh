@@ -100,16 +100,34 @@ fi
 
 PYTHON_BIN="$PROJECT_ROOT/backend/$VENV_DIR/bin/python"
 echo "使用虚拟环境: backend/$VENV_DIR"
-if ! "$PYTHON_BIN" -c "import uvicorn" >/dev/null 2>&1; then
-    echo "检测到后端依赖未安装，正在补全..."
-    if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
-        "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
-    fi
-    "$PYTHON_BIN" -m pip install -r requirements.txt -q
+if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+    "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
 fi
 
-if ! "$PYTHON_BIN" -c "import uvicorn" >/dev/null 2>&1; then
-    echo "❌ 后端依赖安装不完整：当前虚拟环境缺少 uvicorn"
+echo "安装/同步后端依赖..."
+if ! "$PYTHON_BIN" -m pip install -r requirements.txt -q --timeout 120 --retries 5; then
+    echo "❌ 后端依赖安装失败，请检查 requirements.txt、Python 版本和网络后重试"
+    echo "💡 请执行: cd backend && $PYTHON_BIN -m pip install -r requirements.txt"
+    exit 1
+fi
+
+if ! "$PYTHON_BIN" - <<'PY' >/dev/null
+import importlib.util
+import sys
+
+modules = """
+fastapi starlette uvicorn pydantic pydantic_settings multipart sqlalchemy aiosqlite
+requests urllib3 httpx httpcore h11 certifi websockets websocket aiofiles yaml
+openpyxl bs4 lxml google.protobuf execjs qrcode retry tenacity playwright
+mitmproxy cryptography loguru rich typer tqdm pytest pytest_asyncio
+""".split()
+missing = [module for module in modules if importlib.util.find_spec(module) is None]
+if missing:
+    print("Missing backend modules: " + ", ".join(missing), file=sys.stderr)
+    sys.exit(1)
+PY
+then
+    echo "❌ 后端依赖安装不完整，请重新执行后端依赖安装"
     echo "💡 请执行: cd backend && $PYTHON_BIN -m pip install -r requirements.txt"
     exit 1
 fi
