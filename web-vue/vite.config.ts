@@ -24,10 +24,10 @@ export default defineConfig({
     }
   },
   server: {
-    port: 3000,
+    port: 3120,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:3121',
         changeOrigin: true,
         timeout: 300000,  // 5分钟超时，用于 SSE 长连接
         ws: true,  // 启用 WebSocket 代理
