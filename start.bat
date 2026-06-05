@@ -10,17 +10,23 @@ echo ========================================
 set "PROJECT_ROOT=%~dp0"
 if "%PROJECT_ROOT:~-1%"=="\" set "PROJECT_ROOT=%PROJECT_ROOT:~0,-1%"
 
-rem 基础运行环境检查：缺少必要运行时先提示，不先杀掉已有服务。
-set "HAS_BACKEND_VENV=0"
-if exist "%PROJECT_ROOT%\backend\.venv\Scripts\python.exe" set "HAS_BACKEND_VENV=1"
-if exist "%PROJECT_ROOT%\backend\venv\Scripts\python.exe" set "HAS_BACKEND_VENV=1"
-if not "%HAS_BACKEND_VENV%"=="1" (
+set "VENV_DIR="
+if exist "%PROJECT_ROOT%\backend\.venv\Scripts\python.exe" set "VENV_DIR=.venv"
+if not defined VENV_DIR if exist "%PROJECT_ROOT%\backend\venv\Scripts\python.exe" set "VENV_DIR=venv"
+
+if not defined VENV_DIR (
   call :resolve_python
   if not defined PYTHON_CMD (
     echo ❌ 未找到 Python，请先安装 Python 3.10+ 并加入 PATH
     echo 💡 Windows 可从 https://www.python.org/downloads/ 安装，或使用 winget install Python.Python.3.11
     exit /b 1
   )
+  echo ❌ 未找到后端虚拟环境（backend\.venv 或 backend\venv）
+  echo 💡 后端依赖安装方法:
+  echo    cd "%PROJECT_ROOT%\backend"
+  echo    %PYTHON_CMD% -m venv .venv
+  echo    .venv\Scripts\python.exe -m pip install -r requirements.txt
+  exit /b 1
 )
 
 where node >nul 2>nul
@@ -89,46 +95,60 @@ echo.
 echo 启动后端服务...
 cd /d "%PROJECT_ROOT%\backend"
 
-set "VENV_DIR="
-if exist ".venv\Scripts\python.exe" (
-  set "VENV_DIR=.venv"
-) else if exist "venv\Scripts\python.exe" (
-  set "VENV_DIR=venv"
-) else (
-  call :resolve_python
-  if not defined PYTHON_CMD (
-    echo ❌ 未找到 Python，请先安装 Python 3.10+ 并加入 PATH
-    exit /b 1
-  )
-  echo 创建虚拟环境...
-  %PYTHON_CMD% -m venv .venv
-  if errorlevel 1 (
-    echo ❌ 创建虚拟环境失败
-    exit /b 1
-  )
-  set "VENV_DIR=.venv"
-)
-
 set "PYTHON_BIN=%PROJECT_ROOT%\backend\%VENV_DIR%\Scripts\python.exe"
 echo 使用虚拟环境: backend\%VENV_DIR%
 
-"%PYTHON_BIN%" -m pip --version >nul 2>nul
-if errorlevel 1 (
-  "%PYTHON_BIN%" -m ensurepip --upgrade >nul 2>nul
+if not exist "%PYTHON_BIN%" (
+  echo ❌ 当前后端虚拟环境不存在或不完整: %PYTHON_BIN%
+  echo 💡 请执行:
+  echo    cd "%PROJECT_ROOT%\backend"
+  echo    %PYTHON_CMD% -m venv .venv
+  echo    .venv\Scripts\python.exe -m pip install -r requirements.txt
+  exit /b 1
 )
 
-echo 安装/同步后端依赖...
-"%PYTHON_BIN%" -m pip install -r requirements.txt -q --timeout 120 --retries 5
+"%PYTHON_BIN%" -m pip --version >nul 2>nul
 if errorlevel 1 (
-  echo ❌ 后端依赖安装失败，请检查 requirements.txt、Python 版本和网络后重试
+  echo ❌ 当前后端虚拟环境缺少 pip
+  echo 💡 请执行:
+  echo    cd "%PROJECT_ROOT%\backend"
+  echo    "%PYTHON_BIN%" -m ensurepip --upgrade
+  echo    "%PYTHON_BIN%" -m pip install -r requirements.txt
+  exit /b 1
+)
+
+set "BACKEND_CHECK_RESULT="
+for /f "usebackq delims=" %%M in (`"%PYTHON_BIN%" -c "import importlib.util; modules='fastapi starlette uvicorn pydantic pydantic_settings multipart sqlalchemy aiosqlite requests urllib3 httpx httpcore h11 certifi websockets websocket aiofiles yaml openpyxl bs4 lxml google.protobuf execjs qrcode retry tenacity playwright mitmproxy cryptography loguru rich typer tqdm pytest pytest_asyncio'.split(); missing=[m for m in modules if importlib.util.find_spec(m) is None]; print('OK' if not missing else ', '.join(missing))"`) do set "BACKEND_CHECK_RESULT=%%M"
+if /I not "!BACKEND_CHECK_RESULT!"=="OK" (
+  echo ❌ 后端依赖未安装或不完整
+  if not "!BACKEND_CHECK_RESULT!"=="" (
+    echo 💡 缺少模块: !BACKEND_CHECK_RESULT!
+  )
   echo 💡 请执行: cd backend ^&^& "%PYTHON_BIN%" -m pip install -r requirements.txt
   exit /b 1
 )
 
-"%PYTHON_BIN%" -c "import importlib.util, sys; modules='fastapi starlette uvicorn pydantic pydantic_settings multipart sqlalchemy aiosqlite requests urllib3 httpx httpcore h11 certifi websockets websocket aiofiles yaml openpyxl bs4 lxml google.protobuf execjs qrcode retry tenacity playwright mitmproxy cryptography loguru rich typer tqdm pytest pytest_asyncio'.split(); missing=[m for m in modules if importlib.util.find_spec(m) is None]; print('Missing backend modules: ' + ', '.join(missing), file=sys.stderr) if missing else None; sys.exit(1 if missing else 0)" >nul
-if errorlevel 1 (
-  echo ❌ 后端依赖安装不完整，请重新执行后端依赖安装
-  echo 💡 请执行: cd backend ^&^& "%PYTHON_BIN%" -m pip install -r requirements.txt
+set "FRONTEND_PM="
+where pnpm >nul 2>nul
+if not errorlevel 1 (
+  set "FRONTEND_PM=pnpm"
+) else (
+  where npm >nul 2>nul
+  if not errorlevel 1 (
+    set "FRONTEND_PM=npm"
+  )
+)
+
+if not defined FRONTEND_PM (
+  echo ❌ 未找到 npm 或 pnpm，请先安装 Node.js/npm，或执行: npm install -g pnpm
+  exit /b 1
+)
+
+if not exist "%PROJECT_ROOT%\web-vue\node_modules\.bin\vite.cmd" if not exist "%PROJECT_ROOT%\web-vue\node_modules\.bin\vite" (
+  echo ❌ 前端依赖未安装或不完整（缺少 web-vue\node_modules）
+  echo 💡 前端依赖安装方法:
+  echo    cd "%PROJECT_ROOT%\web-vue"
+  echo    !FRONTEND_PM! install
   exit /b 1
 )
 
@@ -141,30 +161,10 @@ cd /d "%PROJECT_ROOT%\web-vue"
 
 set "FRONTEND_LOG=%TEMP%\qingcao-frontend.log"
 break > "%FRONTEND_LOG%"
-
-where pnpm >nul 2>nul
-if not errorlevel 1 (
-  echo 安装/同步前端依赖...
-  pnpm install
-  if errorlevel 1 (
-    echo ❌ 前端依赖安装失败，请检查 pnpm 输出后重试
-    exit /b 1
-  )
+if "%FRONTEND_PM%"=="pnpm" (
   start "Qingcao Frontend" /B cmd /c "pnpm run dev -- --host 0.0.0.0 --port 3120 ^> "%FRONTEND_LOG%" 2^>^&1"
 ) else (
-  where npm >nul 2>nul
-  if not errorlevel 1 (
-    echo 安装/同步前端依赖...
-    npm install
-    if errorlevel 1 (
-      echo ❌ 前端依赖安装失败，请检查 npm 输出后重试
-      exit /b 1
-    )
-    start "Qingcao Frontend" /B cmd /c "npm run dev -- --host 0.0.0.0 --port 3120 ^> "%FRONTEND_LOG%" 2^>^&1"
-  ) else (
-    echo ❌ 未找到 npm 或 pnpm，请先安装 Node.js/npm，或执行: npm install -g pnpm
-    exit /b 1
-  )
+  start "Qingcao Frontend" /B cmd /c "npm run dev -- --host 0.0.0.0 --port 3120 ^> "%FRONTEND_LOG%" 2^>^&1"
 )
 
 set "BACKEND_READY=0"

@@ -8,18 +8,37 @@ echo "========================================"
 echo "  青草工具箱 v2.0.0"
 echo "========================================"
 
-# 获取项目根目录
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-# 基础运行环境检查：缺少必要运行时先提示，不先杀掉已有服务。
-HAS_BACKEND_VENV=0
-if [ -x "$PROJECT_ROOT/backend/.venv/bin/python" ] || [ -x "$PROJECT_ROOT/backend/venv/bin/python" ]; then
-    HAS_BACKEND_VENV=1
+print_backend_setup_hint() {
+    echo "💡 后端依赖安装方法:"
+    echo "   cd \"$PROJECT_ROOT/backend\""
+    echo "   python3 -m venv .venv"
+    echo "   .venv/bin/python -m pip install -r requirements.txt"
+}
+
+print_frontend_setup_hint() {
+    local pm="$1"
+    echo "💡 前端依赖安装方法:"
+    echo "   cd \"$PROJECT_ROOT/web-vue\""
+    echo "   $pm install"
+}
+
+BACKEND_VENV_DIR=""
+if [ -x "$PROJECT_ROOT/backend/.venv/bin/python" ]; then
+    BACKEND_VENV_DIR=".venv"
+elif [ -x "$PROJECT_ROOT/backend/venv/bin/python" ]; then
+    BACKEND_VENV_DIR="venv"
 fi
 
-if [ "$HAS_BACKEND_VENV" -ne 1 ] && ! command -v python3 >/dev/null 2>&1; then
-    echo "❌ 未找到 Python 3，请先安装 Python 3.10+ 并加入 PATH"
-    echo "💡 macOS 可执行: brew install python"
+if [ -z "$BACKEND_VENV_DIR" ]; then
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "❌ 未找到 Python 3，请先安装 Python 3.10+ 并加入 PATH"
+        echo "💡 macOS 可执行: brew install python"
+        exit 1
+    fi
+    echo "❌ 未找到后端虚拟环境（backend/.venv 或 backend/venv）"
+    print_backend_setup_hint
     exit 1
 fi
 
@@ -29,8 +48,51 @@ if ! command -v node >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v pnpm >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1; then
+FRONTEND_PM=""
+if command -v pnpm >/dev/null 2>&1; then
+    FRONTEND_PM="pnpm"
+elif command -v npm >/dev/null 2>&1; then
+    FRONTEND_PM="npm"
+else
     echo "❌ 未找到 pnpm 或 npm，请先安装 Node.js/npm，或执行: npm install -g pnpm"
+    exit 1
+fi
+
+PYTHON_BIN="$PROJECT_ROOT/backend/$BACKEND_VENV_DIR/bin/python"
+echo "使用虚拟环境: backend/$BACKEND_VENV_DIR"
+
+if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+    echo "❌ 当前后端虚拟环境缺少 pip"
+    echo "💡 请执行:"
+    echo "   cd \"$PROJECT_ROOT/backend\""
+    echo "   \"$PYTHON_BIN\" -m ensurepip --upgrade"
+    echo "   \"$PYTHON_BIN\" -m pip install -r requirements.txt"
+    exit 1
+fi
+
+if ! BACKEND_MISSING_MODULES=$(BACKEND_MODULES="fastapi starlette uvicorn pydantic pydantic_settings multipart sqlalchemy aiosqlite requests urllib3 httpx httpcore h11 certifi websockets websocket aiofiles yaml openpyxl bs4 lxml google.protobuf execjs qrcode retry tenacity playwright mitmproxy cryptography loguru rich typer tqdm pytest pytest_asyncio" "$PYTHON_BIN" - <<'PY'
+import importlib.util
+import os
+import sys
+
+modules = os.environ.get("BACKEND_MODULES", "").split()
+missing = [module for module in modules if importlib.util.find_spec(module) is None]
+if missing:
+    print(", ".join(missing))
+    sys.exit(1)
+PY
+); then
+    echo "❌ 后端依赖未安装或不完整"
+    if [ -n "$BACKEND_MISSING_MODULES" ]; then
+        echo "💡 缺少模块: $BACKEND_MISSING_MODULES"
+    fi
+    print_backend_setup_hint
+    exit 1
+fi
+
+if [ ! -x "$PROJECT_ROOT/web-vue/node_modules/.bin/vite" ] && [ ! -x "$PROJECT_ROOT/web-vue/node_modules/.bin/vite.cmd" ]; then
+    echo "❌ 前端依赖未安装或不完整（缺少 web-vue/node_modules）"
+    print_frontend_setup_hint "$FRONTEND_PM"
     exit 1
 fi
 
@@ -40,13 +102,11 @@ lsof -ti:3121 | xargs kill -9 2>/dev/null || true
 lsof -ti:3120 | xargs kill -9 2>/dev/null || true
 sleep 1
 
-# 检查统一运行态配置目录
 CONFIG_DIR="$PROJECT_ROOT/backend/config"
 CONFIG_EXAMPLE_DIR="$PROJECT_ROOT/backend/config.example"
 LEGACY_CONFIG_DIR="$PROJECT_ROOT/backend/app/config"
 mkdir -p "$CONFIG_DIR"
 
-# 兼容旧版本：如果 backend/app/config/config.yaml 已存在，优先复制到新的统一目录。
 if [ ! -f "$CONFIG_DIR/config.yaml" ] && [ -f "$LEGACY_CONFIG_DIR/config.yaml" ]; then
     cp "$LEGACY_CONFIG_DIR/config.yaml" "$CONFIG_DIR/config.yaml"
     echo "✅ 已迁移旧配置: backend/app/config/config.yaml -> backend/config/config.yaml"
@@ -82,83 +142,26 @@ export QINGCAO_CONFIG_DIR="${QINGCAO_CONFIG_DIR:-$CONFIG_DIR}"
 export XIANYU_CONFIG_DIR="${XIANYU_CONFIG_DIR:-$QINGCAO_CONFIG_DIR}"
 export QUARK_CONFIG_DIR="${QUARK_CONFIG_DIR:-$QINGCAO_CONFIG_DIR}"
 
-# 启动后端
 echo ""
 echo "启动后端服务..."
 cd "$PROJECT_ROOT/backend"
 
-VENV_DIR=""
-if [ -d ".venv" ]; then
-    VENV_DIR=".venv"
-elif [ -d "venv" ]; then
-    VENV_DIR="venv"
-else
-    echo "创建虚拟环境..."
-    python3 -m venv .venv
-    VENV_DIR=".venv"
-fi
-
-PYTHON_BIN="$PROJECT_ROOT/backend/$VENV_DIR/bin/python"
-echo "使用虚拟环境: backend/$VENV_DIR"
-if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
-    "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
-fi
-
-echo "安装/同步后端依赖..."
-if ! "$PYTHON_BIN" -m pip install -r requirements.txt -q --timeout 120 --retries 5; then
-    echo "❌ 后端依赖安装失败，请检查 requirements.txt、Python 版本和网络后重试"
-    echo "💡 请执行: cd backend && $PYTHON_BIN -m pip install -r requirements.txt"
-    exit 1
-fi
-
-if ! "$PYTHON_BIN" - <<'PY' >/dev/null
-import importlib.util
-import sys
-
-modules = """
-fastapi starlette uvicorn pydantic pydantic_settings multipart sqlalchemy aiosqlite
-requests urllib3 httpx httpcore h11 certifi websockets websocket aiofiles yaml
-openpyxl bs4 lxml google.protobuf execjs qrcode retry tenacity playwright
-mitmproxy cryptography loguru rich typer tqdm pytest pytest_asyncio
-""".split()
-missing = [module for module in modules if importlib.util.find_spec(module) is None]
-if missing:
-    print("Missing backend modules: " + ", ".join(missing), file=sys.stderr)
-    sys.exit(1)
-PY
-then
-    echo "❌ 后端依赖安装不完整，请重新执行后端依赖安装"
-    echo "💡 请执行: cd backend && $PYTHON_BIN -m pip install -r requirements.txt"
-    exit 1
-fi
-
-# 后台启动后端
 : > /tmp/qingcao-backend.log
 nohup "$PYTHON_BIN" -m uvicorn app.main:app --host 0.0.0.0 --port 3121 > /tmp/qingcao-backend.log 2>&1 &
 BACKEND_PID=$!
 
-# 启动前端
 echo "启动前端服务..."
 cd "$PROJECT_ROOT/web-vue"
 
-if command -v pnpm &> /dev/null; then
-    echo "安装/同步前端依赖..."
-    pnpm install
-    : > /tmp/qingcao-frontend.log
-    nohup pnpm run dev > /tmp/qingcao-frontend.log 2>&1 &
-    FRONTEND_PID=$!
-elif command -v npm &> /dev/null; then
-    echo "安装/同步前端依赖..."
-    npm install
-    : > /tmp/qingcao-frontend.log
-    nohup npm run dev > /tmp/qingcao-frontend.log 2>&1 &
+: > /tmp/qingcao-frontend.log
+if [ "$FRONTEND_PM" = "pnpm" ]; then
+    nohup pnpm run dev -- --host 0.0.0.0 --port 3120 > /tmp/qingcao-frontend.log 2>&1 &
     FRONTEND_PID=$!
 else
-    echo "❌ 未找到 npm 或 pnpm，请先安装 Node.js/npm，或执行: npm install -g pnpm"
-    exit 1
+    nohup npm run dev -- --host 0.0.0.0 --port 3120 > /tmp/qingcao-frontend.log 2>&1 &
+    FRONTEND_PID=$!
 fi
 
-# 等待后端服务启动
 BACKEND_READY=0
 for _ in $(seq 1 30); do
     if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
@@ -218,5 +221,4 @@ echo "💡 提示: 首次使用请在设置页面配置 Cookie"
 echo ""
 echo "按 Ctrl+C 停止所有服务"
 
-# 等待
 wait
