@@ -90,6 +90,8 @@ if exist "%CONFIG_EXAMPLE_DIR%" (
 if not defined QINGCAO_CONFIG_DIR set "QINGCAO_CONFIG_DIR=%CONFIG_DIR%"
 if not defined XIANYU_CONFIG_DIR set "XIANYU_CONFIG_DIR=%QINGCAO_CONFIG_DIR%"
 if not defined QUARK_CONFIG_DIR set "QUARK_CONFIG_DIR=%QINGCAO_CONFIG_DIR%"
+if not defined PYTHONUTF8 set "PYTHONUTF8=1"
+if not defined PYTHONIOENCODING set "PYTHONIOENCODING=utf-8"
 
 echo.
 echo Starting backend service...
@@ -119,7 +121,7 @@ call :wait_url "http://127.0.0.1:3121/health"
 if errorlevel 1 (
   echo.
   echo Backend failed to start. Recent backend log:
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '%BACKEND_LOG%') { Get-Content -Path '%BACKEND_LOG%' -Tail 40 }"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '%BACKEND_LOG%') { Get-Content -Encoding UTF8 -Path '%BACKEND_LOG%' -Tail 40 }"
   exit /b 1
 )
 
@@ -127,7 +129,7 @@ call :wait_url "http://127.0.0.1:3120/"
 if errorlevel 1 (
   echo.
   echo Frontend failed to start. Recent frontend log:
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '%FRONTEND_LOG%') { Get-Content -Path '%FRONTEND_LOG%' -Tail 40 }"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '%FRONTEND_LOG%') { Get-Content -Encoding UTF8 -Path '%FRONTEND_LOG%' -Tail 40 }"
   exit /b 1
 )
 
