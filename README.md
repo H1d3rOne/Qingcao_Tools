@@ -184,7 +184,7 @@ npm install
 
 #### 可选：安装 Playwright 浏览器
 
-仅使用浏览器自动化相关能力时需要。
+仅使用浏览器自动化相关能力时需要，例如抖音搜索、闲鱼浏览器登录。
 
 macOS / Linux / WSL2：
 
@@ -564,7 +564,7 @@ backend/config/config.yaml
 
 ### 10. Playwright 相关功能不可用
 
-安装浏览器依赖：
+抖音搜索、闲鱼浏览器登录等功能需要 Playwright 浏览器。如果提示 `Executable doesn't exist` 或 `playwright install`，安装浏览器依赖：
 
 macOS / Linux / WSL2：
 

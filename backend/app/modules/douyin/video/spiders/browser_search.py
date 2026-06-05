@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import sys
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 from typing import Any
@@ -37,11 +38,72 @@ class DouyinBrowserSearchExecutor:
         if env_path and Path(env_path).exists():
             return env_path
 
-        # macOS 常见路径；其它平台交给 Playwright 使用已安装/下载的 chromium。
-        mac_chrome = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-        if mac_chrome.exists():
-            return str(mac_chrome)
+        candidates: list[Path] = []
+        if sys.platform == "darwin":
+            candidates.extend([
+                Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+                Path("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+            ])
+        elif sys.platform.startswith("win"):
+            roots = [
+                os.getenv("PROGRAMFILES"),
+                os.getenv("PROGRAMFILES(X86)"),
+                os.getenv("PROGRAMW6432"),
+                os.getenv("LOCALAPPDATA"),
+                r"C:\Program Files",
+                r"C:\Program Files (x86)",
+                r"C:\Program Files (Arm)",
+            ]
+            relative_paths = [
+                r"Google\Chrome\Application\chrome.exe",
+                r"Microsoft\Edge\Application\msedge.exe",
+                r"Chromium\Application\chrome.exe",
+            ]
+            for root in roots:
+                if not root:
+                    continue
+                for relative_path in relative_paths:
+                    candidates.append(Path(root) / relative_path)
+        else:
+            candidates.extend([
+                Path("/usr/bin/google-chrome"),
+                Path("/usr/bin/google-chrome-stable"),
+                Path("/usr/bin/chromium"),
+                Path("/usr/bin/chromium-browser"),
+                Path("/snap/bin/chromium"),
+                Path("/opt/google/chrome/chrome"),
+                Path("/usr/bin/microsoft-edge"),
+                Path("/usr/bin/microsoft-edge-stable"),
+            ])
+
+        for candidate in candidates:
+            if candidate.exists():
+                return str(candidate)
         return None
+
+    @staticmethod
+    def _playwright_browser_message() -> str:
+        if sys.platform.startswith("win"):
+            install_command = r"cd backend && .\.venv\Scripts\python -m playwright install chromium"
+        else:
+            install_command = "cd backend && source .venv/bin/activate && python -m playwright install chromium"
+
+        return (
+            "抖音搜索需要 Playwright Chromium 浏览器。"
+            "请先安装浏览器后重启后端："
+            f"{install_command}；"
+            "也可以安装 Chrome/Edge，或设置 DOUYIN_BROWSER_EXECUTABLE 指向浏览器可执行文件。"
+        )
+
+    @staticmethod
+    def _is_playwright_browser_missing_error(exc: Exception) -> bool:
+        message = str(exc)
+        return (
+            "Executable doesn't exist" in message
+            or "playwright install" in message
+            or "Looks like Playwright was just installed or updated" in message
+        )
 
     @staticmethod
     def _to_int(value: Any, fallback: int) -> int:
@@ -123,7 +185,12 @@ class DouyinBrowserSearchExecutor:
             executable = self._chrome_executable()
             if executable:
                 launch_kwargs["executable_path"] = executable
-            self._browser = await self._playwright.chromium.launch(**launch_kwargs)
+            try:
+                self._browser = await self._playwright.chromium.launch(**launch_kwargs)
+            except Exception as exc:
+                if self._is_playwright_browser_missing_error(exc):
+                    raise RuntimeError(self._playwright_browser_message()) from exc
+                raise
 
         profile_key = self._profile_fingerprint(auth, profile)
         if self._context is None or self._profile_key != profile_key:
