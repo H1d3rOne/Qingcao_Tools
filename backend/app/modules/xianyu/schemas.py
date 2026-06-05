@@ -187,6 +187,12 @@ class XianyuBrowserLoginCancelRequest(BaseModel):
     session_id: str = Field(..., min_length=1, description="扫码会话 ID")
 
 
+class XianyuBrowserLoginCancelResponse(BaseModel):
+    """取消浏览器扫码登录响应"""
+    success: bool = Field(True, description="是否成功")
+    message: str = Field("", description="消息")
+
+
 class XianyuUserProfile(BaseModel):
     """闲鱼登录用户信息"""
     display_name: str = Field("", description="用户昵称")

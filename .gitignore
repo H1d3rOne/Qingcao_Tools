@@ -65,7 +65,6 @@ backend/config/
 backend/app/datas/
 backend/app/config/
 backend/app/modules/quark/config/
-backend/xianyu_client/
 
 # 抖音/闲鱼/夸克 cookie 与浏览器档案（敏感）
 **/xianyu_cookies.json
