@@ -113,6 +113,7 @@
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
+| Playwright 浏览器 / Chrome / Edge | 可选 | 抖音搜索、闲鱼浏览器登录需要；可安装 Playwright 自带 Chromium，也可使用系统已安装的 Chrome/Edge |
 | 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
 可用以下命令确认版本：
@@ -185,6 +186,7 @@ npm install
 #### 可选：安装 Playwright 浏览器
 
 仅使用浏览器自动化相关能力时需要，例如抖音搜索、闲鱼浏览器登录。
+如果系统已安装 Chrome/Edge，可跳过此步骤；程序会优先查找系统浏览器。找不到可用系统浏览器时，再安装 Playwright 自带 Chromium。
 
 macOS / Linux / WSL2：
 
@@ -564,7 +566,7 @@ backend/config/config.yaml
 
 ### 10. Playwright 相关功能不可用
 
-抖音搜索、闲鱼浏览器登录等功能需要 Playwright 浏览器。如果提示 `Executable doesn't exist` 或 `playwright install`，安装浏览器依赖：
+抖音搜索、闲鱼浏览器登录等功能需要浏览器执行环境。可以使用系统已安装的 Chrome/Edge；如果提示 `Executable doesn't exist` 或 `playwright install`，可安装 Playwright 自带 Chromium：
 
 macOS / Linux / WSL2：
 
