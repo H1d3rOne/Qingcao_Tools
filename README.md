@@ -122,7 +122,7 @@ Windows：
 start.bat
 ```
 
-`start.sh` / `start.bat` 会先检查环境和依赖；如果缺少 Python、Node.js、后端虚拟环境或前端依赖，只会提示对应安装方法，不会自动安装。
+`start.sh` / `start.bat` 会启动前后端服务；不再进行依赖完整性检测，也不输出依赖安装说明。
 
 1. 显示当前版本号；
 2. 停止已有的 `3120` / `3121` 端口服务；
@@ -130,11 +130,9 @@ start.bat
 4. 兼容迁移旧目录 `backend/app/config/config.yaml`；
 5. 从 `backend/config.example/` 补齐缺失的本地配置模板；
 6. 自动设置 `QINGCAO_CONFIG_DIR`、`XIANYU_CONFIG_DIR`、`QUARK_CONFIG_DIR`；
-7. 检查后端虚拟环境与依赖是否齐全；缺失时输出安装命令；
-8. 启动后端 `http://localhost:3121`，并通过日志/健康检查确认服务可用；
-9. 检查前端 `node_modules` 与 `vite` 是否存在；缺失时输出安装命令；
-10. 启动前端 `http://localhost:3120`；
-11. 输出前端、后端、Swagger、ReDoc 地址以及日志文件路径。
+7. 启动后端 `http://localhost:3121`，并通过日志/健康检查确认服务可用；
+8. 启动前端 `http://localhost:3120`；
+9. 输出前端、后端、Swagger、ReDoc 地址以及日志文件路径。
 
 macOS / Linux 启动日志默认写入：
 
