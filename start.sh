@@ -11,6 +11,29 @@ echo "========================================"
 # 获取项目根目录
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
+# 基础运行环境检查：缺少必要运行时先提示，不先杀掉已有服务。
+HAS_BACKEND_VENV=0
+if [ -x "$PROJECT_ROOT/backend/.venv/bin/python" ] || [ -x "$PROJECT_ROOT/backend/venv/bin/python" ]; then
+    HAS_BACKEND_VENV=1
+fi
+
+if [ "$HAS_BACKEND_VENV" -ne 1 ] && ! command -v python3 >/dev/null 2>&1; then
+    echo "❌ 未找到 Python 3，请先安装 Python 3.10+ 并加入 PATH"
+    echo "💡 macOS 可执行: brew install python"
+    exit 1
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "❌ 未找到 Node.js，请先安装 Node.js 18+ 并加入 PATH"
+    echo "💡 macOS 可执行: brew install node"
+    exit 1
+fi
+
+if ! command -v pnpm >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1; then
+    echo "❌ 未找到 pnpm 或 npm，请先安装 Node.js/npm，或执行: npm install -g pnpm"
+    exit 1
+fi
+
 # 停止已有服务
 echo "停止已有服务..."
 lsof -ti:3121 | xargs kill -9 2>/dev/null || true
@@ -101,23 +124,20 @@ echo "启动前端服务..."
 cd "$PROJECT_ROOT/web-vue"
 
 if command -v pnpm &> /dev/null; then
-    if [ ! -d "node_modules" ]; then
-        echo "安装前端依赖..."
-        pnpm install
-    fi
+    echo "安装/同步前端依赖..."
+    pnpm install
     : > /tmp/qingcao-frontend.log
     nohup pnpm run dev > /tmp/qingcao-frontend.log 2>&1 &
     FRONTEND_PID=$!
 elif command -v npm &> /dev/null; then
-    if [ ! -d "node_modules" ]; then
-        echo "安装前端依赖..."
-        npm install
-    fi
+    echo "安装/同步前端依赖..."
+    npm install
     : > /tmp/qingcao-frontend.log
     nohup npm run dev > /tmp/qingcao-frontend.log 2>&1 &
     FRONTEND_PID=$!
 else
-    echo "⚠️  未找到 npm 或 pnpm，请手动安装前端依赖"
+    echo "❌ 未找到 npm 或 pnpm，请先安装 Node.js/npm，或执行: npm install -g pnpm"
+    exit 1
 fi
 
 # 等待后端服务启动

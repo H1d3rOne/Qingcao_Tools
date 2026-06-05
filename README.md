@@ -111,12 +111,18 @@
 
 ### 方式一：一键启动（推荐）
 
+macOS / Linux：
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
 
-`start.sh` 会自动完成：
+Windows：
+```bat
+start.bat
+```
+
+`start.sh` / `start.bat` 会自动完成：
 
 1. 显示当前版本号；
 2. 停止已有的 `3120` / `3121` 端口服务；
@@ -130,11 +136,18 @@ chmod +x start.sh
 10. 使用 `pnpm` 或 `npm` 安装前端依赖并启动前端 `http://localhost:3120`；
 11. 输出前端、后端、Swagger、ReDoc 地址以及日志文件路径。
 
-启动日志默认写入：
+macOS / Linux 启动日志默认写入：
 
 ```text
 /tmp/qingcao-backend.log
 /tmp/qingcao-frontend.log
+```
+
+Windows 启动日志默认写入：
+
+```text
+%TEMP%\qingcao-backend.log
+%TEMP%\qingcao-frontend.log
 ```
 
 如果后端启动失败，脚本会直接打印最近的后端日志，便于定位依赖、端口或配置问题。
