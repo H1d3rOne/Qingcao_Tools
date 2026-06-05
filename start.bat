@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 echo ========================================
-echo   Qingcao Toolbox v2.0.0
+call :say 6Z2S6I2J5bel5YW3566xIHYyLjAuMA==
 echo ========================================
 
 set "PROJECT_ROOT=%~dp0"
@@ -16,36 +16,35 @@ if not defined VENV_DIR if exist "%PROJECT_ROOT%\backend\venv\Scripts\python.exe
 
 if not defined VENV_DIR (
   echo.
-  echo Backend environment is not ready.
-  echo Run these commands first:
+  call :say 5ZCO56uv5L6d6LWW5rKh5pyJ5a6J6KOF77yM6K+35L2/55SoIHBpcCBpbnN0YWxsIC1yIHJlcXVpcmVtZW50cy50eHQg5a6J6KOF5L6d6LWW44CC
   echo.
   if defined PYTHON_CMD (
     echo   cd "%PROJECT_ROOT%\backend"
     echo   !PYTHON_CMD! -m venv .venv
     echo   .venv\Scripts\python.exe -m pip install -r requirements.txt
   ) else (
-    echo   Install Python 3.10+ first:
+    call :say 6K+35YWI5a6J6KOFIFB5dGhvbiAzLjEwK++8mg==
     echo   https://www.python.org/downloads/
     echo.
-    echo   Or run:
+    call :say 5Lmf5Y+v5Lul5omn6KGM77ya
     echo   winget install Python.Python.3.11
   )
   echo.
-  echo Then run start.bat again.
+  call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
   exit /b 1
 )
 
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo Node.js 18+ is required.
-  echo Install Node.js first:
+  call :say 5pyq5qOA5rWL5YiwIE5vZGUuanMgMTgr77yM6K+35YWI5a6J6KOFIE5vZGUuanPjgII=
+  call :say Tm9kZS5qcyDlronoo4XlnLDlnYDvvJo=
   echo   https://nodejs.org/
   echo.
-  echo Or run:
+  call :say 5Lmf5Y+v5Lul5omn6KGM77ya
   echo   winget install OpenJS.NodeJS.LTS
   echo.
-  echo Then run start.bat again.
+  call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
   exit /b 1
 )
 
@@ -54,16 +53,16 @@ if errorlevel 1 (
   where npm >nul 2>nul
   if errorlevel 1 (
     echo.
-    echo pnpm or npm is required.
-    echo Install Node.js/npm first, or run:
+    call :say 5pyq5qOA5rWL5YiwIHBucG0g5oiWIG5wbeOAgg==
+    call :say 6K+35YWI5a6J6KOFIE5vZGUuanMvbnBt77yM5oiW5omn6KGM77ya
     echo   npm install -g pnpm
     echo.
-    echo Then run start.bat again.
+    call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
     exit /b 1
   )
 )
 
-echo Stopping existing services...
+call :say 5YGc5q2i5bey5pyJ5pyN5YqhLi4u
 call :kill_port 3121
 call :kill_port 3120
 timeout /t 1 /nobreak >nul
@@ -76,7 +75,7 @@ if not exist "%CONFIG_DIR%" mkdir "%CONFIG_DIR%"
 
 if not exist "%CONFIG_DIR%\config.yaml" if exist "%LEGACY_CONFIG_DIR%\config.yaml" (
   copy /Y "%LEGACY_CONFIG_DIR%\config.yaml" "%CONFIG_DIR%\config.yaml" >nul
-  echo Migrated legacy config: backend\app\config\config.yaml -^> backend\config\config.yaml
+  call :say 5bey6L+B56e75pen6YWN572u77yaYmFja2VuZFxhcHBcY29uZmlnXGNvbmZpZy55YW1sIC0+IGJhY2tlbmRcY29uZmlnXGNvbmZpZy55YW1s
 )
 
 if exist "%CONFIG_EXAMPLE_DIR%" (
@@ -100,8 +99,8 @@ if exist "%CONFIG_EXAMPLE_DIR%" (
     )
   )
   if "!CREATED_CONFIG!"=="1" (
-    echo Initialized local config dir: backend\config\
-    echo Real Cookie/API Key files are stored in backend\config\ and ignored by Git.
+    call :say 5bey5Yid5aeL5YyW5pys5Zyw6YWN572u55uu5b2V77yaYmFja2VuZFxjb25maWdc
+    call :say 55yf5a6eIENvb2tpZS9BUEkgS2V5IOWPquS8muS/neWtmOWcqCBiYWNrZW5kXGNvbmZpZ1zvvIzkuI3kvJrmj5DkuqTliLAgR2l044CC
   )
 )
 
@@ -110,7 +109,7 @@ if not defined XIANYU_CONFIG_DIR set "XIANYU_CONFIG_DIR=%QINGCAO_CONFIG_DIR%"
 if not defined QUARK_CONFIG_DIR set "QUARK_CONFIG_DIR=%QINGCAO_CONFIG_DIR%"
 
 echo.
-echo Starting backend service...
+call :say 5ZCv5Yqo5ZCO56uv5pyN5YqhLi4u
 cd /d "%PROJECT_ROOT%\backend"
 
 set "PYTHON_BIN=%PROJECT_ROOT%\backend\%VENV_DIR%\Scripts\python.exe"
@@ -118,8 +117,7 @@ echo Using virtual environment: backend\%VENV_DIR%
 
 if not exist "%PYTHON_BIN%" (
   echo.
-  echo Backend virtual environment is incomplete.
-  echo Recreate it with:
+  call :say 5ZCO56uv5L6d6LWW5rKh5pyJ5a6J6KOF77yM6K+35L2/55SoIHBpcCBpbnN0YWxsIC1yIHJlcXVpcmVtZW50cy50eHQg5a6J6KOF5L6d6LWW44CC
   echo.
   echo   cd "%PROJECT_ROOT%\backend"
   if defined PYTHON_CMD (
@@ -129,21 +127,20 @@ if not exist "%PYTHON_BIN%" (
   )
   echo   .venv\Scripts\python.exe -m pip install -r requirements.txt
   echo.
-  echo Then run start.bat again.
+  call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
   exit /b 1
 )
 
 "%PYTHON_BIN%" -m pip --version >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo pip is missing in the backend virtual environment.
-  echo Run these commands:
+  call :say 5ZCO56uv5L6d6LWW5rKh5pyJ5a6J6KOF77yM6K+35L2/55SoIHBpcCBpbnN0YWxsIC1yIHJlcXVpcmVtZW50cy50eHQg5a6J6KOF5L6d6LWW44CC
   echo.
   echo   cd "%PROJECT_ROOT%\backend"
   echo   "%PYTHON_BIN%" -m ensurepip --upgrade
   echo   "%PYTHON_BIN%" -m pip install -r requirements.txt
   echo.
-  echo Then run start.bat again.
+  call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
   exit /b 1
 )
 
@@ -151,17 +148,15 @@ set "BACKEND_CHECK_RESULT="
 for /f "usebackq delims=" %%M in (`"%PYTHON_BIN%" -c "import importlib.util; modules='fastapi starlette uvicorn pydantic pydantic_settings multipart sqlalchemy aiosqlite requests urllib3 httpx httpcore h11 certifi websockets websocket aiofiles yaml openpyxl bs4 lxml google.protobuf execjs qrcode retry tenacity playwright mitmproxy cryptography loguru rich typer tqdm pytest pytest_asyncio'.split(); missing=[m for m in modules if importlib.util.find_spec(m) is None]; print('OK' if not missing else ', '.join(missing))"`) do set "BACKEND_CHECK_RESULT=%%M"
 if /I not "!BACKEND_CHECK_RESULT!"=="OK" (
   echo.
-  echo Backend dependencies are not ready.
+  call :say 5ZCO56uv5L6d6LWW5rKh5pyJ5a6J6KOF77yM6K+35L2/55SoIHBpcCBpbnN0YWxsIC1yIHJlcXVpcmVtZW50cy50eHQg5a6J6KOF5L6d6LWW44CC
   if not "!BACKEND_CHECK_RESULT!"=="" (
-    echo Missing modules: !BACKEND_CHECK_RESULT!
+    call :say 57y65bCR5qih5Z2X77ya & echo !BACKEND_CHECK_RESULT!
   )
-  echo.
-  echo Run this command:
   echo.
   echo   cd "%PROJECT_ROOT%\backend"
   echo   "%PYTHON_BIN%" -m pip install -r requirements.txt
   echo.
-  echo Then run start.bat again.
+  call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
   exit /b 1
 )
 
@@ -178,23 +173,23 @@ if not errorlevel 1 (
 
 if not defined FRONTEND_PM (
   echo.
-  echo pnpm or npm is required.
-  echo Install Node.js/npm first, or run:
+  call :say 5pyq5qOA5rWL5YiwIHBucG0g5oiWIG5wbeOAgg==
+  call :say 6K+35YWI5a6J6KOFIE5vZGUuanMvbnBt77yM5oiW5omn6KGM77ya
   echo   npm install -g pnpm
   echo.
-  echo Then run start.bat again.
+  call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
   exit /b 1
 )
 
 if not exist "%PROJECT_ROOT%\web-vue\node_modules\.bin\vite.cmd" if not exist "%PROJECT_ROOT%\web-vue\node_modules\.bin\vite" (
   echo.
-  echo Frontend dependencies are not ready.
-  echo Run these commands:
+  call :say 5YmN56uv5L6d6LWW5rKh5pyJ5a6J6KOF77yM6K+35YWI5a6J6KOF5YmN56uv5L6d6LWW44CC
+  call :say 6K+35omn6KGM5LiL6Z2i5ZG95Luk77ya
   echo.
   echo   cd "%PROJECT_ROOT%\web-vue"
   echo   !FRONTEND_PM! install
   echo.
-  echo Then run start.bat again.
+  call :say 5a6J6KOF5a6M5oiQ5ZCO6YeN5paw6L+Q6KGMIHN0YXJ0LmJhdOOAgg==
   exit /b 1
 )
 
@@ -202,7 +197,7 @@ set "BACKEND_LOG=%TEMP%\qingcao-backend.log"
 break > "%BACKEND_LOG%"
 start "Qingcao Backend" /B cmd /c ""%PYTHON_BIN%" -m uvicorn app.main:app --host 0.0.0.0 --port 3121 ^> "%BACKEND_LOG%" 2^>^&1"
 
-echo Starting frontend service...
+call :say 5ZCv5Yqo5YmN56uv5pyN5YqhLi4u
 cd /d "%PROJECT_ROOT%\web-vue"
 
 set "FRONTEND_LOG=%TEMP%\qingcao-frontend.log"
@@ -226,14 +221,14 @@ for /L %%I in (1,1,30) do (
 :backend_ready
 if not "%BACKEND_READY%"=="1" (
   echo.
-  echo Backend failed to start. Recent backend log:
+  call :say 5ZCO56uv5ZCv5Yqo5aSx6LSl77yM5pyA6L+R5pel5b+X5aaC5LiL77ya
   powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path '%BACKEND_LOG%') { Get-Content -Path '%BACKEND_LOG%' -Tail 40 }"
   exit /b 1
 )
 
 echo.
 echo ========================================
-echo   Services started
+call :say 5pyN5Yqh5ZCv5Yqo5a6M5oiQ
 echo ========================================
 echo.
 echo   Frontend: http://localhost:3120
@@ -242,18 +237,23 @@ echo   API docs: http://localhost:3121/docs
 echo   ReDoc:    http://localhost:3121/redoc
 echo.
 echo ========================================
-echo   Log files
+call :say 5pel5b+X5paH5Lu2
 echo ========================================
 echo   Backend:  %BACKEND_LOG%
 echo   Frontend: %FRONTEND_LOG%
 echo ========================================
 echo.
-echo Runtime config dir: backend\config\
-echo Template config dir: backend\config.example\
-echo Configure Cookie/API Key in the Settings page before first use.
+call :say 5pys5Zyw6YWN572u55uu5b2V77yaYmFja2VuZFxjb25maWdc
+call :say 6YWN572u5qih5p2/55uu5b2V77yaYmFja2VuZFxjb25maWcuZXhhbXBsZVw=
+call :say 6aaW5qyh5L2/55So6K+35Zyo6K6+572u6aG16Z2i6YWN572uIENvb2tpZS9BUEkgS2V544CC
 echo.
-echo Press Ctrl+C or close this window to stop the script. Re-run this script to clean ports if needed.
+call :say 5oyJIEN0cmwrQyDmiJblhbPpl63nqpflj6PlgZzmraLohJrmnKzvvJvlpoLpnIDmuIXnkIbnq6/lj6PvvIzlj6/ph43mlrDov5DooYwgc3RhcnQuYmF044CC
 pause >nul
+exit /b 0
+
+
+:say
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Write-Host ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('%~1')))"
 exit /b 0
 
 :kill_port
