@@ -424,7 +424,7 @@ async function handleTestAi() {
             </div>
             <div class="summary-chip">
               <span class="summary-chip__label">夸克</span>
-              <el-tag :type="quarkFallbackConfigured ? 'success' : 'warning'" size="small">
+              <el-tag :type="quarkFallbackConfigured ? 'success' : 'danger'" size="small">
                 {{ quarkFallbackConfigured ? '已配置' : '未配置' }}
               </el-tag>
             </div>
@@ -472,8 +472,8 @@ async function handleTestAi() {
               <div class="config-item">
                 <div class="config-item__head">
                   <label>直播 Cookie</label>
-                  <el-tag :type="liveConfigured ? 'success' : 'info'" size="small">
-                    {{ liveConfigured ? '已配置' : '可选' }}
+                  <el-tag :type="liveConfigured ? 'success' : 'danger'" size="small">
+                    {{ liveConfigured ? '已配置' : '未配置' }}
                   </el-tag>
                 </div>
                 <p class="config-item__desc">用于直播间查询和直播数据获取，可按需配置。</p>
@@ -481,7 +481,7 @@ async function handleTestAi() {
                   v-model="liveCookieInput"
                   type="textarea"
                   :rows="4"
-                  placeholder="请粘贴直播 Cookie（可选）..."
+                  placeholder="请粘贴直播 Cookie..."
                   class="cookie-input"
                 />
                 <div class="config-actions">
@@ -554,7 +554,7 @@ async function handleTestAi() {
               <div class="config-item">
                 <div class="config-item__head">
                   <label>夸克 Cookie</label>
-                  <el-tag :type="quarkFallbackConfigured ? 'success' : 'warning'" size="small">
+                  <el-tag :type="quarkFallbackConfigured ? 'success' : 'danger'" size="small">
                     {{ quarkFallbackConfigured ? '已配置' : '未配置' }}
                   </el-tag>
                 </div>

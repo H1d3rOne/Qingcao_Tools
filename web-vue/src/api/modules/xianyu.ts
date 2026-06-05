@@ -434,27 +434,13 @@ export interface XianyuSearchPayload {
 }
 
 export interface XianyuAuthLoginPayload {
-  method?: 'qrcode' | 'cookie' | string
+  method?: 'cookie'
   cookies?: string
 }
 
 export interface XianyuAuthLoginResponse {
   success: boolean
   message: string
-  qrcode_url?: string
-  qrcode_token?: string
-  qrcode_image?: string
-  login_token?: string
-}
-
-export interface XianyuAuthCheckLoginPayload {
-  qrcode_token: string
-}
-
-export interface XianyuAuthCheckLoginResponse {
-  success: boolean
-  message: string
-  is_logged_in: boolean
   login_token?: string
 }
 
@@ -470,52 +456,12 @@ export interface XianyuAuthLogoutResponse {
   message: string
 }
 
-export interface XianyuBrowserLoginStartResponse {
-  success: boolean
-  message: string
-  session_id: string
-  qrcode_image?: string | null
-  expires_in: number
-}
-
-export interface XianyuBrowserLoginStatusResponse {
-  success: boolean
-  message: string
-  status: 'waiting' | 'scanned' | 'confirmed' | 'success' | 'expired' | 'failed' | 'cancelled' | string
-  is_logged_in: boolean
-  login_token?: string | null
-}
-
 export function searchXianyuItems(payload: XianyuSearchPayload) {
   return request.post<ApiResponse<XianyuSearchResult>>('/xianyu/search', payload)
 }
 
-export function getXianyuLoginQRCode() {
-  return request.get<XianyuAuthLoginResponse>('/xianyu/auth/qrcode')
-}
-
-export function checkXianyuLogin(payload: XianyuAuthCheckLoginPayload) {
-  return request.post<XianyuAuthCheckLoginResponse>('/xianyu/auth/check-login', payload)
-}
-
 export function loginXianyu(payload: XianyuAuthLoginPayload) {
   return request.post<XianyuAuthLoginResponse>('/xianyu/auth/login', payload)
-}
-
-export function startXianyuBrowserLogin() {
-  return request.post<XianyuBrowserLoginStartResponse>('/xianyu/auth/browser-qrcode/start')
-}
-
-export function getXianyuBrowserLoginStatus(sessionId: string) {
-  return request.get<XianyuBrowserLoginStatusResponse>('/xianyu/auth/browser-qrcode/status', {
-    session_id: sessionId,
-  })
-}
-
-export function cancelXianyuBrowserLogin(sessionId: string) {
-  return request.post<XianyuAuthLogoutResponse>('/xianyu/auth/browser-qrcode/cancel', {
-    session_id: sessionId,
-  })
 }
 
 export function getXianyuAuthStatus() {
