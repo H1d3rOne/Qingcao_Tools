@@ -104,132 +104,86 @@
 
 ## 快速开始
 
-### 1. 环境要求
+### 1. 环境准备
+
+先在本机准备好以下环境，并确认命令可用：
 
 | 环境 | 建议版本 | 说明 |
 | ---- | -------- | ---- |
-| Python | 推荐 `3.11 x64`；支持 `3.10 - 3.12` | Windows 建议使用 python.org 的 64 位安装包，避免 Microsoft Store / embeddable 版本导致 `greenlet` DLL 加载问题 |
-| Node.js | 推荐 `20.19+` 或更新 LTS | 前端可在 Node 18+ 运行；完整功能还需要安装 `backend/package.json` 中的 JS 辅助依赖，建议直接使用 Node 20.19+ |
-| Python 包管理 | `pip` + 虚拟环境 | 后端依赖位于 `backend/requirements.txt` |
-| Node 包管理 | 前端推荐 `pnpm`，也支持 `npm`；后端 JS 辅助依赖使用 `npm` | 前端依赖位于 `web-vue/package.json`，后端 JS 辅助依赖位于 `backend/package.json` |
-| 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 涉及打开目录、浏览器自动化、证书安装等能力时，桌面系统体验更完整 |
+| Python | 推荐 `3.11 x64`；支持 `3.10 - 3.12` | Windows 建议使用 python.org 64 位版本 |
+| Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
+| pnpm | 推荐 | 没有 pnpm 时可改用 npm |
+| Git | 任意新版 | 用于拉取项目代码 |
+| 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
-### 2. 拉取代码
+可用以下命令确认版本：
+
+```bash
+# macOS / Linux / WSL2
+python3.11 --version
+
+# Windows
+py -3.11 --version
+
+node --version
+npm --version
+pnpm --version  # 使用 pnpm 时
+```
+
+> `start.sh` / `start.bat` 只负责启动前后端，不安装依赖，也不输出依赖安装说明。首次部署、换电脑或依赖文件更新后，请先执行安装步骤。
+
+### 2. 安装
+
+首次 clone 使用完整命令；已在项目根目录时可跳过 `git clone` 和 `cd Qingcao_Tools` 两行。
+
+#### macOS / Linux / Windows WSL2
 
 ```bash
 git clone <你的仓库地址> Qingcao_Tools
 cd Qingcao_Tools
-```
 
-如果已经 clone 过项目，更新代码后建议重新执行对应依赖安装命令，尤其是 `requirements.txt`、`backend/package.json`、`web-vue/package.json` 有变化时。
-
-### 3. 安装依赖（首次部署必须执行）
-
-> `start.sh` / `start.bat` 只负责启动前后端，不会安装依赖，也不会输出依赖安装说明。首次部署、换电脑或依赖文件更新后，请先按当前系统执行本节命令。
-
-#### macOS
-
-如果未安装 Python / Node，可先准备环境（已有符合版本可跳过）：
-
-```bash
-# Homebrew 示例
-brew install python@3.11 node pnpm
-```
-
-安装项目依赖：
-
-```bash
-# 后端 Python 依赖
 cd backend
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-
-# 后端 JS 辅助依赖：抖音签名等功能会用到 jsrsasign / sdenv
 npm ci
 
-# 前端依赖
 cd ../web-vue
 pnpm install
-# 如果不用 pnpm，可改用：npm install
 ```
 
-#### Windows 10/11（CMD 或 PowerShell）
+如果不用 pnpm，最后一步改为：
 
-先安装：
+```bash
+npm install
+```
 
-- Python `3.11.x` 64 位，安装时勾选 `Add python.exe to PATH`；
-- Node.js `20.19+` 或更新 LTS；
-- Git for Windows；
-- pnpm 可选：`corepack enable` 或 `npm install -g pnpm`。
-
-安装项目依赖（CMD / PowerShell 均可直接执行）：
+#### Windows 10/11（CMD / PowerShell）
 
 ```bat
-REM 后端 Python 依赖
+git clone <你的仓库地址> Qingcao_Tools
+cd Qingcao_Tools
+
 cd backend
 py -3.11 -m venv .venv
-.venv\Scripts\python -m pip install --upgrade pip
-.venv\Scripts\python -m pip install -r requirements.txt
-
-REM 后端 JS 辅助依赖：抖音签名等功能会用到 jsrsasign / sdenv
+.\.venv\Scripts\python -m pip install --upgrade pip
+.\.venv\Scripts\python -m pip install -r requirements.txt
 npm ci
 
-REM 前端依赖
 cd ..\web-vue
-corepack enable
 pnpm install
-REM 如果不用 pnpm，可改用：npm install
 ```
 
-如果本机只有一个 Python 版本，也可以把 `py -3.11` 替换为 `python`。
+如果不用 pnpm，最后一步改为：
 
-#### Linux（Ubuntu / Debian）
-
-先确认 Python 与 Node 版本。系统源里的 Node 版本过低时，建议使用 nvm、NodeSource 或发行版推荐方式安装 Node `20.19+`。
-
-```bash
-python3 --version
-node --version
-npm --version
+```bat
+npm install
 ```
 
-安装项目依赖：
+#### 可选：安装 Playwright 浏览器
 
-```bash
-# 如缺少 venv，可先安装：sudo apt install python3.11-venv
-
-# 后端 Python 依赖
-cd backend
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-
-# 后端 JS 辅助依赖
-npm ci
-
-# 前端依赖
-cd ../web-vue
-corepack enable
-pnpm install
-# 如果不用 pnpm，可改用：npm install
-```
-
-#### Windows WSL2
-
-在 WSL2 内按 Linux 方式安装依赖并执行 `./start.sh`。浏览器访问 Windows 侧的：
-
-```text
-http://localhost:3120
-```
-
-如果涉及打开本地目录、证书安装、浏览器自动化等功能，原生 Windows 或 macOS 的桌面体验通常更完整。
-
-### 4. 可选：安装 Playwright 浏览器
-
-只有使用浏览器自动化相关能力时才需要：
+仅使用浏览器自动化相关能力时需要。
 
 macOS / Linux / WSL2：
 
@@ -243,12 +197,14 @@ Windows：
 
 ```bat
 cd backend
-.venv\Scripts\python -m playwright install chromium
+.\.venv\Scripts\python -m playwright install chromium
 ```
 
-### 5. 一键启动（推荐）
+### 3. 运行
 
-macOS / Linux / WSL2：
+#### 一键启动（推荐）
+
+macOS / Linux / Windows WSL2：
 
 ```bash
 chmod +x start.sh
@@ -261,32 +217,18 @@ Windows：
 start.bat
 ```
 
-`start.sh` / `start.bat` 当前只做启动相关工作：
-
-1. 显示当前版本号；
-2. 停止已有的 `3120` / `3121` 端口服务；
-3. 初始化 `backend/config/` 本地运行态配置；
-4. 兼容迁移旧目录 `backend/app/config/config.yaml`；
-5. 从 `backend/config.example/` 补齐缺失的本地配置模板；
-6. 自动设置 `QINGCAO_CONFIG_DIR`、`XIANYU_CONFIG_DIR`、`QUARK_CONFIG_DIR`；
-7. 启动后端 `http://localhost:3121` 并通过日志/健康检查确认服务可用；
-8. 启动前端 `http://localhost:3120`；
-9. 输出前端、后端、Swagger、ReDoc 地址以及日志文件路径。
-
-脚本不会安装 Python / Node 依赖，也不会做依赖完整性检测；如果依赖缺失或服务无法启动，会保留并打印最近的后端/前端日志。
-
-日志路径：
+脚本会清理 `3120` / `3121` 端口、初始化 `backend/config/` 本地配置、启动后端和前端；启动失败时会打印最近日志。
 
 | 系统 | 后端日志 | 前端日志 |
 | ---- | -------- | -------- |
 | macOS / Linux / WSL2 | `/tmp/qingcao-backend.log` | `/tmp/qingcao-frontend.log` |
 | Windows | `%TEMP%\qingcao-backend.log` | `%TEMP%\qingcao-frontend.log` |
 
-### 6. 手动启动（开发调试）
+#### 手动启动（开发调试）
 
-需要打开两个终端窗口。
+打开两个终端。
 
-#### 后端：macOS / Linux / WSL2
+后端：macOS / Linux / WSL2
 
 ```bash
 cd backend
@@ -296,16 +238,16 @@ export PYTHONIOENCODING=utf-8
 python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
 ```
 
-#### 后端：Windows CMD
+后端：Windows CMD
 
 ```bat
 cd backend
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
+.\.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
 ```
 
-#### 后端：Windows PowerShell
+后端：Windows PowerShell
 
 ```powershell
 cd backend
@@ -314,15 +256,20 @@ $env:PYTHONIOENCODING = "utf-8"
 .\.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
 ```
 
-#### 前端：所有系统
+前端：所有系统
 
 ```bash
 cd web-vue
 pnpm run dev -- --host 0.0.0.0 --port 3120
-# 如果使用 npm 安装依赖，则执行：npm run dev -- --host 0.0.0.0 --port 3120
 ```
 
-启动完成后访问：
+使用 npm 时改为：
+
+```bash
+npm run dev -- --host 0.0.0.0 --port 3120
+```
+
+访问地址：
 
 ```text
 前端：http://localhost:3120
