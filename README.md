@@ -6,8 +6,8 @@
   <p>一个基于 <strong>FastAPI + Vue 3 + TypeScript</strong> 的多功能工具箱，集成抖音解析、夸克网盘、视频号助手、闲鱼工具、消息推送与统一配置管理。</p>
 
   <p>
-    <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+" />
-    <img src="https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white" alt="Node.js 18+" />
+    <img src="https://img.shields.io/badge/Python-3.10--3.12%20%7C%203.11%20recommended-3776AB?logo=python&logoColor=white" alt="Python 3.10-3.12, 3.11 recommended" />
+    <img src="https://img.shields.io/badge/Node.js-20.19%2B%20recommended-339933?logo=node.js&logoColor=white" alt="Node.js 20.19+ recommended" />
     <img src="https://img.shields.io/badge/Vue-3.4%2B-4FC08D?logo=vue.js&logoColor=white" alt="Vue 3.4+" />
     <img src="https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
     <img src="https://img.shields.io/badge/Element%20Plus-2.6%2B-409EFF" alt="Element Plus" />
@@ -36,7 +36,7 @@
 | 抖音解析 | 作品解析、评论获取、无水印下载、用户主页、作品列表、综合/视频/用户/直播搜索、直播间信息与弹幕 WebSocket |
 | 夸克工具 | 扫码/自动登录、网盘文件列表、上传下载、新建文件夹、重命名、移动、删除、分享管理、分享链接转存/下载 |
 | 视频号助手 | 监听视频号资源、视频记录管理、下载任务、下载目录选择、预览与打开目录、监听端口配置、证书检测/安装 |
-| 闲鱼工具 | 登录/扫码登录、商品搜索、详情查看、监控任务、命中商品、聊天会话、AI 自动回复、商品管理、自动发货、订单管理 |
+| 闲鱼工具 | Cookie 登录、商品搜索、详情查看、监控任务、命中商品、聊天会话、AI 自动回复、商品管理、自动发货、订单管理 |
 | 消息推送 | 企业微信、钉钉、飞书 Webhook 配置与测试 |
 | 系统设置 | Cookie 配置、运行状态、统计数据、统一运行态配置初始化与备份 |
 
@@ -48,7 +48,8 @@
 - Pydantic v2
 - SQLAlchemy Async + SQLite
 - httpx / requests / websockets
-- Playwright（闲鱼浏览器扫码登录等场景）
+- Node.js 辅助依赖：jsrsasign / sdenv（抖音签名等）
+- Playwright（可选，用于浏览器自动化等场景）
 - mitmproxy、websocket-client、BeautifulSoup、lxml 等辅助依赖
 - pytest / pytest-asyncio
 
@@ -82,7 +83,8 @@
 │   ├── config.example/              # 可提交的安全配置模板
 │   ├── config/                      # 本机运行态配置，已被 gitignore 忽略
 │   ├── tests/                       # 后端测试
-│   └── requirements.txt             # Python 依赖
+│   ├── requirements.txt             # Python 依赖
+│   └── package.json                 # 后端 JS 辅助依赖（抖音签名等）
 ├── web-vue/                         # Vue 前端
 │   ├── public/                      # favicon / Logo 等静态资源
 │   ├── src/
@@ -102,80 +104,233 @@
 
 ## 快速开始
 
-### 环境要求
+### 1. 环境要求
 
-- Python 3.10+（推荐 3.11）
-- Node.js 18+
-- pnpm（推荐）或 npm
-- macOS / Linux / Windows WSL 均可运行；涉及浏览器自动化、目录打开等功能时，桌面环境体验更完整
+| 环境 | 建议版本 | 说明 |
+| ---- | -------- | ---- |
+| Python | 推荐 `3.11 x64`；支持 `3.10 - 3.12` | Windows 建议使用 python.org 的 64 位安装包，避免 Microsoft Store / embeddable 版本导致 `greenlet` DLL 加载问题 |
+| Node.js | 推荐 `20.19+` 或更新 LTS | 前端可在 Node 18+ 运行；完整功能还需要安装 `backend/package.json` 中的 JS 辅助依赖，建议直接使用 Node 20.19+ |
+| Python 包管理 | `pip` + 虚拟环境 | 后端依赖位于 `backend/requirements.txt` |
+| Node 包管理 | 前端推荐 `pnpm`，也支持 `npm`；后端 JS 辅助依赖使用 `npm` | 前端依赖位于 `web-vue/package.json`，后端 JS 辅助依赖位于 `backend/package.json` |
+| 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 涉及打开目录、浏览器自动化、证书安装等能力时，桌面系统体验更完整 |
 
-### 方式一：一键启动（推荐）
+### 2. 拉取代码
 
-macOS / Linux：
+```bash
+git clone <你的仓库地址> Qingcao_Tools
+cd Qingcao_Tools
+```
+
+如果已经 clone 过项目，更新代码后建议重新执行对应依赖安装命令，尤其是 `requirements.txt`、`backend/package.json`、`web-vue/package.json` 有变化时。
+
+### 3. 安装依赖（首次部署必须执行）
+
+> `start.sh` / `start.bat` 只负责启动前后端，不会安装依赖，也不会输出依赖安装说明。首次部署、换电脑或依赖文件更新后，请先按当前系统执行本节命令。
+
+#### macOS
+
+如果未安装 Python / Node，可先准备环境（已有符合版本可跳过）：
+
+```bash
+# Homebrew 示例
+brew install python@3.11 node pnpm
+```
+
+安装项目依赖：
+
+```bash
+# 后端 Python 依赖
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+# 后端 JS 辅助依赖：抖音签名等功能会用到 jsrsasign / sdenv
+npm ci
+
+# 前端依赖
+cd ../web-vue
+pnpm install
+# 如果不用 pnpm，可改用：npm install
+```
+
+#### Windows 10/11（CMD 或 PowerShell）
+
+先安装：
+
+- Python `3.11.x` 64 位，安装时勾选 `Add python.exe to PATH`；
+- Node.js `20.19+` 或更新 LTS；
+- Git for Windows；
+- pnpm 可选：`corepack enable` 或 `npm install -g pnpm`。
+
+安装项目依赖（CMD / PowerShell 均可直接执行）：
+
+```bat
+REM 后端 Python 依赖
+cd backend
+py -3.11 -m venv .venv
+.venv\Scripts\python -m pip install --upgrade pip
+.venv\Scripts\python -m pip install -r requirements.txt
+
+REM 后端 JS 辅助依赖：抖音签名等功能会用到 jsrsasign / sdenv
+npm ci
+
+REM 前端依赖
+cd ..\web-vue
+corepack enable
+pnpm install
+REM 如果不用 pnpm，可改用：npm install
+```
+
+如果本机只有一个 Python 版本，也可以把 `py -3.11` 替换为 `python`。
+
+#### Linux（Ubuntu / Debian）
+
+先确认 Python 与 Node 版本。系统源里的 Node 版本过低时，建议使用 nvm、NodeSource 或发行版推荐方式安装 Node `20.19+`。
+
+```bash
+python3 --version
+node --version
+npm --version
+```
+
+安装项目依赖：
+
+```bash
+# 如缺少 venv，可先安装：sudo apt install python3.11-venv
+
+# 后端 Python 依赖
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+# 后端 JS 辅助依赖
+npm ci
+
+# 前端依赖
+cd ../web-vue
+corepack enable
+pnpm install
+# 如果不用 pnpm，可改用：npm install
+```
+
+#### Windows WSL2
+
+在 WSL2 内按 Linux 方式安装依赖并执行 `./start.sh`。浏览器访问 Windows 侧的：
+
+```text
+http://localhost:3120
+```
+
+如果涉及打开本地目录、证书安装、浏览器自动化等功能，原生 Windows 或 macOS 的桌面体验通常更完整。
+
+### 4. 可选：安装 Playwright 浏览器
+
+只有使用浏览器自动化相关能力时才需要：
+
+macOS / Linux / WSL2：
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m playwright install chromium
+```
+
+Windows：
+
+```bat
+cd backend
+.venv\Scripts\python -m playwright install chromium
+```
+
+### 5. 一键启动（推荐）
+
+macOS / Linux / WSL2：
+
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
 
 Windows：
+
 ```bat
 start.bat
 ```
 
-`start.sh` / `start.bat` 会启动前后端服务；不再进行依赖完整性检测，也不输出依赖安装说明。
+`start.sh` / `start.bat` 当前只做启动相关工作：
 
 1. 显示当前版本号；
 2. 停止已有的 `3120` / `3121` 端口服务；
-3. 初始化 `backend/config/` 运行态配置；
+3. 初始化 `backend/config/` 本地运行态配置；
 4. 兼容迁移旧目录 `backend/app/config/config.yaml`；
 5. 从 `backend/config.example/` 补齐缺失的本地配置模板；
 6. 自动设置 `QINGCAO_CONFIG_DIR`、`XIANYU_CONFIG_DIR`、`QUARK_CONFIG_DIR`；
-7. 启动后端 `http://localhost:3121`，并通过日志/健康检查确认服务可用；
+7. 启动后端 `http://localhost:3121` 并通过日志/健康检查确认服务可用；
 8. 启动前端 `http://localhost:3120`；
 9. 输出前端、后端、Swagger、ReDoc 地址以及日志文件路径。
 
-macOS / Linux 启动日志默认写入：
+脚本不会安装 Python / Node 依赖，也不会做依赖完整性检测；如果依赖缺失或服务无法启动，会保留并打印最近的后端/前端日志。
 
-```text
-/tmp/qingcao-backend.log
-/tmp/qingcao-frontend.log
-```
+日志路径：
 
-Windows 启动日志默认写入：
+| 系统 | 后端日志 | 前端日志 |
+| ---- | -------- | -------- |
+| macOS / Linux / WSL2 | `/tmp/qingcao-backend.log` | `/tmp/qingcao-frontend.log` |
+| Windows | `%TEMP%\qingcao-backend.log` | `%TEMP%\qingcao-frontend.log` |
 
-```text
-%TEMP%\qingcao-backend.log
-%TEMP%\qingcao-frontend.log
-```
+### 6. 手动启动（开发调试）
 
-如果后端启动失败，脚本会直接打印最近的后端日志，便于定位依赖、端口或配置问题。
+需要打开两个终端窗口。
 
-### 方式二：手动启动
-
-后端：
+#### 后端：macOS / Linux / WSL2
 
 ```bash
 cd backend
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
+source .venv/bin/activate
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
 python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
 ```
 
-前端：
+#### 后端：Windows CMD
+
+```bat
+cd backend
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
+.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
+```
+
+#### 后端：Windows PowerShell
+
+```powershell
+cd backend
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+.\.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
+```
+
+#### 前端：所有系统
 
 ```bash
 cd web-vue
-pnpm install
-pnpm run dev
+pnpm run dev -- --host 0.0.0.0 --port 3120
+# 如果使用 npm 安装依赖，则执行：npm run dev -- --host 0.0.0.0 --port 3120
 ```
 
-如果需要使用 Playwright 相关能力：
+启动完成后访问：
 
-```bash
-cd backend
-.venv/bin/python -m playwright install chromium
+```text
+前端：http://localhost:3120
+后端：http://localhost:3121
+文档：http://localhost:3121/docs
 ```
+
+首次使用各功能前，请先到前端“系统设置”配置对应 Cookie / API Key；未配置时页面会提示“未配置 Cookie”。
 
 ## 配置说明
 
@@ -189,8 +344,18 @@ cd backend
 
 首次启动时会自动从 `backend/config.example/` 初始化缺失文件到 `backend/config/`。也可以手动复制：
 
+macOS / Linux / WSL2：
+
 ```bash
-cp -R backend/config.example backend/config
+mkdir -p backend/config
+cp -R backend/config.example/. backend/config/
+```
+
+Windows：
+
+```bat
+if not exist backend\config mkdir backend\config
+xcopy backend\config.example backend\config\ /E /I /Y
 ```
 
 常用配置文件：
@@ -229,7 +394,7 @@ backend/config/xianyu_monitor_tasks.json.bak
 
 ### Cookie 配置建议
 
-推荐在前端“系统设置”或对应模块登录页配置 Cookie / 登录状态。手动获取 Cookie 的通用方式：
+推荐在前端“系统设置”或对应模块登录页配置 Cookie / 登录状态。未配置 Cookie 时，对应功能会在使用前提示未配置。手动获取 Cookie 的通用方式：
 
 1. 浏览器打开对应平台并登录；
 2. 按 `F12` 打开开发者工具；
@@ -296,7 +461,7 @@ backend/config/xianyu_monitor_tasks.json.bak
 
 主要能力：
 
-- 登录状态管理、Cookie 登录、二维码登录、浏览器二维码登录；
+- 登录状态管理、Cookie 登录；
 - 商品搜索、商品详情、用户资料；
 - 监控任务：关键词/价格/筛选条件、手动运行、启停、命中商品预览；
 - 聊天会话：会话列表、消息列表、发送文本/图片、撤回、标记已读、清除红点、WebSocket 实时消息、共享连接保活；
@@ -340,6 +505,7 @@ cd backend
 
 # 安装依赖
 .venv/bin/python -m pip install -r requirements.txt
+npm ci
 
 # 启动开发服务
 .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
@@ -353,6 +519,8 @@ cd backend
 # Python 语法检查
 .venv/bin/python -m py_compile app/main.py app/core/config.py app/core/config_bootstrap.py
 ```
+
+> Windows 下把 `.venv/bin/python` 替换为 `.venv\Scripts\python`。
 
 ### 前端
 
@@ -412,21 +580,78 @@ pnpm run lint
 
 ## 常见问题
 
-### 1. 后端启动失败，提示缺少依赖
+### 1. 后端启动失败，提示缺少 Python 依赖
+
+先确认使用的是项目虚拟环境里的 Python，再重新安装后端依赖：
+
+macOS / Linux / WSL2：
 
 ```bash
 cd backend
-.venv/bin/python -m pip install -r requirements.txt
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Windows：
+
+```bat
+cd backend
+.venv\Scripts\python -m pip install --upgrade pip
+.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
 如果虚拟环境损坏，可以删除后重建：
 
 ```bash
+# macOS / Linux / WSL2
 rm -rf backend/.venv
-./start.sh
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 2. 前端无法访问后端
+```bat
+REM Windows
+rmdir /s /q backend\.venv
+cd backend
+py -3.11 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+### 2. Windows 提示 `greenlet library is required` 或 `_greenlet` DLL 加载失败
+
+通常是 Python / 虚拟环境 / wheel 架构不匹配。推荐处理方式：
+
+1. 安装 Python `3.11.x` 64 位；
+2. 删除 `backend\.venv`；
+3. 用 `py -3.11 -m venv .venv` 重建虚拟环境；
+4. 重新执行 `pip install -r requirements.txt`。
+
+### 3. 抖音解析提示 `Cannot find module 'jsrsasign'`
+
+这是后端 JS 辅助依赖未安装，不是 Cookie 配置问题。执行：
+
+```bash
+cd backend
+npm ci
+```
+
+执行后重新启动后端。
+
+### 4. 功能提示未配置 Cookie
+
+先到前端“系统设置”配置对应平台 Cookie：
+
+- 抖音作品/搜索：配置抖音 Cookie；
+- 抖音直播：配置抖音直播 Cookie；
+- 夸克网盘：配置夸克 Cookie 或使用夸克登录；
+- 闲鱼工具：配置闲鱼 Cookie。
+
+配置会写入 `backend/config/`，不会写入 `backend/config.example/`。
+
+### 5. 前端无法访问后端
 
 确认后端运行在 `3121`，前端 Vite 代理会将 `/api` 转发到：
 
@@ -434,7 +659,9 @@ rm -rf backend/.venv
 http://localhost:3121
 ```
 
-### 3. 配置或 AI 供应商“不见了”
+如果端口被占用，可先关闭占用 `3120` / `3121` 的旧进程，或直接使用一键启动脚本让脚本清理端口后重新启动。
+
+### 6. 配置或 AI 供应商“不见了”
 
 优先检查：
 
@@ -446,21 +673,31 @@ backend/config/config.yaml
 
 确认没有把 `QINGCAO_CONFIG_DIR` / `XIANYU_CONFIG_DIR` 指到其他目录。
 
-### 4. Cookie 鉴权失败
+### 7. Cookie 鉴权失败
 
 - 重新登录平台后更新 Cookie；
-- 闲鱼建议优先使用模块内登录/浏览器二维码登录能力；
+- 闲鱼当前前端入口以 Cookie 登录为主；
 - 避免频繁切换账号或短时间高频请求；
 - 若提示风控或登录失效，等待一段时间后重新登录并更新配置；
 - 闲鱼聊天链路命中风控后会暂停自动轮询/重复建连，避免持续触发 `login.token`。
 
-### 5. Playwright 相关功能不可用
+### 8. Playwright 相关功能不可用
 
 安装浏览器依赖：
 
+macOS / Linux / WSL2：
+
 ```bash
 cd backend
-.venv/bin/python -m playwright install chromium
+source .venv/bin/activate
+python -m playwright install chromium
+```
+
+Windows：
+
+```bat
+cd backend
+.venv\Scripts\python -m playwright install chromium
 ```
 
 ## 版本与变更
