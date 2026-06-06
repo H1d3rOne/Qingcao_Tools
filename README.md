@@ -6,7 +6,7 @@
   <p>一个基于 <strong>FastAPI + Vue 3 + TypeScript</strong> 的多功能工具箱，集成抖音解析、夸克网盘、视频号助手、闲鱼工具、消息推送与统一配置管理。</p>
 
   <p>
-    <img src="https://img.shields.io/badge/Python-3.10--3.12%20%7C%203.11%20recommended-3776AB?logo=python&logoColor=white" alt="Python 3.10-3.12, 3.11 recommended" />
+    <img src="https://img.shields.io/badge/Python-3.10--3.12-3776AB?logo=python&logoColor=white" alt="Python 3.10-3.12" />
     <img src="https://img.shields.io/badge/Node.js-20.19%2B%20recommended-339933?logo=node.js&logoColor=white" alt="Node.js 20.19+ recommended" />
     <img src="https://img.shields.io/badge/Vue-3.4%2B-4FC08D?logo=vue.js&logoColor=white" alt="Vue 3.4+" />
     <img src="https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
@@ -109,7 +109,7 @@
 
 | 环境 | 建议版本 | 说明 |
 | ---- | -------- | ---- |
-| Python | 推荐 `3.11 x64`；支持 `3.10 - 3.12` | Windows 建议使用 python.org 64 位版本 |
+| Python | 支持 `3.10 - 3.12` | Windows 建议使用 python.org 64 位版本 |
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
@@ -119,12 +119,7 @@
 可用以下命令确认版本：
 
 ```bash
-# macOS / Linux / WSL2
-python3.11 --version
-
-# Windows
-py -3.11 --version
-
+python --version
 node --version
 npm --version
 pnpm --version  # 使用 pnpm 时
@@ -139,11 +134,11 @@ pnpm --version  # 使用 pnpm 时
 #### macOS / Linux / Windows WSL2
 
 ```bash
-git clone <你的仓库地址> Qingcao_Tools
+git clone https://github.com/H1d3rOne/Qingcao_Tools.git Qingcao_Tools
 cd Qingcao_Tools
 
 cd backend
-python3.11 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
@@ -163,11 +158,11 @@ npm install
 #### Windows 10/11（CMD / PowerShell）
 
 ```bat
-git clone <你的仓库地址> Qingcao_Tools
+git clone https://github.com/H1d3rOne/Qingcao_Tools.git Qingcao_Tools
 cd Qingcao_Tools
 
 cd backend
-py -3.11 -m venv .venv
+python -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
 
@@ -487,22 +482,22 @@ cd backend
 
 ```bat
 py -0p
-py -3.11-64 -c "import platform, struct; print(platform.architecture(), struct.calcsize('P') * 8)"
+python -c "import platform, struct; print(platform.architecture(), struct.calcsize('P') * 8)"
 ```
 
-如果不是 64 位，安装 python.org 的 Python `3.11.x` x64 后重建虚拟环境：
+如果不是 64 位，安装 python.org 的 64 位 Python（建议 3.10 - 3.12）后重建虚拟环境：
 
 ```bat
 cd backend
 rmdir /s /q .venv
-py -3.11-64 -m venv .venv
+python -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip setuptools wheel
 .\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
 ### 3. Windows 提示 `greenlet library is required` 或 `_greenlet` DLL 加载失败
 
-通常也是 Python / 虚拟环境 / wheel 架构不匹配。处理方式同上：安装 Python `3.11.x` x64，删除 `backend\.venv` 后重新安装依赖。
+通常也是 Python / 虚拟环境 / wheel 架构不匹配。处理方式同上：安装 64 位 Python，删除 `backend\.venv` 后重新安装依赖。
 
 ### 4. 抖音视频解析提示 `Cannot find module 'jsrsasign'`
 
