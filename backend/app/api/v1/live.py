@@ -143,7 +143,9 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
         logger.info("WebSocket: 弹幕采集线程已启动")
         
         # 5. 等待连接建立
-        max_wait = 10
+        # 真实浏览器弹幕监听需要打开直播页并等待页面自己的 WebSocket，
+        # 比直接连接略慢，给 Windows/低配置机器更充足的启动时间。
+        max_wait = 20
         wait_count = 0
         startup_error = None
         while not spider.is_running and wait_count < max_wait * 10:

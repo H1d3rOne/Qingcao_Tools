@@ -33,6 +33,7 @@ def test_live_page_parser_extracts_user_unique_id_and_room_id():
 
 
 def test_start_ws_uses_page_user_id_prefetch_cursor_and_full_cookie(monkeypatch):
+    monkeypatch.setenv("DOUYIN_LIVE_DANMU_MODE", "direct")
     auth = make_auth()
     spider = DouyinLiveSpider("https://live.douyin.com/123456", auth)
     captured = {}
@@ -95,6 +96,7 @@ def test_start_ws_uses_page_user_id_prefetch_cursor_and_full_cookie(monkeypatch)
 
 
 def test_start_ws_reports_missing_user_unique_id_before_signing(monkeypatch):
+    monkeypatch.setenv("DOUYIN_LIVE_DANMU_MODE", "direct")
     auth = make_auth()
     spider = DouyinLiveSpider("https://live.douyin.com/123456", auth)
     messages = []
@@ -121,6 +123,32 @@ def test_start_ws_reports_missing_user_unique_id_before_signing(monkeypatch):
         "type": "error",
         "message": "无法获取 user_unique_id，无法建立弹幕连接；请更新抖音直播 Cookie 后重试",
     }]
+
+
+def test_start_ws_defaults_to_browser_mode(monkeypatch):
+    monkeypatch.delenv("DOUYIN_LIVE_DANMU_MODE", raising=False)
+    auth = make_auth()
+    spider = DouyinLiveSpider("https://live.douyin.com/123456", auth)
+    captured = {}
+
+    monkeypatch.setattr(
+        DouyinLiveSpider,
+        "_start_browser_ws",
+        lambda self, room_info: captured.update({"room_info": room_info}),
+    )
+    monkeypatch.setattr(
+        live_module,
+        "WebSocketApp",
+        lambda *args, **kwargs: pytest.fail("默认 browser 模式不应创建手工 WebSocket"),
+    )
+
+    spider.start_ws({
+        "room_id": "7317661077232560922",
+        "web_rid": "123456",
+        "ttwid": "ttwid-value",
+    })
+
+    assert captured["room_info"]["room_id"] == "7317661077232560922"
 
 
 def test_initial_fetch_uses_reference_fingerprint(monkeypatch):

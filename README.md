@@ -185,7 +185,7 @@ npm install
 
 #### 可选：安装 Playwright 浏览器
 
-仅使用浏览器自动化相关能力时需要，例如抖音搜索、闲鱼浏览器登录。
+仅使用浏览器自动化相关能力时需要，例如抖音搜索、抖音直播弹幕、闲鱼浏览器登录。
 如果系统已安装 Chrome/Edge，可跳过此步骤；程序会优先查找系统浏览器。找不到可用系统浏览器时，再安装 Playwright 自带 Chromium。
 
 macOS / Linux / WSL2：
@@ -530,16 +530,16 @@ npm ci
 
 ### 6. 抖音直播弹幕提示连接超时或 `DEVICE_BLOCKED`
 
-实时弹幕现在使用纯 JS 签名，并按直播页解析 `user_unique_id`、预取 `/webcast/im/fetch/` 的 `cursor/internal_ext` 后再连接 WebSocket，不再依赖 `sdenv` / `node-gyp` / Visual Studio C++ Build Tools。
+实时弹幕默认使用真实浏览器打开直播间，并被动监听页面自己的弹幕 WebSocket，避免手工构造握手触发 `DEVICE_BLOCKED`；不再依赖 `sdenv` / `node-gyp` / Visual Studio C++ Build Tools。
 
-先确认已配置有效的抖音直播 Cookie，且 Cookie 中包含或可从直播页补到 `ttwid`；然后重启后端再试。旧版本升级后如果 `backend/node_modules` 里残留 `sdenv`，可删除 `backend/node_modules` 后重新执行：
+先确认已配置有效的抖音直播 Cookie，并且已安装系统 Chrome/Edge 或 Playwright 自带 Chromium；然后重启后端再试。旧版本升级后如果 `backend/node_modules` 里残留 `sdenv`，可删除 `backend/node_modules` 后重新执行：
 
 ```bash
 cd backend
 npm ci
 ```
 
-如果后端日志出现 `handshake-msg: DEVICE_BLOCKED` / `handshake-status: 415`，表示抖音侧拒绝了当前 Cookie 对应的浏览器设备指纹。请用真实浏览器重新打开 `live.douyin.com` 直播间，复制最新抖音直播 Cookie 后重试。
+如果仍然出现 `handshake-msg: DEVICE_BLOCKED` / `handshake-status: 415`，通常是启用了旧的直接 WebSocket 模式，或当前 Cookie 已被抖音侧风控。请取消 `DOUYIN_LIVE_DANMU_MODE=direct`，或用真实浏览器重新打开 `live.douyin.com` 直播间，复制最新抖音直播 Cookie 后重试。
 
 如果仍然超时，优先检查后端日志里 WebSocket 的具体错误；直播链接解析和播放正常不代表弹幕 WebSocket 一定能连通。
 
@@ -581,7 +581,7 @@ backend/config/config.yaml
 
 ### 11. Playwright 相关功能不可用
 
-抖音搜索、闲鱼浏览器登录等功能需要浏览器执行环境。可以使用系统已安装的 Chrome/Edge；如果提示 `Executable doesn't exist` 或 `playwright install`，可安装 Playwright 自带 Chromium：
+抖音搜索、抖音直播弹幕、闲鱼浏览器登录等功能需要浏览器执行环境。可以使用系统已安装的 Chrome/Edge；如果提示 `Executable doesn't exist` 或 `playwright install`，可安装 Playwright 自带 Chromium：
 
 macOS / Linux / WSL2：
 

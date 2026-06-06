@@ -10,11 +10,14 @@
 """
 import gzip
 import html as html_lib
+import os
 import re
+import sys
 import threading
 import time
 from datetime import datetime, timedelta
-from urllib.parse import urlencode
+from pathlib import Path
+from urllib.parse import urlencode, urlsplit
 from typing import Optional, Callable, Dict, Any
 
 import requests
@@ -120,6 +123,7 @@ class DouyinLiveSpider:
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/146.0.0.0 Safari/537.36"
     )
+    LIVE_BROWSER_WS_WAIT_SECONDS = 15
     
     def __init__(self, live_url: str, auth: DouyinAuth, timeout: int = 30):
         """初始化直播爬虫
@@ -136,6 +140,9 @@ class DouyinLiveSpider:
         self.is_running = False
         self.message_callback: Optional[Callable[[Dict[str, Any]], None]] = None
         self._room_info: Optional[Dict] = None
+        self._browser = None
+        self._browser_context = None
+        self._browser_page = None
     
     def set_message_callback(self, callback: Callable[[Dict[str, Any]], None]):
         """设置消息回调函数"""
@@ -776,6 +783,17 @@ class DouyinLiveSpider:
     
     def _on_message(self, ws, message):
         """WebSocket 消息回调"""
+        def send_ack(ack_frame):
+            ws.send(ack_frame.SerializeToString(), opcode=0x02)
+
+        self._handle_push_frame(message, ack_sender=send_ack)
+
+    def _handle_push_frame(self, message, ack_sender=None):
+        """解析抖音直播 PushFrame。
+
+        直接连接 WebSocket 时由 `ack_sender` 发送 ACK；真实浏览器监听模式下
+        浏览器页面自己的 JS 已经负责 ACK，这里只被动解析服务端下行帧。
+        """
         try:
             logger.info(f"收到 WebSocket 消息, 长度: {len(message)}")
             
@@ -792,12 +810,15 @@ class DouyinLiveSpider:
             
             # 发送 ACK
             if response.needAck:
-                s = Live_pb2.PushFrame()
-                s.payloadType = "ack"
-                s.payload = response.internalExt.encode('utf-8')
-                s.logId = frame.logId
-                ws.send(s.SerializeToString(), opcode=0x02)
-                logger.info("已发送 ACK")
+                if ack_sender:
+                    s = Live_pb2.PushFrame()
+                    s.payloadType = "ack"
+                    s.payload = response.internalExt.encode('utf-8')
+                    s.logId = frame.logId
+                    ack_sender(s)
+                    logger.info("已发送 ACK")
+                else:
+                    logger.debug("浏览器监听模式收到 needAck 帧，ACK 由页面 JS 负责")
             
             # 解析消息
             msg_count = len(response.messagesList)
@@ -1000,6 +1021,297 @@ class DouyinLiveSpider:
             )
         return f"直播弹幕连接失败: {detail}"
 
+    @staticmethod
+    def _danmu_mode() -> str:
+        """弹幕连接模式。
+
+        默认使用真实浏览器页面被动监听弹幕 WebSocket，避免手工构造握手时
+        触发 DEVICE_BLOCKED。需要调试旧链路时可设置：
+        `DOUYIN_LIVE_DANMU_MODE=direct`。
+        """
+        mode = (os.getenv("DOUYIN_LIVE_DANMU_MODE") or "browser").strip().lower()
+        if mode in {"browser", "playwright"}:
+            return "browser"
+        if mode in {"direct", "websocket", "ws"}:
+            return "direct"
+        if mode == "auto":
+            return "auto"
+        logger.warning("未知 DOUYIN_LIVE_DANMU_MODE={}，使用 browser 模式", mode)
+        return "browser"
+
+    @staticmethod
+    def _chrome_executable() -> str | None:
+        """优先使用系统 Chrome/Edge，找不到时交给 Playwright 自带 Chromium。"""
+        env_path = os.getenv("DOUYIN_BROWSER_EXECUTABLE")
+        if env_path:
+            env_path = env_path.strip().strip('"')
+        if env_path and Path(env_path).exists():
+            return env_path
+
+        candidates: list[Path] = []
+        if sys.platform == "darwin":
+            candidates.extend([
+                Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
+                Path("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+            ])
+        elif sys.platform.startswith("win"):
+            roots = [
+                os.getenv("PROGRAMFILES"),
+                os.getenv("PROGRAMFILES(X86)"),
+                os.getenv("PROGRAMW6432"),
+                os.getenv("LOCALAPPDATA"),
+                r"C:\Program Files",
+                r"C:\Program Files (x86)",
+                r"C:\Program Files (Arm)",
+            ]
+            relative_paths = [
+                r"Google\Chrome\Application\chrome.exe",
+                r"Microsoft\Edge\Application\msedge.exe",
+                r"Chromium\Application\chrome.exe",
+            ]
+            for root in roots:
+                if not root:
+                    continue
+                for relative_path in relative_paths:
+                    candidates.append(Path(root) / relative_path)
+        else:
+            candidates.extend([
+                Path("/usr/bin/google-chrome"),
+                Path("/usr/bin/google-chrome-stable"),
+                Path("/usr/bin/chromium"),
+                Path("/usr/bin/chromium-browser"),
+                Path("/snap/bin/chromium"),
+                Path("/opt/google/chrome/chrome"),
+                Path("/usr/bin/microsoft-edge"),
+                Path("/usr/bin/microsoft-edge-stable"),
+            ])
+
+        for candidate in candidates:
+            if candidate.exists():
+                return str(candidate)
+        return None
+
+    @staticmethod
+    def _is_playwright_browser_missing_error(exc: Exception) -> bool:
+        message = str(exc)
+        return (
+            "Executable doesn't exist" in message
+            or "playwright install" in message
+            or "Looks like Playwright was just installed or updated" in message
+        )
+
+    @staticmethod
+    def _playwright_browser_message() -> str:
+        if sys.platform.startswith("win"):
+            install_command = r"cd backend && .\.venv\Scripts\python -m playwright install chromium"
+        else:
+            install_command = "cd backend && source .venv/bin/activate && python -m playwright install chromium"
+        return (
+            "抖音直播弹幕需要真实浏览器执行环境。请安装 Chrome/Edge，"
+            "或安装 Playwright 自带 Chromium 后重启后端："
+            f"{install_command}；也可以设置 DOUYIN_BROWSER_EXECUTABLE 指向浏览器可执行文件。"
+        )
+
+    @staticmethod
+    def _to_int(value: Any, fallback: int) -> int:
+        try:
+            return int(float(value))
+        except Exception:
+            return fallback
+
+    @staticmethod
+    def _browser_cookie_items(auth) -> list[dict]:
+        """转换为 Playwright 可注入的 Cookie。"""
+        items: list[dict] = []
+        for name, value in (getattr(auth, "cookie", None) or {}).items():
+            if not name or name == "douyin.com" or value is None:
+                continue
+            cookie = {
+                "name": str(name),
+                "value": str(value),
+                "path": "/",
+                "secure": True,
+            }
+            # __Host- Cookie 必须是 host-only，不能带 domain；普通抖音 Cookie
+            # 放到 .douyin.com，才能同时覆盖 live.douyin.com 和 webcast 子域。
+            if str(name).startswith("__Host-"):
+                cookie["url"] = "https://live.douyin.com"
+            else:
+                cookie["domain"] = ".douyin.com"
+            items.append(cookie)
+        return items
+
+    @staticmethod
+    def _normalize_browser_frame(payload) -> bytes | None:
+        if isinstance(payload, bytes):
+            return payload
+        if isinstance(payload, bytearray):
+            return bytes(payload)
+        if isinstance(payload, memoryview):
+            return payload.tobytes()
+        return None
+
+    @staticmethod
+    def _safe_ws_url(ws_url: str) -> str:
+        """日志中只保留 WebSocket 的协议/主机/路径，避免泄露签名参数。"""
+        try:
+            parts = urlsplit(ws_url or "")
+            if not parts.scheme or not parts.netloc:
+                return (ws_url or "")[:160]
+            return f"{parts.scheme}://{parts.netloc}{parts.path}"
+        except Exception:
+            return (ws_url or "")[:160]
+
+    def _on_browser_frame(self, payload):
+        data = self._normalize_browser_frame(payload)
+        if not data:
+            return
+        self._handle_push_frame(data, ack_sender=None)
+
+    def _browser_page_diagnostics(self) -> Dict[str, Any]:
+        page = self._browser_page
+        if not page:
+            return {}
+        try:
+            return page.evaluate(
+                """() => ({
+                    href: location.href,
+                    title: document.title,
+                    text: (document.body && document.body.innerText || '').slice(0, 200),
+                    webdriver: navigator.webdriver,
+                    readyState: document.readyState,
+                })"""
+            )
+        except Exception as exc:
+            return {"diagnostic_error": str(exc), "url": getattr(page, "url", "") or ""}
+
+    def _start_browser_ws(self, room_info: Dict):
+        """用真实浏览器打开直播间，被动监听页面自己的弹幕 WebSocket。
+
+        这条链路不再手工构造 WebSocket 签名/握手，因此能绕开很多
+        DEVICE_BLOCKED 场景；浏览器页面自身负责心跳和 ACK，后端只解析下行帧。
+        """
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:
+            raise RuntimeError("抖音直播弹幕需要 Playwright，请先安装 backend 依赖 playwright") from exc
+
+        web_rid = (room_info or {}).get("web_rid") or self._get_web_rid(self.live_url)
+        page_url = f"https://live.douyin.com/{web_rid}"
+        profile = get_douyin_browser_profile(self.auth)
+        width = self._to_int(profile.get("screen_width"), 1920)
+        height = self._to_int(profile.get("screen_height"), 1080)
+        ws_seen = threading.Event()
+
+        logger.info("使用真实浏览器监听抖音直播弹幕: {}", page_url)
+        try:
+            with sync_playwright() as playwright:
+                launch_kwargs = {
+                    "headless": os.getenv("DOUYIN_BROWSER_HEADLESS", "1") != "0",
+                    "args": [
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-dev-shm-usage",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                    ],
+                }
+                executable = self._chrome_executable()
+                if executable:
+                    launch_kwargs["executable_path"] = executable
+                    logger.info("抖音直播弹幕使用系统浏览器: {}", executable)
+
+                try:
+                    self._browser = playwright.chromium.launch(**launch_kwargs)
+                except Exception as exc:
+                    if self._is_playwright_browser_missing_error(exc):
+                        raise RuntimeError(self._playwright_browser_message()) from exc
+                    raise
+
+                context_kwargs = {
+                    "locale": profile.get("browser_language") or "zh-CN",
+                    "viewport": {"width": width, "height": height},
+                    "device_scale_factor": float(profile.get("device_pixel_ratio") or 1),
+                    "timezone_id": "Asia/Shanghai",
+                }
+                if os.getenv("DOUYIN_LIVE_BROWSER_USE_COOKIE_UA", "1") != "0":
+                    context_kwargs["user_agent"] = profile.get("user_agent") or None
+
+                self._browser_context = self._browser.new_context(**context_kwargs)
+                self._browser_context.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+                )
+                cookies = self._browser_cookie_items(self.auth)
+                if cookies:
+                    try:
+                        self._browser_context.add_cookies(cookies)
+                    except Exception as exc:
+                        logger.warning("抖音直播 Cookie 注入浏览器失败: {}", exc)
+                        added = 0
+                        for cookie in cookies:
+                            try:
+                                self._browser_context.add_cookies([cookie])
+                                added += 1
+                            except Exception as item_exc:
+                                logger.debug("跳过无法注入的抖音 Cookie {}: {}", cookie.get("name"), item_exc)
+                        if added:
+                            logger.info("已按单个 Cookie 方式注入 {} 个抖音直播 Cookie", added)
+
+                self._browser_page = self._browser_context.new_page()
+
+                def on_websocket(ws):
+                    ws_url = ws.url or ""
+                    logger.debug("浏览器发现 WebSocket: {}", self._safe_ws_url(ws_url))
+                    if "webcast" not in ws_url or "/webcast/im/" not in ws_url:
+                        return
+                    logger.info("浏览器捕获抖音直播弹幕 WebSocket: {}", self._safe_ws_url(ws_url))
+                    ws_seen.set()
+                    self.is_running = True
+
+                    def on_ws_error(error):
+                        self.is_running = False
+                        self._emit_error(self._format_ws_error(error))
+
+                    def on_ws_close(*_):
+                        logger.warning("浏览器直播弹幕 WebSocket 已关闭")
+                        self.is_running = False
+
+                    ws.on("framereceived", self._on_browser_frame)
+                    ws.on("socketerror", on_ws_error)
+                    ws.on("close", on_ws_close)
+
+                self._browser_page.on("websocket", on_websocket)
+                self._browser_page.goto(page_url, wait_until="domcontentloaded", timeout=30_000)
+
+                deadline = time.time() + self.LIVE_BROWSER_WS_WAIT_SECONDS
+                while self.is_running is False and time.time() < deadline:
+                    if ws_seen.is_set():
+                        break
+                    self._browser_page.wait_for_timeout(200)
+
+                if not ws_seen.is_set():
+                    info = self._browser_page_diagnostics()
+                    raise RuntimeError(
+                        "真实浏览器未捕获到抖音直播弹幕 WebSocket；"
+                        "请确认直播间正在直播、抖音直播 Cookie 有效。"
+                        f"页面诊断: url={info.get('href') or info.get('url') or page_url}, "
+                        f"title={info.get('title') or ''}, text={info.get('text') or ''}"
+                    )
+
+                logger.info("真实浏览器弹幕监听已启动")
+                while self.is_running:
+                    self._browser_page.wait_for_timeout(1000)
+        finally:
+            self.is_running = False
+            for obj_name in ("_browser_page", "_browser_context", "_browser"):
+                obj = getattr(self, obj_name, None)
+                if obj:
+                    try:
+                        obj.close()
+                    except Exception:
+                        pass
+                    setattr(self, obj_name, None)
+
     def _get_webcast_initial_response(self, room_id: str, user_id: str, web_rid: str) -> Dict[str, str]:
         """预取 `/webcast/im/fetch/`，拿到 cursor/internal_ext。
 
@@ -1115,6 +1427,18 @@ class DouyinLiveSpider:
         if not room_id:
             self._emit_error("无法获取 room_id，无法建立弹幕连接")
             return
+
+        mode = self._danmu_mode()
+        if mode in {"browser", "auto"}:
+            try:
+                self._start_browser_ws(self._room_info)
+                return
+            except Exception as e:
+                message = str(e) or "真实浏览器弹幕监听启动失败"
+                if mode == "browser":
+                    self._emit_error(message)
+                    return
+                logger.warning("真实浏览器弹幕监听失败，回退直接 WebSocket: {}", message)
         
         user_id = (
             self._room_info.get('user_unique_id')
@@ -1240,4 +1564,17 @@ class DouyinLiveSpider:
         """停止 WebSocket 连接"""
         self.is_running = False
         if self.ws:
-            self.ws.close()
+            try:
+                self.ws.close()
+            except Exception:
+                pass
+        # 浏览器模式会在监听线程内按 is_running 退出并关闭资源；这里做一次
+        # 尽力关闭，失败也不影响后端退出。
+        for obj_name in ("_browser_page", "_browser_context", "_browser"):
+            obj = getattr(self, obj_name, None)
+            if obj:
+                try:
+                    obj.close()
+                except Exception:
+                    pass
+                setattr(self, obj_name, None)
