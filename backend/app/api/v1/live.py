@@ -143,7 +143,9 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
         logger.info("WebSocket: 弹幕采集线程已启动")
         
         # 5. 等待连接建立
-        max_wait = 10
+        # 弹幕启动会尝试多个抖音 WebSocket 域名；Windows 网络/DNS/代理异常时
+        # 需要等后台线程返回明确错误，避免前端只看到笼统的“连接超时”。
+        max_wait = 120
         wait_count = 0
         startup_error = None
         while not spider.is_running and wait_count < max_wait * 10:
@@ -158,14 +160,31 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
             if startup_error:
                 logger.warning(f"WebSocket: 弹幕启动失败: {startup_error}")
                 return
+            if spider.startup_error:
+                logger.warning(f"WebSocket: 弹幕启动失败: {spider.startup_error}")
+                await websocket.send_json({
+                    'type': 'error',
+                    'message': spider.startup_error
+                })
+                return
+            if not ws_thread.is_alive():
+                message = spider.startup_error or f"弹幕连接已结束，当前阶段：{spider.startup_stage}"
+                logger.warning(f"WebSocket: {message}")
+                await websocket.send_json({
+                    'type': 'error',
+                    'message': message
+                })
+                return
             await asyncio.sleep(0.1)
             wait_count += 1
         
         if not spider.is_running:
-            logger.warning("WebSocket: 弹幕连接超时")
+            startup_stage = getattr(spider, 'startup_stage', '未知')
+            logger.warning(f"WebSocket: 弹幕连接超时，当前阶段: {startup_stage}")
+            spider.stop()
             await websocket.send_json({
                 'type': 'error',
-                'message': '弹幕连接超时'
+                'message': f'弹幕连接超时，当前阶段：{startup_stage}'
             })
             return
         

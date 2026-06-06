@@ -10,6 +10,8 @@
 """
 import gzip
 import re
+import socket
+import ssl
 import threading
 import time
 import random
@@ -19,11 +21,12 @@ from typing import Optional, Callable, Dict, Any
 
 import requests
 from requests.exceptions import Timeout, RequestException
+import websocket as websocket_client
 from websocket import WebSocketApp
 from loguru import logger
 
 from app.modules.douyin.common.auth import DouyinAuth
-from app.modules.douyin.common.header import HeaderBuilder
+from app.modules.douyin.common.header import HeaderBuilder, HeaderType
 from app.modules.douyin.common.params import Params
 from app.utils.dy_util import generate_signature
 from app.modules.douyin.scripts import Live_pb2
@@ -121,12 +124,22 @@ class DouyinLiveSpider:
         self.timeout = timeout
         self.ws: Optional[WebSocketApp] = None
         self.is_running = False
+        self.startup_stage = "初始化"
+        self.startup_error: Optional[str] = None
+        self._opened_once = False
+        self._defer_startup_errors = False
+        self._last_startup_error: Optional[str] = None
         self.message_callback: Optional[Callable[[Dict[str, Any]], None]] = None
         self._room_info: Optional[Dict] = None
     
     def set_message_callback(self, callback: Callable[[Dict[str, Any]], None]):
         """设置消息回调函数"""
         self.message_callback = callback
+
+    def _set_startup_stage(self, stage: str):
+        """记录弹幕启动阶段，方便前端展示真实卡点而不是笼统超时。"""
+        self.startup_stage = stage
+        logger.info(f"直播弹幕启动阶段: {stage}")
     
     def _get_web_rid(self, input_str: str) -> str:
         """从输入中提取 web_rid
@@ -521,6 +534,241 @@ class DouyinLiveSpider:
             'user_count': 0,
             'status': 0,
         }
+
+    def _cookie_dict(self) -> Dict[str, str]:
+        """获取当前直播请求使用的 Cookie 字典。"""
+        cookies = {}
+        if hasattr(self.auth, 'cookie') and self.auth.cookie:
+            cookies.update(self.auth.cookie)
+        return cookies
+
+    def _cookie_header(self) -> str:
+        """获取完整 Cookie 字符串，WebSocket 握手必须尽量保持真实浏览器 Cookie。"""
+        return (getattr(self.auth, 'cookie_str', '') or '').strip()
+
+    def _get_live_page_context(self, web_rid: str) -> Dict[str, str]:
+        """从直播间 HTML 中补齐 room_id/user_unique_id/ttwid。
+
+        抖音直播弹幕的 user_unique_id 与 ttwid 都属于浏览器设备态。
+        只用随机 user_id 或只带 ttwid 建连时，Windows 上更容易被卡住或被风控拒绝。
+        """
+        context: Dict[str, str] = {}
+        if not web_rid:
+            return context
+
+        url = f"https://live.douyin.com/{web_rid}"
+        try:
+            headers = HeaderBuilder.build(HeaderType.DOC, self.auth).get()
+            response = requests.get(
+                url,
+                headers=headers,
+                cookies=self._cookie_dict(),
+                timeout=10,
+            )
+            html = response.text or ""
+            ttwid = response.cookies.get_dict().get('ttwid') or self._cookie_dict().get('ttwid', '')
+            if ttwid:
+                context['ttwid'] = ttwid
+
+            patterns = {
+                'room_id': [
+                    r'\\"roomId\\":\\"(\d+)\\"',
+                    r'"roomId":"(\d+)"',
+                    r'&quot;roomId&quot;:&quot;(\d+)&quot;',
+                ],
+                'user_unique_id': [
+                    r'\\"user_unique_id\\":\\"(\d+)\\"',
+                    r'"user_unique_id":"(\d+)"',
+                    r'&quot;user_unique_id&quot;:&quot;(\d+)&quot;',
+                ],
+            }
+            for key, key_patterns in patterns.items():
+                for pattern in key_patterns:
+                    match = re.search(pattern, html)
+                    if match:
+                        context[key] = match.group(1)
+                        break
+
+            logger.info(
+                "直播页面上下文: "
+                f"room_id={bool(context.get('room_id'))}, "
+                f"user_unique_id={bool(context.get('user_unique_id'))}, "
+                f"ttwid={bool(context.get('ttwid'))}"
+            )
+        except Exception as e:
+            logger.warning(f"获取直播页面上下文失败，继续使用已有信息: {e}")
+        return context
+
+    def _resolve_user_unique_id(self, room_info: Dict, page_context: Dict[str, str]) -> str:
+        """解析弹幕连接使用的 user_unique_id，缺失时才随机兜底。"""
+        candidates = [
+            page_context.get('user_unique_id'),
+            room_info.get('user_unique_id'),
+        ]
+        for value in candidates:
+            value = str(value or '').strip()
+            if re.fullmatch(r'\d{10,}', value):
+                return value
+
+        fallback = ''.join([str(random.randint(0, 9)) for _ in range(19)])
+        logger.warning("未获取到真实 user_unique_id，使用随机值兜底")
+        return fallback
+
+    def _fetch_initial_live_response(self, room_id: str, user_unique_id: str, web_rid: str) -> Optional[Any]:
+        """先请求 /webcast/im/fetch/ 获取 cursor/internal_ext。
+
+        新版直播 WebSocket 建连时带上 cursor/internal_ext 更接近真实页面流程；
+        如果该请求失败，仍继续尝试 WebSocket，避免影响直播播放。
+        """
+        try:
+            self._set_startup_stage("获取弹幕初始游标")
+            referer = f"https://live.douyin.com/{web_rid or room_id}"
+            headers = HeaderBuilder.build(HeaderType.FORM, self.auth).get()
+            headers.update({
+                'origin': 'https://live.douyin.com',
+                'referer': referer,
+                'accept': '*/*',
+            })
+
+            params = Params()
+            (params
+             .add_param('resp_content_type', 'protobuf')
+             .add_param('did_rule', '3')
+             .add_param('device_id', '')
+             .add_param('app_name', 'douyin_web')
+             .add_param('endpoint', 'live_pc')
+             .add_param('support_wrds', '1')
+             .add_param('user_unique_id', str(user_unique_id))
+             .add_param('identity', 'audience')
+             .add_param('need_persist_msg_count', '15')
+             .add_param('insert_task_id', '')
+             .add_param('live_reason', '')
+             .add_param('room_id', room_id)
+             .add_param('version_code', '180800')
+             .add_param('last_rtt', '0')
+             .add_param('live_id', '1')
+             .add_param('aid', '6383')
+             .add_param('fetch_rule', '1')
+             .add_param('cursor', '')
+             .add_param('internal_ext', '')
+             .add_param('device_platform', 'web')
+             .add_param('cookie_enabled', 'true')
+             .add_param('screen_width', '1707')
+             .add_param('screen_height', '960')
+             .add_param('browser_language', 'zh-CN')
+             .add_param('browser_platform', 'Win32')
+             .add_param('browser_name', 'Mozilla')
+             .add_param('browser_version', HeaderBuilder.ua)
+             .add_param('browser_online', 'true')
+             .add_param('tz_name', 'Asia/Shanghai')
+            )
+
+            response = requests.get(
+                'https://live.douyin.com/webcast/im/fetch/',
+                params=params.get(),
+                headers=headers,
+                cookies=self._cookie_dict(),
+                timeout=10,
+            )
+            if response.status_code != 200:
+                logger.warning(f"弹幕初始游标请求失败: HTTP {response.status_code}")
+                return None
+
+            frame = Live_pb2.LiveResponse()
+            frame.ParseFromString(response.content)
+            logger.info(
+                f"弹幕初始游标获取成功: cursor={bool(frame.cursor)}, "
+                f"internal_ext={bool(frame.internalExt)}, messages={len(frame.messagesList)}"
+            )
+            return frame
+        except Exception as e:
+            logger.warning(f"获取弹幕初始游标失败，继续直接连接 WebSocket: {e}")
+            return None
+
+    def _resolve_ws_addresses(self, host: str, port: int) -> list:
+        """解析弹幕域名地址，优先 IPv4。
+
+        websocket-client 在 Windows 上会顺序尝试 getaddrinfo 返回的地址；
+        如果 IPv6 地址排在前面但当前网络 IPv6 不通，容易卡到前端超时。
+        这里自己解析并控制尝试顺序/总耗时。
+        """
+        addrinfo_list = []
+        errors = []
+
+        for family in (socket.AF_INET, socket.AF_UNSPEC):
+            try:
+                infos = socket.getaddrinfo(
+                    host,
+                    port,
+                    family,
+                    socket.SOCK_STREAM,
+                    socket.IPPROTO_TCP,
+                )
+                addrinfo_list.extend(infos)
+            except socket.gaierror as e:
+                errors.append(str(e))
+
+        # 去重，并确保 IPv4 排在 IPv6 前面。
+        unique = []
+        seen = set()
+        for info in addrinfo_list:
+            family, socktype, proto, _canonname, address = info
+            key = (family, address[0], address[1])
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append((family, socktype, proto, address))
+
+        unique.sort(key=lambda item: 0 if item[0] == socket.AF_INET else 1)
+        if not unique:
+            raise OSError(f"解析弹幕服务器失败: {host}; {'; '.join(errors) or '无可用地址'}")
+        return unique
+
+    def _open_direct_tls_socket(self, host: str, port: int, timeout: int):
+        """直连并建立 TLS socket，绕开 websocket-client 的环境代理探测。
+
+        websocket-client 的 http_no_proxy 在未显式传 http_proxy_host 时不会阻止它读取
+        HTTPS_PROXY/HTTP_PROXY 环境变量。Windows 上视频号监听/mitm 或系统环境里残留
+        代理时，就会表现为抖音弹幕 WebSocket 建连超时。预先创建直连 TLS socket 后再
+        交给 WebSocketApp，可同时规避残留代理和 IPv6 顺序连接卡住的问题。
+        """
+        self._set_startup_stage(f"解析弹幕服务器 {host}")
+        addrinfo_list = self._resolve_ws_addresses(host, port)
+        deadline = time.monotonic() + max(3, timeout)
+        last_error = None
+        context = ssl.create_default_context()
+
+        for index, (family, socktype, proto, address) in enumerate(addrinfo_list, start=1):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+
+            # 单个 IP 不要吃完整个 host 的超时预算，避免多 IP 域名在 Windows 上卡太久。
+            per_address_timeout = max(1.0, min(5.0, remaining))
+            raw_sock = None
+            try:
+                self._set_startup_stage(
+                    f"直连弹幕服务器 {host} [{index}/{len(addrinfo_list)}] {address[0]}"
+                )
+                raw_sock = socket.socket(family, socktype, proto)
+                raw_sock.settimeout(per_address_timeout)
+                raw_sock.connect(address)
+
+                self._set_startup_stage(f"建立弹幕 TLS 连接 {host}")
+                tls_sock = context.wrap_socket(raw_sock, server_hostname=host)
+                tls_sock.settimeout(timeout)
+                logger.info(f"弹幕服务器直连成功: host={host}, remote={address[0]}:{address[1]}")
+                return tls_sock
+            except Exception as e:
+                last_error = e
+                logger.warning(f"弹幕服务器直连失败: host={host}, address={address}, error={e}")
+                try:
+                    if raw_sock:
+                        raw_sock.close()
+                except Exception:
+                    pass
+
+        raise TimeoutError(f"{host} 直连失败或超时: {last_error or '无可用地址'}")
     
     # ==================== WebSocket 弹幕相关 ====================
     
@@ -540,7 +788,17 @@ class DouyinLiveSpider:
         """WebSocket 打开回调"""
         logger.info(f"✓ 直播间 {self.live_url} WebSocket 连接成功!")
         logger.info(f"✓ 设置 is_running = True")
+        self._set_startup_stage("WebSocket 已连接")
+        self.startup_error = None
+        self._opened_once = True
         self.is_running = True
+        # setdefaulttimeout 只用于限制建连阶段，连接成功后恢复为阻塞读取，
+        # 避免低弹幕直播间长时间无消息时被 socket timeout 误关闭。
+        try:
+            if getattr(ws, "sock", None):
+                ws.sock.settimeout(None)
+        except Exception as e:
+            logger.debug(f"恢复直播 WebSocket 读取超时失败: {e}")
         logger.info(f"✓ is_running 状态: {self.is_running}")
         
         # 启动心跳线程
@@ -754,15 +1012,26 @@ class DouyinLiveSpider:
         """WebSocket 错误回调"""
         logger.error(f"直播 WebSocket 错误: {error}")
         self.is_running = False
-        self._emit_error(f"直播弹幕连接失败: {error}")
-    
+        message = f"直播弹幕连接失败: {error}"
+        if self._defer_startup_errors and not self._opened_once:
+            self._last_startup_error = message
+            return
+        self._emit_error(message)
+
     def _on_close(self, ws, close_status_code, close_msg):
         """WebSocket 关闭回调"""
         logger.warning(f"直播间 {self.live_url} 连接关闭: {close_status_code}, {close_msg}")
+        if not self.is_running and not self.startup_error:
+            message = f"直播弹幕连接关闭: {close_status_code or ''} {close_msg or ''}".strip()
+            if self._defer_startup_errors and not self._opened_once:
+                self._last_startup_error = self._last_startup_error or message
+            else:
+                self.startup_error = message
         self.is_running = False
 
     def _emit_error(self, message: str):
         """向前端推送弹幕错误，避免启动失败时只显示超时。"""
+        self.startup_error = message
         logger.error(message)
         if self.message_callback:
             self.message_callback({'type': 'error', 'message': message})
@@ -770,6 +1039,10 @@ class DouyinLiveSpider:
     def start_ws(self, room_info: Dict = None):
         """启动 WebSocket 连接"""
         logger.info(f"start_ws 被调用, room_info: {room_info is not None}")
+        self.startup_error = None
+        self._last_startup_error = None
+        self._opened_once = False
+        self._set_startup_stage("准备启动")
         
         if room_info:
             self._room_info = room_info
@@ -778,31 +1051,41 @@ class DouyinLiveSpider:
             logger.error("未获取直播间信息")
             raise ValueError("未获取直播间信息，请先调用 get_room_info()")
         
-        room_id = self._room_info.get('room_id', '')
+        web_rid = self._room_info.get('web_rid') or self._get_web_rid(self.live_url)
+        page_context = self._get_live_page_context(web_rid)
+
+        room_id = self._room_info.get('room_id') or page_context.get('room_id') or ''
         logger.info(f"room_id: {room_id}")
         
         if not room_id:
             self._emit_error("无法获取 room_id，无法建立弹幕连接")
             return
         
-        # 生成随机 user_id
-        user_id = ''.join([str(random.randint(0, 9)) for _ in range(19)])
+        user_id = self._resolve_user_unique_id(self._room_info, page_context)
         
-        # 获取 ttwid
-        cookies = {}
-        if hasattr(self.auth, 'cookie') and self.auth.cookie:
-            cookies.update(self.auth.cookie)
-        ttwid = cookies.get('ttwid', '')
+        # 获取 ttwid，并在握手中携带完整 Cookie，而不是只带 ttwid。
+        cookies = self._cookie_dict()
+        ttwid = cookies.get('ttwid') or page_context.get('ttwid', '')
         if not ttwid:
             self._emit_error("Cookie 中缺少 ttwid，无法建立弹幕连接")
             return
+        cookie_header = self._cookie_header()
+        if not cookie_header:
+            cookie_header = f"ttwid={ttwid};"
+        elif 'ttwid=' not in cookie_header:
+            cookie_header = f"{cookie_header}; ttwid={ttwid}"
 
         try:
+            self._set_startup_stage("生成弹幕签名")
             signature = generate_signature(room_id, user_id)
         except Exception as e:
             message = str(e) or "抖音直播弹幕签名生成失败"
             self._emit_error(message)
             return
+
+        initial_response = self._fetch_initial_live_response(room_id, user_id, web_rid)
+        cursor = getattr(initial_response, 'cursor', '') if initial_response else ''
+        internal_ext = getattr(initial_response, 'internalExt', '') if initial_response else ''
         
         # 构建参数
         params = Params()
@@ -822,6 +1105,8 @@ class DouyinLiveSpider:
          .add_param('browser_version', HeaderBuilder.ua.split('Mozilla/')[-1] if 'Mozilla/' in HeaderBuilder.ua else '125.0.0.0')
          .add_param('browser_online', 'true')
          .add_param('tz_name', 'Etc/GMT-8')
+         .add_param('cursor', str(cursor or ''))
+         .add_param('internal_ext', internal_ext or '')
          .add_param('host', 'https://live.douyin.com')
          .add_param('aid', '6383')
          .add_param('live_id', '1')
@@ -838,39 +1123,103 @@ class DouyinLiveSpider:
          .add_param('heartbeatDuration', '0')
          .add_param('signature', signature)
         )
+
+        ws_hosts = [
+            'webcast100-ws-web-hl.douyin.com',
+            'webcast5-ws-web-hl.douyin.com',
+            'webcast5-ws-web-lf.douyin.com',
+        ]
         
-        wss_url = f"wss://webcast5-ws-web-lf.douyin.com/webcast/im/push/v2/?{urlencode(params.get())}"
-        logger.info(f"WebSocket URL: {wss_url[:100]}...")
-        
-        self.ws = WebSocketApp(
-            url=wss_url,
-            header={
-                'Pragma': 'no-cache',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-                'User-Agent': HeaderBuilder.ua,
-                'Upgrade': 'websocket',
-                'Cache-Control': 'no-cache',
-                'Connection': 'Upgrade',
-            },
-            cookie=f"ttwid={ttwid};",
-            on_message=self._on_message,
-            on_error=self._on_error,
-            on_close=self._on_close,
-            on_open=self._on_open
-        )
-        
-        logger.info("WebSocket 实例已创建，准备连接...")
-        
+        # 单个弹幕域名的建连超时不要太长；Windows 上某个域名/DNS 卡住时
+        # 需要尽快切到备用域名，整体等待由 API 层控制。
+        connect_timeout = max(8, min(int(self.timeout or 15), 15))
+        old_timeout = websocket_client.getdefaulttimeout()
         try:
-            logger.info("调用 run_forever()...")
-            self.ws.run_forever(origin='https://live.douyin.com')
-            logger.info("run_forever() 已返回")
+            # websocket-client 默认 socket timeout 为 None。Windows 上网络/DNS/握手异常时
+            # 可能一直卡在建连阶段，前端只能看到“弹幕连接超时”。这里给建连阶段设置
+            # 明确超时，并由 _on_error/_emit_error 把真实错误转发给前端。
+            websocket_client.setdefaulttimeout(connect_timeout)
+            self._defer_startup_errors = True
+            for index, host in enumerate(ws_hosts, start=1):
+                self.startup_error = None
+                self._last_startup_error = None
+                prepared_socket = None
+                wss_url = f"wss://{host}/webcast/im/push/v2/?{urlencode(params.get())}"
+                logger.info(f"WebSocket URL({index}/{len(ws_hosts)}): {wss_url[:100]}...")
+                self._set_startup_stage(f"创建 WebSocket（{host}）")
+
+                try:
+                    prepared_socket = self._open_direct_tls_socket(host, 443, connect_timeout)
+                except Exception as e:
+                    self._last_startup_error = f"直播弹幕直连失败: {e}"
+                    logger.warning(f"弹幕 WebSocket 主机 {host} 直连失败: {self._last_startup_error}")
+                    if index < len(ws_hosts):
+                        logger.info("尝试下一个抖音弹幕 WebSocket 主机")
+                    continue
+
+                self.ws = WebSocketApp(
+                    url=wss_url,
+                    header={
+                        'Pragma': 'no-cache',
+                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+                        'User-Agent': HeaderBuilder.ua,
+                        'Upgrade': 'websocket',
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'Upgrade',
+                    },
+                    cookie=cookie_header,
+                    on_message=self._on_message,
+                    on_error=self._on_error,
+                    on_close=self._on_close,
+                    on_open=self._on_open,
+                    socket=prepared_socket,
+                )
+
+                logger.info("WebSocket 实例已创建，准备连接...")
+                self._set_startup_stage(f"连接抖音弹幕服务器 {host}（超时 {connect_timeout} 秒）")
+                logger.info("调用 run_forever()...")
+                try:
+                    self.ws.run_forever(
+                        origin='https://live.douyin.com',
+                        http_proxy_timeout=connect_timeout,
+                        # 已传入预连接的直连 TLS socket；这里仍保留 no_proxy，
+                        # 兼容未来 websocket-client 修复代理绕过逻辑后的行为。
+                        http_no_proxy=["*"],
+                    )
+                except Exception as e:
+                    self._last_startup_error = f"直播弹幕连接失败: {e}"
+                    logger.error(self._last_startup_error)
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    if self.ws:
+                        self.ws.close()
+                logger.info("run_forever() 已返回")
+
+                if self.is_running or self._opened_once:
+                    return
+                if self._last_startup_error:
+                    logger.warning(f"弹幕 WebSocket 主机 {host} 启动失败: {self._last_startup_error}")
+                if index < len(ws_hosts):
+                    logger.info("尝试下一个抖音弹幕 WebSocket 主机")
         except Exception as e:
-            self._emit_error(f"直播弹幕连接失败: {e}")
+            if self._defer_startup_errors and not self._opened_once:
+                self._last_startup_error = f"直播弹幕连接失败: {e}"
+                logger.error(self._last_startup_error)
+            else:
+                self._emit_error(f"直播弹幕连接失败: {e}")
             import traceback
             logger.error(traceback.format_exc())
             if self.ws:
                 self.ws.close()
+        finally:
+            self._defer_startup_errors = False
+            websocket_client.setdefaulttimeout(old_timeout)
+
+        if not self.is_running:
+            if self._last_startup_error:
+                self._emit_error(self._last_startup_error)
+            elif not self.startup_error:
+                self._emit_error("直播弹幕连接失败：所有抖音弹幕服务器均未连接成功")
     
     def stop(self):
         """停止 WebSocket 连接"""
