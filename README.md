@@ -113,7 +113,7 @@
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
-| Visual Studio C++ Build Tools | Windows 可选 | 仅使用抖音直播实时弹幕时可能需要，用于编译 `sdenv` 原生依赖 |
+| Visual Studio C++ Build Tools | Windows 可选 | 仅选择完整编译抖音直播弹幕原生依赖时需要；需包含 MSVC v143 和 Windows SDK |
 | Playwright 浏览器 / Chrome / Edge | 可选 | 抖音搜索、闲鱼浏览器登录需要；可安装 Playwright 自带 Chromium，也可使用系统已安装的 Chrome/Edge |
 | 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
@@ -186,13 +186,23 @@ npm install
 
 #### 可选：安装抖音直播实时弹幕依赖
 
-上面的安装命令会跳过 `sdenv`，不影响直播链接解析和播放；如果需要实时弹幕，在 `backend` 目录执行：
+上面的安装命令会跳过 `sdenv`，不影响直播链接解析和播放；如果需要实时弹幕，在 `backend` 目录执行。
+
+推荐免编译安装，Windows ARM64 / Node 22 优先使用这个方式：
+
+```bash
+npm ci --include=optional --ignore-scripts
+```
+
+项目的弹幕签名不依赖 `canvas` 原生绘图，并已对 `sdenv` 的 `documentAll` 原生模块做 JS 兜底；跳过原生编译通常不影响实时弹幕。
+
+如果你希望完整编译原生依赖，或免编译方式在你的环境不可用，再执行：
 
 ```bash
 npm ci --include=optional
 ```
 
-Windows 如果编译 `sdenv` 失败，需要先安装 Visual Studio C++ Build Tools，并勾选 **Desktop development with C++**。macOS 如遇原生依赖编译失败，先执行 `xcode-select --install` 安装命令行工具。
+Windows 完整编译需要在 Visual Studio Installer 中安装 **Desktop development with C++**，并确认单个组件里包含 **MSVC v143**（Windows ARM64 需要 ARM64/ARM64EC 工具集）和 Windows SDK。macOS 如遇原生依赖编译失败，先执行 `xcode-select --install` 安装命令行工具。
 
 #### 可选：安装 Playwright 浏览器
 
@@ -539,17 +549,26 @@ rmdir /s /q node_modules
 npm ci --omit=optional
 ```
 
-如果需要抖音直播实时弹幕，最后一行改为 `npm ci --include=optional`。
+如果需要抖音直播实时弹幕，最后一行改为 `npm ci --include=optional --ignore-scripts`；只有需要完整原生编译时才去掉 `--ignore-scripts`。
 
 ### 6. 抖音直播弹幕提示连接超时或 `sdenv` 未安装
 
 直播链接解析/播放不需要 `sdenv`；实时弹幕需要。请在 `backend` 目录安装可选依赖后重启后端：
 
 ```bash
-npm ci --include=optional
+npm ci --include=optional --ignore-scripts
 ```
 
-Windows 如出现 `node-gyp` / Visual Studio 相关报错，安装 Visual Studio C++ Build Tools，并勾选 **Desktop development with C++** 后重试。
+如果需要完整编译原生依赖，可改用 `npm ci --include=optional`。Windows 如出现 `node-gyp` / Visual Studio 相关报错，优先使用上面的免编译命令。
+
+如果完整编译报 `MSB8020: 无法找到 v143 的生成工具`，说明 Visual Studio Build Tools 缺少对应的 MSVC v143 工具集，不是 Cookie 或项目配置问题。处理方式：
+
+1. 打开 **Visual Studio Installer** → **Build Tools 2022** → **Modify**；
+2. 勾选 **Desktop development with C++**；
+3. 在 **Individual components** 中确认安装 **MSVC v143**、Windows SDK；Windows ARM64 还需要 **MSVC v143 ARM64/ARM64EC build tools**；
+4. 重新打开终端后再执行 `npm ci --include=optional`。
+
+如果不想折腾原生编译，继续使用 `npm ci --include=optional --ignore-scripts` 即可。
 
 ### 7. 功能提示未配置 Cookie
 
@@ -570,7 +589,7 @@ http://localhost:3121
 
 如果端口被占用，可先关闭占用 `3120` / `3121` 的旧进程，或直接使用一键启动脚本让脚本清理端口后重新启动。
 
-### 8. 配置或 AI 供应商“不见了”
+### 9. 配置或 AI 供应商“不见了”
 
 优先检查：
 
@@ -580,14 +599,14 @@ backend/config/xianyu_ai_config.json.bak
 backend/config/config.yaml
 ```
 
-### 9. Cookie 鉴权失败
+### 10. Cookie 鉴权失败
 
 - 重新登录平台后更新 Cookie；
 - 闲鱼当前前端入口以 Cookie 登录为主；
 - 避免频繁切换账号或短时间高频请求；
 - 若提示风控或登录失效，等待一段时间后重新登录并更新配置。
 
-### 10. Playwright 相关功能不可用
+### 11. Playwright 相关功能不可用
 
 抖音搜索、闲鱼浏览器登录等功能需要浏览器执行环境。可以使用系统已安装的 Chrome/Edge；如果提示 `Executable doesn't exist` 或 `playwright install`，可安装 Playwright 自带 Chromium：
 

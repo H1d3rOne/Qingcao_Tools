@@ -40,7 +40,9 @@ def _format_node_dependency_message(module_name=None):
         return (
             f"抖音直播弹幕 JS 依赖未安装{module_hint}，"
             "直播链接解析/播放不受影响；如需实时弹幕，请在 backend 目录执行 "
-            "npm ci --include=optional 后重启后端。Windows 如遇 node-gyp 编译失败，请安装 Visual Studio C++ Build Tools。"
+            "npm ci --include=optional --ignore-scripts 后重启后端。"
+            "如需完整编译原生依赖，再改用 npm ci --include=optional；"
+            "Windows 完整编译报 v143/canvas/node-gyp 错误时，请安装 MSVC v143 和 Windows SDK。"
         )
     return f"后端 JS 依赖未安装{module_hint}，请在 backend 目录执行 npm ci 后重启后端"
 
