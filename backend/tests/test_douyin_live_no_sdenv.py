@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from app.modules.douyin.common.auth import DouyinAuth
+from app.modules.douyin.common.header import HeaderBuilder
 from app.modules.douyin.live.spiders import live as live_module
 from app.modules.douyin.live.spiders.live import DouyinLiveSpider
 
@@ -85,6 +86,9 @@ def test_start_ws_uses_page_user_id_prefetch_cursor_and_full_cookie(monkeypatch)
     assert query["cursor"] == ["cursor-1"]
     assert query["internal_ext"] == ["internal-ext-1"]
     assert query["signature"] == ["sig-7317661077232560922-9876543210123456789"]
+    assert query["browser_platform"] == ["Win32"]
+    assert query["browser_version"] == [HeaderBuilder.ua.split("Mozilla/")[-1]]
+    assert captured["header"]["User-Agent"] == HeaderBuilder.ua
     assert "ttwid=ttwid-value" in captured["cookie"]
     assert "msToken=ms-token" in captured["cookie"]
     assert captured["origin"] == "https://live.douyin.com"
@@ -117,3 +121,77 @@ def test_start_ws_reports_missing_user_unique_id_before_signing(monkeypatch):
         "type": "error",
         "message": "无法获取 user_unique_id，无法建立弹幕连接；请更新抖音直播 Cookie 后重试",
     }]
+
+
+def test_initial_fetch_uses_reference_fingerprint(monkeypatch):
+    auth = make_auth()
+    spider = DouyinLiveSpider("https://live.douyin.com/123456", auth)
+    captured = {}
+
+    monkeypatch.setattr(
+        live_module.Params,
+        "with_a_bogus",
+        lambda self, *args, **kwargs: self.add_param("a_bogus", "a-bogus-test"),
+    )
+
+    from app.utils import dy_util
+
+    monkeypatch.setattr(
+        dy_util,
+        "generate_csrf_token",
+        lambda cookie_str: ("csrf-token-test", None),
+    )
+
+    frame = live_module.Live_pb2.LiveResponse()
+    frame.cursor = "cursor-1"
+    frame.internalExt = "internal-ext-1"
+
+    class FakeCookies:
+        def get_dict(self):
+            return {}
+
+    class FakeResponse:
+        status_code = 200
+        content = frame.SerializeToString()
+        text = ""
+        cookies = FakeCookies()
+
+    def fake_get(url, *, headers, params, cookies, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["params"] = params
+        captured["cookies"] = cookies
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(live_module.requests, "get", fake_get)
+
+    result = spider._get_webcast_initial_response(
+        "7317661077232560922",
+        "9876543210123456789",
+        "123456",
+    )
+
+    assert result == {"cursor": "cursor-1", "internal_ext": "internal-ext-1"}
+    assert captured["url"] == "https://live.douyin.com/webcast/im/fetch/"
+    assert captured["headers"]["user-agent"] == HeaderBuilder.ua
+    assert captured["headers"]["x-secsdk-csrf-token"] == "csrf-token-test"
+    assert captured["params"]["screen_width"] == "2560"
+    assert captured["params"]["screen_height"] == "1440"
+    assert captured["params"]["browser_language"] == "en"
+    assert captured["params"]["browser_platform"] == "Win32"
+    assert captured["params"]["browser_version"] == spider.LIVE_FETCH_BROWSER_VERSION
+    assert captured["params"]["a_bogus"] == "a-bogus-test"
+
+
+def test_ws_device_blocked_error_is_friendly():
+    error = (
+        "Handshake status 200 OK -+-+- {'handshake-msg': 'DEVICE_BLOCKED', "
+        "'handshake-status': '415'} -+-+- b''"
+    )
+
+    message = DouyinLiveSpider._format_ws_error(error)
+
+    assert "DEVICE_BLOCKED/415" in message
+    assert "复制最新抖音直播 Cookie" in message
+    assert "直播链接解析/播放不受影响" in message

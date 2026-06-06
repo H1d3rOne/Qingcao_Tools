@@ -609,7 +609,12 @@ def generate_csrf_token(cookies_str):
             'x-secsdk-csrf-request': '1',
             'x-secsdk-csrf-version': '1.2.22',
         }
-        response = requests.head('https://www.douyin.com/service/2/abtest_config/', headers=headers, verify=False)
+        response = requests.head(
+            'https://www.douyin.com/service/2/abtest_config/',
+            headers=headers,
+            verify=False,
+            timeout=5,
+        )
         return response.headers['X-Ware-Csrf-Token'].split(',')[1], response.headers['X-Ware-Csrf-Token'].split(',')[4]
     except Exception as e:
         return csrf_token_1, csrf_token_2

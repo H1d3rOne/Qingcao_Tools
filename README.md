@@ -528,7 +528,7 @@ rmdir /s /q node_modules
 npm ci
 ```
 
-### 6. 抖音直播弹幕提示连接超时
+### 6. 抖音直播弹幕提示连接超时或 `DEVICE_BLOCKED`
 
 实时弹幕现在使用纯 JS 签名，并按直播页解析 `user_unique_id`、预取 `/webcast/im/fetch/` 的 `cursor/internal_ext` 后再连接 WebSocket，不再依赖 `sdenv` / `node-gyp` / Visual Studio C++ Build Tools。
 
@@ -538,6 +538,8 @@ npm ci
 cd backend
 npm ci
 ```
+
+如果后端日志出现 `handshake-msg: DEVICE_BLOCKED` / `handshake-status: 415`，表示抖音侧拒绝了当前 Cookie 对应的浏览器设备指纹。请用真实浏览器重新打开 `live.douyin.com` 直播间，复制最新抖音直播 Cookie 后重试。
 
 如果仍然超时，优先检查后端日志里 WebSocket 的具体错误；直播链接解析和播放正常不代表弹幕 WebSocket 一定能连通。
 

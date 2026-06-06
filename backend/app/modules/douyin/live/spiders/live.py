@@ -111,6 +111,15 @@ class DouyinLiveSpider:
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
     }
+
+    # 抖音直播弹幕握手对“请求参数里的浏览器指纹”和 WebSocket Header 较敏感。
+    # 这里按 Douyin_Spider 可用链路固定弹幕初始化/WS 指纹，避免混用用户 Cookie
+    # 中的 Chrome/Edge/Mac/Windows 信息后被服务端判定为 DEVICE_BLOCKED。
+    LIVE_FETCH_BROWSER_VERSION = (
+        "5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/146.0.0.0 Safari/537.36"
+    )
     
     def __init__(self, live_url: str, auth: DouyinAuth, timeout: int = 30):
         """初始化直播爬虫
@@ -966,7 +975,7 @@ class DouyinLiveSpider:
         """WebSocket 错误回调"""
         logger.error(f"直播 WebSocket 错误: {error}")
         self.is_running = False
-        self._emit_error(f"直播弹幕连接失败: {error}")
+        self._emit_error(self._format_ws_error(error))
     
     def _on_close(self, ws, close_status_code, close_msg):
         """WebSocket 关闭回调"""
@@ -979,6 +988,18 @@ class DouyinLiveSpider:
         if self.message_callback:
             self.message_callback({'type': 'error', 'message': message})
 
+    @staticmethod
+    def _format_ws_error(error) -> str:
+        """把抖音弹幕握手风控错误转换为可操作提示。"""
+        detail = str(error or "")
+        if "DEVICE_BLOCKED" in detail or "handshake-status': '415'" in detail or 'handshake-status": "415"' in detail:
+            return (
+                "直播弹幕连接失败：抖音侧返回 DEVICE_BLOCKED/415，表示当前抖音直播 Cookie "
+                "对应的浏览器设备指纹被风控拒绝；请用真实浏览器重新打开 live.douyin.com "
+                "直播间，复制最新抖音直播 Cookie 后重试。直播链接解析/播放不受影响。"
+            )
+        return f"直播弹幕连接失败: {detail}"
+
     def _get_webcast_initial_response(self, room_id: str, user_id: str, web_rid: str) -> Dict[str, str]:
         """预取 `/webcast/im/fetch/`，拿到 cursor/internal_ext。
 
@@ -988,10 +1009,20 @@ class DouyinLiveSpider:
         """
         api_url = "https://live.douyin.com/webcast/im/fetch/"
         page_url = f"https://live.douyin.com/{web_rid or self._get_web_rid(self.live_url)}"
-        profile = get_douyin_browser_profile(self.auth)
-        headers = HeaderBuilder.build(HeaderType.FORM, auth=self.auth, profile=profile).get()
+        # 初始化 fetch 按参考项目固定 UA/参数；不要混用 Cookie 中恢复出的浏览器
+        # 指纹，否则预取成功后 WS 仍可能在握手阶段返回 DEVICE_BLOCKED。
+        header = HeaderBuilder.build(HeaderType.FORM)
+        headers = header.get()
         headers['origin'] = 'https://live.douyin.com'
         headers['referer'] = page_url
+        # x-secsdk-csrf-token 不是每次都能取到；取不到时保持参考链路的其他参数继续请求。
+        try:
+            from app.utils.dy_util import generate_csrf_token
+            csrf_token = generate_csrf_token(getattr(self.auth, "cookie_str", "") or "")[0]
+        except Exception:
+            csrf_token = None
+        if csrf_token:
+            headers['x-secsdk-csrf-token'] = csrf_token
 
         params = Params()
         (params
@@ -1015,23 +1046,25 @@ class DouyinLiveSpider:
          .add_param("cursor", "")
          .add_param("internal_ext", "")
          .add_param("device_platform", "web")
-         .add_param("cookie_enabled", profile.get("cookie_enabled", "true"))
-         .add_param("screen_width", profile.get("screen_width", "1707"))
-         .add_param("screen_height", profile.get("screen_height", "960"))
-         .add_param("browser_language", profile.get("browser_language", "zh-CN"))
-         .add_param("browser_platform", profile.get("browser_platform", "Win32"))
+         .add_param("cookie_enabled", "true")
+         .add_param("screen_width", "2560")
+         .add_param("screen_height", "1440")
+         .add_param("browser_language", "en")
+         .add_param("browser_platform", "Win32")
          .add_param("browser_name", "Mozilla")
-         .add_param("browser_version", profile.get("user_agent") or HeaderBuilder.ua)
-         .add_param("browser_online", profile.get("browser_online", "true"))
+         .add_param("browser_version", self.LIVE_FETCH_BROWSER_VERSION)
+         .add_param("browser_online", "true")
          .add_param("tz_name", "Asia/Shanghai")
-         .add_param("msToken", getattr(self.auth, "msToken", "") or profile.get("msToken", ""))
+         .add_param("msToken", getattr(self.auth, "msToken", "") or "")
         )
-        params.with_a_bogus(
-            auth=self.auth,
-            user_agent=profile.get("user_agent") or HeaderBuilder.ua,
-            env=profile,
-            page_url=page_url,
-            url=api_url,
+        params.with_a_bogus()
+        logger.info(
+            "弹幕初始化指纹: ua={}, screen={}x{}, browser_language={}, browser_version={}",
+            HeaderBuilder.ua,
+            "2560",
+            "1440",
+            "en",
+            self.LIVE_FETCH_BROWSER_VERSION,
         )
 
         response = requests.get(
@@ -1119,8 +1152,10 @@ class DouyinLiveSpider:
             self._emit_error(message)
             return
 
-        profile = get_douyin_browser_profile(self.auth)
-        user_agent = profile.get('user_agent') or HeaderBuilder.ua
+        # WebSocket 握手继续固定参考项目的 Firefox UA 与 Win32 参数，避免
+        # 与初始化 fetch 或签名环境不一致。
+        user_agent = HeaderBuilder.ua
+        browser_version = user_agent.split('Mozilla/')[-1] if 'Mozilla/' in user_agent else user_agent
         
         # 构建参数
         params = Params()
@@ -1135,9 +1170,9 @@ class DouyinLiveSpider:
          .add_param('screen_width', '1707')
          .add_param('screen_height', '960')
          .add_param('browser_language', 'zh-CN')
-         .add_param('browser_platform', profile.get('browser_platform', 'Win32'))
+         .add_param('browser_platform', 'Win32')
          .add_param('browser_name', 'Mozilla')
-         .add_param('browser_version', user_agent.split('Mozilla/')[-1] if 'Mozilla/' in user_agent else user_agent)
+         .add_param('browser_version', browser_version)
          .add_param('browser_online', 'true')
          .add_param('tz_name', 'Etc/GMT-8')
          .add_param('cursor', initial_response.get('cursor', ''))
@@ -1161,6 +1196,15 @@ class DouyinLiveSpider:
         
         wss_url = f"wss://webcast100-ws-web-hl.douyin.com/webcast/im/push/v2/?{urlencode(params.get())}"
         logger.info(f"WebSocket URL: {wss_url[:100]}...")
+        logger.info(
+            "弹幕 WS 指纹: ua={}, screen={}x{}, browser_language={}, browser_platform={}, browser_version={}",
+            user_agent,
+            "1707",
+            "960",
+            "zh-CN",
+            "Win32",
+            browser_version,
+        )
         
         self.ws = WebSocketApp(
             url=wss_url,
@@ -1186,7 +1230,7 @@ class DouyinLiveSpider:
             self.ws.run_forever(origin='https://live.douyin.com')
             logger.info("run_forever() 已返回")
         except Exception as e:
-            self._emit_error(f"直播弹幕连接失败: {e}")
+            self._emit_error(self._format_ws_error(e))
             import traceback
             logger.error(traceback.format_exc())
             if self.ws:
