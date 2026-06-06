@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 echo ========================================
-echo   Qingcao Toolbox v2.0.0
+echo   Qingcao Toolbox v2.2.5
 echo ========================================
 
 set "PROJECT_ROOT=%~dp0"

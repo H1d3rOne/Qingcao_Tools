@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const appInfo = {
   name: '青草工具箱',
-  version: '2.0.0',
+  version: '2.2.5',
   author: 'H1d3rOne',
   description: '一款集成多种实用工具的工具箱应用，目前支持抖音解析、夸克网盘等功能。',
   features: [

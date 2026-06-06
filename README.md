@@ -113,7 +113,6 @@
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
-| Visual Studio C++ Build Tools | Windows 可选 | 仅选择完整编译抖音直播弹幕原生依赖时需要；需包含 MSVC v143 和 Windows SDK |
 | Playwright 浏览器 / Chrome / Edge | 可选 | 抖音搜索、闲鱼浏览器登录需要；可安装 Playwright 自带 Chromium，也可使用系统已安装的 Chrome/Edge |
 | 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
@@ -149,7 +148,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
-npm ci --omit=optional
+npm ci --include=optional --ignore-scripts
 
 cd ../web-vue
 pnpm install
@@ -172,7 +171,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
 
-npm ci --omit=optional
+npm ci --include=optional --ignore-scripts
 
 cd ..\web-vue
 pnpm install
@@ -183,26 +182,6 @@ pnpm install
 ```bat
 npm install
 ```
-
-#### 可选：安装抖音直播实时弹幕依赖
-
-上面的安装命令会跳过 `sdenv`，不影响直播链接解析和播放；如果需要实时弹幕，在 `backend` 目录执行。
-
-推荐免编译安装，Windows ARM64 / Node 22 优先使用这个方式：
-
-```bash
-npm ci --include=optional --ignore-scripts
-```
-
-项目的弹幕签名不依赖 `canvas` 原生绘图，并已对 `sdenv` 的 `documentAll` 原生模块做 JS 兜底；跳过原生编译通常不影响实时弹幕。
-
-如果你希望完整编译原生依赖，或免编译方式在你的环境不可用，再执行：
-
-```bash
-npm ci --include=optional
-```
-
-Windows 完整编译需要在 Visual Studio Installer 中安装 **Desktop development with C++**，并确认单个组件里包含 **MSVC v143**（Windows ARM64 需要 ARM64/ARM64EC 工具集）和 Windows SDK。macOS 如遇原生依赖编译失败，先执行 `xcode-select --install` 安装命令行工具。
 
 #### 可选：安装 Playwright 浏览器
 
@@ -406,7 +385,7 @@ cd backend
 
 # 安装依赖
 .venv/bin/python -m pip install -r requirements.txt
-npm ci --omit=optional
+npm ci --include=optional --ignore-scripts
 
 # 启动开发服务
 .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
@@ -531,7 +510,7 @@ py -3.11-64 -m venv .venv
 
 ```bash
 cd backend
-npm ci --omit=optional
+npm ci --include=optional --ignore-scripts
 ```
 
 执行后重新启动后端。
@@ -546,29 +525,21 @@ npm ci --omit=optional
 cd backend
 taskkill /F /IM node.exe 2>nul
 rmdir /s /q node_modules
-npm ci --omit=optional
-```
-
-如果需要抖音直播实时弹幕，最后一行改为 `npm ci --include=optional --ignore-scripts`；只有需要完整原生编译时才去掉 `--ignore-scripts`。
-
-### 6. 抖音直播弹幕提示连接超时或 `sdenv` 未安装
-
-直播链接解析/播放不需要 `sdenv`；实时弹幕需要。请在 `backend` 目录安装可选依赖后重启后端：
-
-```bash
 npm ci --include=optional --ignore-scripts
 ```
 
-如果需要完整编译原生依赖，可改用 `npm ci --include=optional`。Windows 如出现 `node-gyp` / Visual Studio 相关报错，优先使用上面的免编译命令。
+### 6. 抖音直播弹幕提示连接超时或 `sdenv` 未安装
 
-如果完整编译报 `MSB8020: 无法找到 v143 的生成工具`，说明 Visual Studio Build Tools 缺少对应的 MSVC v143 工具集，不是 Cookie 或项目配置问题。处理方式：
+项目统一使用免编译方式安装后端 JS 依赖，已包含抖音直播弹幕所需的 `sdenv`：
 
-1. 打开 **Visual Studio Installer** → **Build Tools 2022** → **Modify**；
-2. 勾选 **Desktop development with C++**；
-3. 在 **Individual components** 中确认安装 **MSVC v143**、Windows SDK；Windows ARM64 还需要 **MSVC v143 ARM64/ARM64EC build tools**；
-4. 重新打开终端后再执行 `npm ci --include=optional`。
+```bash
+cd backend
+npm ci --include=optional --ignore-scripts
+```
 
-如果不想折腾原生编译，继续使用 `npm ci --include=optional --ignore-scripts` 即可。
+执行后重启后端。如果仍提示 `sdenv` 未安装，确认命令是在 `backend` 目录执行，并检查 `backend/node_modules/sdenv` 是否存在。
+
+如果是弹幕连接超时，通常不是安装问题，优先检查抖音直播 Cookie 是否过期、是否从真实浏览器重新复制，以及后端日志里显示的具体连接阶段。
 
 ### 7. 功能提示未配置 Cookie
 
@@ -627,7 +598,7 @@ cd backend
 
 ## 版本与变更
 
-当前版本：`v2.0.0`
+当前版本：`v2.2.5`
 
 近期主要变更：
 
