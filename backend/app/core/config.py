@@ -34,7 +34,7 @@ class AppConfig(BaseModel):
 class ServerConfig(BaseModel):
     """服务器配置"""
     host: str = "0.0.0.0"
-    port: int = 5000
+    port: int = 3121
 
 
 class DatabaseConfig(BaseModel):

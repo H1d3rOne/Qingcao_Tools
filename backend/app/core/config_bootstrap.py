@@ -27,7 +27,7 @@ DEFAULT_BACKEND_CONFIG: dict = {
         "debug": False,
         "api_prefix": "/api/v1",
     },
-    "server": {"host": "0.0.0.0", "port": 5000},
+    "server": {"host": "0.0.0.0", "port": 3121},
     "database": {"url": "sqlite+aiosqlite:///./data.db"},
     "redis": {"url": "redis://localhost:6379/0", "enabled": False},
     "cookies": {"douyin": "", "douyin_live": "", "quark": "", "xianyu": ""},

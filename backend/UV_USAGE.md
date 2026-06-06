@@ -49,7 +49,7 @@ uv sync
 
 ```bash
 # 运行应用
-uv run uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
+uv run uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
 
 # 运行测试
 uv run pytest

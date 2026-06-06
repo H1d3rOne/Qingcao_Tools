@@ -8,7 +8,7 @@ app:
 
 server:
   host: 0.0.0.0
-  port: 5000
+  port: 3121
 
 database:
   url: sqlite+aiosqlite:///./data.db
