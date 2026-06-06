@@ -5,6 +5,7 @@ import json
 import os
 import random
 import base64
+import hashlib
 import urllib
 from urllib.parse import unquote
 from os import path
@@ -33,15 +34,11 @@ bdm_live_path = SCRIPTS_DIR / 'bdm_live.js'
 _dy_js = None
 _sign_js = None
 
+DOUYIN_LIVE_WEBCAST_SDK_VERSION = "1.0.15"
+
 
 def _format_node_dependency_message(module_name=None):
     module_hint = f"（缺少 {module_name}）" if module_name else ""
-    if module_name and "sdenv" in module_name:
-        return (
-            f"抖音直播弹幕 JS 依赖未安装{module_hint}，"
-            "直播链接解析/播放不受影响；如需实时弹幕，请在 backend 目录执行 "
-            "npm ci --include=optional 后重启后端。Windows 如遇 node-gyp 编译失败，请安装 Visual Studio C++ Build Tools。"
-        )
     return f"后端 JS 依赖未安装{module_hint}，请在 backend 目录执行 npm ci 后重启后端"
 
 
@@ -63,8 +60,7 @@ def _raise_friendly_js_error(exc, live_danmu=False):
     message = str(exc)
     missing_module = _extract_missing_node_module(message)
     if missing_module or "MODULE_NOT_FOUND" in message:
-        module_name = "sdenv" if live_danmu else missing_module
-        raise RuntimeError(_format_node_dependency_message(module_name)) from exc
+        raise RuntimeError(_format_node_dependency_message(missing_module)) from exc
     if (
         "Could not find an available JavaScript runtime" in message
         or "No such file or directory: 'node'" in message
@@ -74,14 +70,14 @@ def _raise_friendly_js_error(exc, live_danmu=False):
     raise exc
 
 
-def _compile_js(script_path, *module_names):
+def _compile_js(script_path, *module_names, live_danmu=False):
     if not script_path.exists():
         raise RuntimeError(f"抖音 JS 脚本缺失: {script_path}")
     _ensure_node_modules(*module_names)
     try:
         return execjs.compile(script_path.read_text(encoding="utf-8"), cwd=str(BACKEND_ROOT))
     except Exception as exc:
-        _raise_friendly_js_error(exc, live_danmu="sdenv" in module_names)
+        _raise_friendly_js_error(exc, live_danmu=live_danmu)
 
 
 def _get_dy_js():
@@ -94,7 +90,7 @@ def _get_dy_js():
 def _get_sign_js():
     global _sign_js
     if _sign_js is None:
-        _sign_js = _compile_js(sign_path, "sdenv")
+        _sign_js = _compile_js(sign_path, live_danmu=True)
     return _sign_js
 
 
@@ -487,8 +483,15 @@ def generate_a_bogus(query, data="", user_agent=None, env=None, *, url=None, pag
     return _call_js(_get_dy_js, 'get_ab', query, data, user_agent or DEFAULT_DOUYIN_USER_AGENT, env or {})
 
 
-def generate_signature(roomId, user_unique_id):
-    return _call_js(_get_sign_js, 'sign', roomId, user_unique_id)
+def generate_signature(roomId, user_unique_id, webcast_sdk_version=DOUYIN_LIVE_WEBCAST_SDK_VERSION):
+    raw_string = (
+        "live_id=1,aid=6383,version_code=180800,"
+        f"webcast_sdk_version={webcast_sdk_version},"
+        f"room_id={roomId},sub_room_id=,sub_channel_id=,did_rule=3,"
+        f"user_unique_id={user_unique_id},device_platform=web,device_type=,ac=,identity=audience"
+    )
+    x_ms_stub = hashlib.md5(raw_string.encode("utf-8")).hexdigest()
+    return _call_js(_get_sign_js, 'get_signature', x_ms_stub)
 
 
 # 传递私钥

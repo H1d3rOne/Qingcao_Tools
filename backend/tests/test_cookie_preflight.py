@@ -46,11 +46,14 @@ def test_douyin_live_signature_does_not_require_sdenv(monkeypatch):
 
     class FakeContext:
         def call(self, function_name, *args):
-            assert function_name == "sign"
+            assert function_name == "get_signature"
+            assert len(args) == 1
+            assert len(args[0]) == 32
             return "mock-signature"
 
-    def fake_compile_js(script_path, *module_names):
+    def fake_compile_js(script_path, *module_names, **kwargs):
         captured["module_names"] = module_names
+        captured["live_danmu"] = kwargs.get("live_danmu")
         return FakeContext()
 
     monkeypatch.setattr(dy_util, "_compile_js", fake_compile_js)
@@ -58,6 +61,7 @@ def test_douyin_live_signature_does_not_require_sdenv(monkeypatch):
     try:
         assert dy_util.generate_signature("room-id", "user-id") == "mock-signature"
         assert captured["module_names"] == ()
+        assert captured["live_danmu"] is True
     finally:
         dy_util._sign_js = None
 

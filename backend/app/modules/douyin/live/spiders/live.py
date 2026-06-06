@@ -9,10 +9,10 @@
 4. 返回给前端
 """
 import gzip
+import html as html_lib
 import re
 import threading
 import time
-import random
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from typing import Optional, Callable, Dict, Any
@@ -23,9 +23,13 @@ from websocket import WebSocketApp
 from loguru import logger
 
 from app.modules.douyin.common.auth import DouyinAuth
-from app.modules.douyin.common.header import HeaderBuilder
+from app.modules.douyin.common.header import HeaderBuilder, HeaderType
 from app.modules.douyin.common.params import Params
-from app.utils.dy_util import generate_signature
+from app.utils.dy_util import (
+    DOUYIN_LIVE_WEBCAST_SDK_VERSION,
+    generate_signature,
+    get_douyin_browser_profile,
+)
 from app.modules.douyin.scripts import Live_pb2
 from app.core.config import settings
 
@@ -153,6 +157,187 @@ class DouyinLiveSpider:
             return match.group(1)
         
         return input_str
+
+    @staticmethod
+    def _first_match(text: str, patterns: list[str]) -> str:
+        """按顺序返回第一个正则分组结果。"""
+        for pattern in patterns:
+            match = re.search(pattern, text, re.S)
+            if match:
+                return match.group(1)
+        return ''
+
+    @staticmethod
+    def _html_variants(text: str) -> list[str]:
+        """生成几种常见的直播页转义形态，便于用同一组正则解析。"""
+        variants: list[str] = []
+        for candidate in (
+            text or '',
+            html_lib.unescape(text or ''),
+        ):
+            if candidate and candidate not in variants:
+                variants.append(candidate)
+            unescaped = (
+                candidate
+                .replace(r'\\"', '"')
+                .replace(r'\"', '"')
+                .replace(r'\\/', '/')
+                .replace(r'\/', '/')
+            )
+            if unescaped and unescaped not in variants:
+                variants.append(unescaped)
+        return variants
+
+    @staticmethod
+    def _cookie_dict_to_string(cookies: Dict[str, str]) -> str:
+        return "; ".join(
+            f"{key}={value}"
+            for key, value in cookies.items()
+            if key and value is not None and value != ''
+        )
+
+    def _sync_auth_cookie(self, cookies: Dict[str, str]):
+        """把页面响应补发的 ttwid 等 Cookie 合并到当前认证对象。"""
+        if not cookies:
+            return
+        if not hasattr(self.auth, 'cookie') or self.auth.cookie is None:
+            self.auth.cookie = {}
+        changed = False
+        for key, value in cookies.items():
+            if value and self.auth.cookie.get(key) != value:
+                self.auth.cookie[key] = value
+                changed = True
+        if changed:
+            self.auth.cookie_str = self._cookie_dict_to_string(self.auth.cookie)
+
+    def _build_cookie_header(self, *, ttwid: str = '') -> str:
+        """构建给 WebSocket / 直播接口使用的完整 Cookie 字符串。"""
+        cookies = {}
+        if getattr(self.auth, 'cookie', None):
+            cookies.update(self.auth.cookie)
+        if ttwid and not cookies.get('ttwid'):
+            cookies['ttwid'] = ttwid
+        if cookies:
+            return self._cookie_dict_to_string(cookies)
+        return (getattr(self.auth, 'cookie_str', '') or '').strip()
+
+    def _parse_live_page_html(self, html: str) -> Dict[str, str]:
+        """从直播页 HTML 中提取弹幕连接需要的 room_id/user_unique_id。
+
+        Douyin_Spider 的弹幕实现不是使用随机 user_id，而是从直播页脚本中
+        提取 `user_unique_id` 后参与 X-Bogus 签名；这里也按这个路径解析。
+        """
+        result = {
+            'room_id': '',
+            'user_id': '',
+            'user_unique_id': '',
+            'anchor_id': '',
+            'sec_uid': '',
+            'title': '',
+            'status': '',
+        }
+
+        for candidate in self._html_variants(html):
+            if not result['room_id']:
+                result['room_id'] = self._first_match(candidate, [
+                    r'"roomId"\s*:\s*"(\d+)"',
+                    r'"room_id"\s*:\s*"(\d+)"',
+                    r'"room"\s*:\s*\{[^{}]*"id_str"\s*:\s*"(\d{10,})"',
+                    r'&quot;roomId&quot;:&quot;(\d+)&quot;',
+                ])
+            if not result['user_unique_id']:
+                result['user_unique_id'] = self._first_match(candidate, [
+                    r'"user_unique_id"\s*:\s*"(\d+)"',
+                    r'&quot;user_unique_id&quot;:&quot;(\d+)&quot;',
+                ])
+                result['user_id'] = result['user_unique_id']
+            if not result['anchor_id']:
+                result['anchor_id'] = self._first_match(candidate, [
+                    r'"anchor"\s*:\s*\{[^{}]*"id_str"\s*:\s*"(\d+)"',
+                    r'"owner"\s*:\s*\{[^{}]*"id_str"\s*:\s*"(\d+)"',
+                    r'"owner"\s*:\s*\{[^{}]*"id"\s*:\s*(\d+)',
+                ])
+            if not result['sec_uid']:
+                result['sec_uid'] = self._first_match(candidate, [
+                    r'"sec_uid"\s*:\s*"([^"]+)"',
+                ])
+            if not result['title']:
+                result['title'] = self._first_match(candidate, [
+                    r'"title"\s*:\s*"([^"]*)"',
+                ])
+            if not result['status']:
+                result['status'] = self._first_match(candidate, [
+                    r'"status"\s*:\s*(\d+)',
+                    r'"room_status"\s*:\s*(\d+)',
+                ])
+
+        return result
+
+    def _get_live_page_info(self, web_rid: str) -> Dict[str, str]:
+        """请求直播页并提取 room_id、user_unique_id、ttwid 等信息。"""
+        url = f"https://live.douyin.com/{web_rid}"
+        try:
+            headers = HeaderBuilder.build(HeaderType.DOC, auth=self.auth).get()
+            headers['referer'] = 'https://live.douyin.com/?from_nav=1'
+            response = requests.get(
+                url,
+                headers=headers,
+                cookies=getattr(self.auth, 'cookie', {}) or None,
+                timeout=10,
+            )
+            response_cookies = response.cookies.get_dict()
+            self._sync_auth_cookie(response_cookies)
+
+            page_info = self._parse_live_page_html(response.text)
+            page_info['ttwid'] = (
+                response_cookies.get('ttwid')
+                or getattr(self.auth, 'cookie', {}).get('ttwid', '')
+            )
+            if page_info.get('room_id'):
+                logger.info(
+                    "直播页解析成功: room_id={}, user_unique_id={}, ttwid={}",
+                    page_info.get('room_id'),
+                    bool(page_info.get('user_unique_id')),
+                    bool(page_info.get('ttwid')),
+                )
+            else:
+                logger.warning("直播页未解析到 room_id")
+            return page_info
+        except Timeout:
+            logger.error(f"获取直播页超时: {url}")
+        except RequestException as e:
+            logger.error(f"获取直播页网络请求失败: {e}")
+        except Exception as e:
+            logger.error(f"解析直播页失败: {e}")
+        return {}
+
+    @staticmethod
+    def _merge_live_metadata(room_info: Dict, page_info: Dict) -> Dict:
+        """把直播页解析结果补到 API 房间信息里。"""
+        if not room_info:
+            return room_info
+        if not page_info:
+            return room_info
+
+        for key in ('room_id', 'web_rid', 'user_id', 'user_unique_id', 'ttwid', 'anchor_id', 'sec_uid'):
+            if page_info.get(key) and not room_info.get(key):
+                room_info[key] = page_info[key]
+
+        if page_info.get('title') and not room_info.get('title'):
+            room_info['title'] = page_info['title']
+        if page_info.get('status') and not room_info.get('status'):
+            try:
+                room_info['status'] = int(page_info['status'])
+            except ValueError:
+                room_info['status'] = page_info['status']
+
+        owner = room_info.get('owner') or {}
+        if page_info.get('anchor_id') and not owner.get('uid'):
+            owner['uid'] = page_info['anchor_id']
+        if page_info.get('sec_uid') and not owner.get('sec_uid'):
+            owner['sec_uid'] = page_info['sec_uid']
+        room_info['owner'] = owner
+        return room_info
     
     def _get_room_id(self, url: str) -> str:
         """从网页中提取 19 位 room_id
@@ -337,16 +522,22 @@ class DouyinLiveSpider:
         # Step 1: 提取 web_rid
         web_rid = self._get_web_rid(self.live_url)
         logger.info(f"提取的 web_rid: {web_rid}")
+
+        # 先请求直播页。弹幕 WebSocket 的签名需要页面里的 user_unique_id，
+        # 不能再使用随机 user_id，否则容易表现为连接超时。
+        page_info = self._get_live_page_info(web_rid)
+        if page_info:
+            page_info['web_rid'] = web_rid
         
         # 方案1: 使用 Web API 获取（推荐，更稳定）
         room_info = self._get_room_info_via_api(web_rid)
         if room_info and room_info.get('room_id'):
-            return room_info
+            return self._merge_live_metadata(room_info, page_info)
         
         # 方案2: 从网页解析 room_id
         logger.warning("Web API 获取失败，尝试从网页解析 room_id")
         live_url = f"https://live.douyin.com/{web_rid}"
-        room_id = self._get_room_id(live_url)
+        room_id = page_info.get('room_id') or self._get_room_id(live_url)
         
         if room_id:
             stream_info = self._get_stream_url(room_id)
@@ -354,15 +545,18 @@ class DouyinLiveSpider:
                 result = {
                     'room_id': room_id,
                     'web_rid': web_rid,
+                    'user_id': page_info.get('user_id', ''),
+                    'user_unique_id': page_info.get('user_unique_id', ''),
+                    'ttwid': page_info.get('ttwid', ''),
                     'owner': stream_info.get('owner', {}),
                     'stream_url': stream_info.get('stream_url', {}),
                     'title': stream_info.get('title', ''),
                     'user_count': stream_info.get('user_count', 0),
                     'status': stream_info.get('status', 0),
                 }
-                return result
+                return self._merge_live_metadata(result, page_info)
         
-        return self._build_empty_result(web_rid)
+        return self._merge_live_metadata(self._build_empty_result(web_rid), page_info)
     
     def _get_room_info_via_api(self, web_rid: str) -> Dict:
         """通过 Web API 直接获取直播间信息（推荐方式）
@@ -411,6 +605,7 @@ class DouyinLiveSpider:
         
         try:
             response = requests.get(api_url, params=params, headers=headers, cookies=cookies, timeout=10)
+            self._sync_auth_cookie(response.cookies.get_dict())
             data = response.json()
             logger.info(f"Web API 响应 status_code: {data.get('status_code')}")
             
@@ -425,6 +620,17 @@ class DouyinLiveSpider:
             
             room = room_data[0]
             user = data.get('data', {}).get('user', {})
+            # 注意：data.user 多数情况下是主播/房间用户，不一定是当前访问者。
+            # 弹幕签名需要的是页面里的 viewer user_unique_id，API 只取显式字段。
+            user_unique_id = str(
+                data.get('data', {}).get('user_unique_id')
+                or data.get('data', {}).get('web_user_id')
+                or ''
+            )
+            ttwid = (
+                response.cookies.get_dict().get('ttwid')
+                or cookies.get('ttwid', '')
+            )
             
             # 解析视频流
             stream_url = room.get('stream_url', {})
@@ -471,6 +677,9 @@ class DouyinLiveSpider:
             result = {
                 'room_id': str(room.get('id_str', '')),
                 'web_rid': web_rid,
+                'user_id': user_unique_id,
+                'user_unique_id': user_unique_id,
+                'ttwid': ttwid,
                 'owner': owner_info,
                 'stream_url': {
                     'rtmp': '',
@@ -494,6 +703,9 @@ class DouyinLiveSpider:
         return {
             'room_id': room_id or web_rid,
             'web_rid': web_rid,
+            'user_id': '',
+            'user_unique_id': '',
+            'ttwid': '',
             'owner': {
                 'nickname': None,
                 'avatar': None,
@@ -766,6 +978,92 @@ class DouyinLiveSpider:
         logger.error(message)
         if self.message_callback:
             self.message_callback({'type': 'error', 'message': message})
+
+    def _get_webcast_initial_response(self, room_id: str, user_id: str, web_rid: str) -> Dict[str, str]:
+        """预取 `/webcast/im/fetch/`，拿到 cursor/internal_ext。
+
+        Douyin_Spider 的可用链路会先请求一次 protobuf fetch，再把返回的
+        cursor/internalExt 带入 WebSocket。缺少这一步时，签名即使能生成，
+        也可能出现 WebSocket 长时间无响应/超时。
+        """
+        api_url = "https://live.douyin.com/webcast/im/fetch/"
+        page_url = f"https://live.douyin.com/{web_rid or self._get_web_rid(self.live_url)}"
+        profile = get_douyin_browser_profile(self.auth)
+        headers = HeaderBuilder.build(HeaderType.FORM, auth=self.auth, profile=profile).get()
+        headers['origin'] = 'https://live.douyin.com'
+        headers['referer'] = page_url
+
+        params = Params()
+        (params
+         .add_param("resp_content_type", "protobuf")
+         .add_param("did_rule", "3")
+         .add_param("device_id", "")
+         .add_param("app_name", "douyin_web")
+         .add_param("endpoint", "live_pc")
+         .add_param("support_wrds", "1")
+         .add_param("user_unique_id", str(user_id))
+         .add_param("identity", "audience")
+         .add_param("need_persist_msg_count", "15")
+         .add_param("insert_task_id", "")
+         .add_param("live_reason", "")
+         .add_param("room_id", str(room_id))
+         .add_param("version_code", "180800")
+         .add_param("last_rtt", "0")
+         .add_param("live_id", "1")
+         .add_param("aid", "6383")
+         .add_param("fetch_rule", "1")
+         .add_param("cursor", "")
+         .add_param("internal_ext", "")
+         .add_param("device_platform", "web")
+         .add_param("cookie_enabled", profile.get("cookie_enabled", "true"))
+         .add_param("screen_width", profile.get("screen_width", "1707"))
+         .add_param("screen_height", profile.get("screen_height", "960"))
+         .add_param("browser_language", profile.get("browser_language", "zh-CN"))
+         .add_param("browser_platform", profile.get("browser_platform", "Win32"))
+         .add_param("browser_name", "Mozilla")
+         .add_param("browser_version", profile.get("user_agent") or HeaderBuilder.ua)
+         .add_param("browser_online", profile.get("browser_online", "true"))
+         .add_param("tz_name", "Asia/Shanghai")
+         .add_param("msToken", getattr(self.auth, "msToken", "") or profile.get("msToken", ""))
+        )
+        params.with_a_bogus(
+            auth=self.auth,
+            user_agent=profile.get("user_agent") or HeaderBuilder.ua,
+            env=profile,
+            page_url=page_url,
+            url=api_url,
+        )
+
+        response = requests.get(
+            api_url,
+            headers=headers,
+            params=params.get(),
+            cookies=getattr(self.auth, 'cookie', {}) or None,
+            timeout=10,
+        )
+        self._sync_auth_cookie(response.cookies.get_dict())
+        if response.status_code != 200:
+            raise RuntimeError(f"弹幕初始化接口返回 HTTP {response.status_code}")
+
+        frame = Live_pb2.LiveResponse()
+        try:
+            frame.ParseFromString(response.content)
+        except Exception as exc:
+            preview = response.text[:120] if response.text else ''
+            raise RuntimeError(f"弹幕初始化接口返回非 protobuf 数据: {preview}") from exc
+
+        result = {
+            "cursor": str(frame.cursor or ""),
+            "internal_ext": frame.internalExt or "",
+        }
+        if not result["cursor"] and not result["internal_ext"]:
+            raise RuntimeError("弹幕初始化接口未返回 cursor/internal_ext，请检查抖音直播 Cookie 是否有效")
+        logger.info(
+            "弹幕初始化成功: cursor={}, internal_ext={}",
+            bool(result["cursor"]),
+            bool(result["internal_ext"]),
+        )
+        return result
     
     def start_ws(self, room_info: Dict = None):
         """启动 WebSocket 连接"""
@@ -785,16 +1083,33 @@ class DouyinLiveSpider:
             self._emit_error("无法获取 room_id，无法建立弹幕连接")
             return
         
-        # 生成随机 user_id
-        user_id = ''.join([str(random.randint(0, 9)) for _ in range(19)])
+        user_id = (
+            self._room_info.get('user_unique_id')
+            or self._room_info.get('user_id')
+            or ''
+        )
+        if not user_id:
+            self._emit_error("无法获取 user_unique_id，无法建立弹幕连接；请更新抖音直播 Cookie 后重试")
+            return
         
         # 获取 ttwid
         cookies = {}
         if hasattr(self.auth, 'cookie') and self.auth.cookie:
             cookies.update(self.auth.cookie)
-        ttwid = cookies.get('ttwid', '')
+        ttwid = self._room_info.get('ttwid') or cookies.get('ttwid', '')
         if not ttwid:
             self._emit_error("Cookie 中缺少 ttwid，无法建立弹幕连接")
+            return
+        self._sync_auth_cookie({'ttwid': ttwid})
+        cookie_header = self._build_cookie_header(ttwid=ttwid)
+
+        web_rid = self._room_info.get('web_rid') or self._get_web_rid(self.live_url)
+
+        try:
+            initial_response = self._get_webcast_initial_response(room_id, user_id, web_rid)
+        except Exception as e:
+            message = str(e) or "抖音直播弹幕初始化失败"
+            self._emit_error(message)
             return
 
         try:
@@ -803,25 +1118,30 @@ class DouyinLiveSpider:
             message = str(e) or "抖音直播弹幕签名生成失败"
             self._emit_error(message)
             return
+
+        profile = get_douyin_browser_profile(self.auth)
+        user_agent = profile.get('user_agent') or HeaderBuilder.ua
         
         # 构建参数
         params = Params()
         (params
          .add_param('app_name', 'douyin_web')
          .add_param('version_code', '180800')
-         .add_param('webcast_sdk_version', '1.0.14-beta.0')
-         .add_param('update_version_code', '1.0.14-beta.0')
+         .add_param('webcast_sdk_version', DOUYIN_LIVE_WEBCAST_SDK_VERSION)
+         .add_param('update_version_code', DOUYIN_LIVE_WEBCAST_SDK_VERSION)
          .add_param('compress', 'gzip')
          .add_param('device_platform', 'web')
          .add_param('cookie_enabled', 'true')
          .add_param('screen_width', '1707')
          .add_param('screen_height', '960')
          .add_param('browser_language', 'zh-CN')
-         .add_param('browser_platform', 'Win32')
+         .add_param('browser_platform', profile.get('browser_platform', 'Win32'))
          .add_param('browser_name', 'Mozilla')
-         .add_param('browser_version', HeaderBuilder.ua.split('Mozilla/')[-1] if 'Mozilla/' in HeaderBuilder.ua else '125.0.0.0')
+         .add_param('browser_version', user_agent.split('Mozilla/')[-1] if 'Mozilla/' in user_agent else user_agent)
          .add_param('browser_online', 'true')
          .add_param('tz_name', 'Etc/GMT-8')
+         .add_param('cursor', initial_response.get('cursor', ''))
+         .add_param('internal_ext', initial_response.get('internal_ext', ''))
          .add_param('host', 'https://live.douyin.com')
          .add_param('aid', '6383')
          .add_param('live_id', '1')
@@ -839,7 +1159,7 @@ class DouyinLiveSpider:
          .add_param('signature', signature)
         )
         
-        wss_url = f"wss://webcast5-ws-web-lf.douyin.com/webcast/im/push/v2/?{urlencode(params.get())}"
+        wss_url = f"wss://webcast100-ws-web-hl.douyin.com/webcast/im/push/v2/?{urlencode(params.get())}"
         logger.info(f"WebSocket URL: {wss_url[:100]}...")
         
         self.ws = WebSocketApp(
@@ -847,12 +1167,12 @@ class DouyinLiveSpider:
             header={
                 'Pragma': 'no-cache',
                 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
-                'User-Agent': HeaderBuilder.ua,
+                'User-Agent': user_agent,
                 'Upgrade': 'websocket',
                 'Cache-Control': 'no-cache',
                 'Connection': 'Upgrade',
             },
-            cookie=f"ttwid={ttwid};",
+            cookie=cookie_header,
             on_message=self._on_message,
             on_error=self._on_error,
             on_close=self._on_close,

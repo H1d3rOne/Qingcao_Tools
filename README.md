@@ -113,7 +113,6 @@
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
-| Visual Studio C++ Build Tools | Windows 可选 | 仅使用抖音直播实时弹幕时可能需要，用于编译 `sdenv` 原生依赖 |
 | Playwright 浏览器 / Chrome / Edge | 可选 | 抖音搜索、闲鱼浏览器登录需要；可安装 Playwright 自带 Chromium，也可使用系统已安装的 Chrome/Edge |
 | 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
@@ -149,7 +148,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
-npm ci --omit=optional
+npm ci
 
 cd ../web-vue
 pnpm install
@@ -172,7 +171,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
 
-npm ci --omit=optional
+npm ci
 
 cd ..\web-vue
 pnpm install
@@ -183,16 +182,6 @@ pnpm install
 ```bat
 npm install
 ```
-
-#### 可选：安装抖音直播实时弹幕依赖
-
-上面的安装命令会跳过 `sdenv`，不影响直播链接解析和播放；如果需要实时弹幕，在 `backend` 目录执行：
-
-```bash
-npm ci --include=optional
-```
-
-Windows 如果编译 `sdenv` 失败，需要先安装 Visual Studio C++ Build Tools，并勾选 **Desktop development with C++**。macOS 如遇原生依赖编译失败，先执行 `xcode-select --install` 安装命令行工具。
 
 #### 可选：安装 Playwright 浏览器
 
@@ -396,7 +385,7 @@ cd backend
 
 # 安装依赖
 .venv/bin/python -m pip install -r requirements.txt
-npm ci --omit=optional
+npm ci
 
 # 启动开发服务
 .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
@@ -521,7 +510,7 @@ py -3.11-64 -m venv .venv
 
 ```bash
 cd backend
-npm ci --omit=optional
+npm ci
 ```
 
 执行后重新启动后端。
@@ -536,20 +525,21 @@ npm ci --omit=optional
 cd backend
 taskkill /F /IM node.exe 2>nul
 rmdir /s /q node_modules
-npm ci --omit=optional
+npm ci
 ```
 
-如果需要抖音直播实时弹幕，最后一行改为 `npm ci --include=optional`。
+### 6. 抖音直播弹幕提示连接超时
 
-### 6. 抖音直播弹幕提示连接超时或 `sdenv` 未安装
+实时弹幕现在使用纯 JS 签名，并按直播页解析 `user_unique_id`、预取 `/webcast/im/fetch/` 的 `cursor/internal_ext` 后再连接 WebSocket，不再依赖 `sdenv` / `node-gyp` / Visual Studio C++ Build Tools。
 
-直播链接解析/播放不需要 `sdenv`；实时弹幕需要。请在 `backend` 目录安装可选依赖后重启后端：
+先确认已配置有效的抖音直播 Cookie，且 Cookie 中包含或可从直播页补到 `ttwid`；然后重启后端再试。旧版本升级后如果 `backend/node_modules` 里残留 `sdenv`，可删除 `backend/node_modules` 后重新执行：
 
 ```bash
-npm ci --include=optional
+cd backend
+npm ci
 ```
 
-Windows 如出现 `node-gyp` / Visual Studio 相关报错，安装 Visual Studio C++ Build Tools，并勾选 **Desktop development with C++** 后重试。
+如果仍然超时，优先检查后端日志里 WebSocket 的具体错误；直播链接解析和播放正常不代表弹幕 WebSocket 一定能连通。
 
 ### 7. 功能提示未配置 Cookie
 
@@ -570,7 +560,7 @@ http://localhost:3121
 
 如果端口被占用，可先关闭占用 `3120` / `3121` 的旧进程，或直接使用一键启动脚本让脚本清理端口后重新启动。
 
-### 8. 配置或 AI 供应商“不见了”
+### 9. 配置或 AI 供应商“不见了”
 
 优先检查：
 
@@ -580,14 +570,14 @@ backend/config/xianyu_ai_config.json.bak
 backend/config/config.yaml
 ```
 
-### 9. Cookie 鉴权失败
+### 10. Cookie 鉴权失败
 
 - 重新登录平台后更新 Cookie；
 - 闲鱼当前前端入口以 Cookie 登录为主；
 - 避免频繁切换账号或短时间高频请求；
 - 若提示风控或登录失效，等待一段时间后重新登录并更新配置。
 
-### 10. Playwright 相关功能不可用
+### 11. Playwright 相关功能不可用
 
 抖音搜索、闲鱼浏览器登录等功能需要浏览器执行环境。可以使用系统已安装的 Chrome/Edge；如果提示 `Executable doesn't exist` 或 `playwright install`，可安装 Playwright 自带 Chromium：
 
