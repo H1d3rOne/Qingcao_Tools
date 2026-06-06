@@ -211,6 +211,37 @@ class DouyinBrowserSearchExecutor:
 
         return self._page
 
+    @staticmethod
+    async def _page_diagnostics(page) -> dict:
+        try:
+            return await page.evaluate(
+                """() => ({
+                    href: location.href,
+                    title: document.title,
+                    text: (document.body && document.body.innerText || '').slice(0, 200),
+                    hasBdms: !!window.bdms,
+                    hasAcrawler: !!window.byted_acrawler,
+                })"""
+            )
+        except Exception as exc:
+            return {"href": getattr(page, "url", "") or "", "diagnostic_error": str(exc)}
+
+    async def _wait_for_search_sdk(self, page, timeout_ms: int = 15_000) -> None:
+        try:
+            await page.wait_for_function(
+                "() => !!window.bdms || !!window.byted_acrawler",
+                timeout=timeout_ms,
+            )
+        except Exception as exc:
+            info = await self._page_diagnostics(page)
+            logger.warning(f"抖音搜索页面签名脚本加载超时: {info}")
+            raise RuntimeError(
+                "抖音搜索页面签名脚本加载超时，无法生成搜索请求签名；"
+                f"url={info.get('href') or getattr(page, 'url', '')}, "
+                f"title={info.get('title') or ''}, "
+                f"hasBdms={info.get('hasBdms')}, hasAcrawler={info.get('hasAcrawler')}"
+            ) from exc
+
     async def fetch_text(self, url: str, refer: str, auth, profile: dict, timeout_ms: int = 60_000) -> dict:
         """在真实抖音页面上下文中 fetch URL，让页面 SDK 自动补 a_bogus。"""
         async with self._lock:
@@ -220,10 +251,7 @@ class DouyinBrowserSearchExecutor:
                 if not self._same_search_context(current_url, refer):
                     await page.goto(refer, wait_until="domcontentloaded", timeout=timeout_ms)
 
-                await page.wait_for_function(
-                    "() => !!window.bdms || !!window.byted_acrawler",
-                    timeout=15_000,
-                )
+                await self._wait_for_search_sdk(page)
                 result = await page.evaluate(
                     """async ({ targetUrl, refer }) => {
                         const res = await fetch(targetUrl, {

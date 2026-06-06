@@ -806,7 +806,10 @@ class DouyinSpider(BaseSpider):
         import urllib.parse
 
         api = "/aweme/v1/web/search/item/"
-        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=video"
+        # video 页签在部分环境不会初始化 window.bdms/window.byted_acrawler，
+        # 但视频接口只需要同源搜索页签名上下文，频道由 search_channel=aweme_video_web 决定。
+        # 因此复用 general 搜索页作为浏览器签名上下文，避免等待 video 页签 SDK 超时。
+        refer = f"{self.BASE_URL}/search/{urllib.parse.quote(keyword)}?aid={uuid.uuid4()}&type=general"
         headers, profile = self._build_search_headers(refer)
         page_count = self._normalize_search_count(count, default=25)
 
