@@ -532,7 +532,7 @@ npm ci
 
 实时弹幕默认使用真实浏览器打开直播间，并被动监听页面自己的弹幕 WebSocket，避免手工构造握手触发 `DEVICE_BLOCKED`；不再依赖 `sdenv` / `node-gyp` / Visual Studio C++ Build Tools。
 
-先确认已配置有效的抖音直播 Cookie，并且已安装系统 Chrome/Edge 或 Playwright 自带 Chromium；然后重启后端再试。旧版本升级后如果 `backend/node_modules` 里残留 `sdenv`，可删除 `backend/node_modules` 后重新执行：
+先确认已配置有效的抖音直播 Cookie，并且已安装系统 Chrome/Edge 或 Playwright 自带 Chromium；弹幕监听默认会打开一个真实浏览器窗口，如果必须后台无窗口运行，可设置 `DOUYIN_LIVE_BROWSER_HEADLESS=1`，但更容易触发风控或捕获不到弹幕连接。修改后重启后端再试。旧版本升级后如果 `backend/node_modules` 里残留 `sdenv`，可删除 `backend/node_modules` 后重新执行：
 
 ```bash
 cd backend

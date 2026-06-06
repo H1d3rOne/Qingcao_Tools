@@ -123,7 +123,7 @@ class DouyinLiveSpider:
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/146.0.0.0 Safari/537.36"
     )
-    LIVE_BROWSER_WS_WAIT_SECONDS = 15
+    LIVE_BROWSER_WS_WAIT_SECONDS = 30
     
     def __init__(self, live_url: str, auth: DouyinAuth, timeout: int = 30):
         """初始化直播爬虫
@@ -1121,6 +1121,15 @@ class DouyinLiveSpider:
             return fallback
 
     @staticmethod
+    def _env_flag(name: str, default: str = "0") -> bool:
+        value = (os.getenv(name, default) or default).strip().lower()
+        return value not in {"0", "false", "no", "off", ""}
+
+    @classmethod
+    def _browser_ws_wait_seconds(cls) -> int:
+        return max(5, cls._to_int(os.getenv("DOUYIN_LIVE_BROWSER_WS_WAIT_SECONDS"), cls.LIVE_BROWSER_WS_WAIT_SECONDS))
+
+    @staticmethod
     def _browser_cookie_items(auth) -> list[dict]:
         """转换为 Playwright 可注入的 Cookie。"""
         items: list[dict] = []
@@ -1202,13 +1211,19 @@ class DouyinLiveSpider:
         profile = get_douyin_browser_profile(self.auth)
         width = self._to_int(profile.get("screen_width"), 1920)
         height = self._to_int(profile.get("screen_height"), 1080)
+        ws_wait_seconds = self._browser_ws_wait_seconds()
         ws_seen = threading.Event()
 
         logger.info("使用真实浏览器监听抖音直播弹幕: {}", page_url)
         try:
             with sync_playwright() as playwright:
                 launch_kwargs = {
-                    "headless": os.getenv("DOUYIN_BROWSER_HEADLESS", "1") != "0",
+                    # 抖音直播页对无头浏览器更敏感；弹幕监听默认用有头浏览器。
+                    # 如需后台无窗口运行，可设置 DOUYIN_LIVE_BROWSER_HEADLESS=1。
+                    "headless": self._env_flag(
+                        "DOUYIN_LIVE_BROWSER_HEADLESS",
+                        os.getenv("DOUYIN_BROWSER_HEADLESS", "0"),
+                    ),
                     "args": [
                         "--disable-blink-features=AutomationControlled",
                         "--disable-dev-shm-usage",
@@ -1281,9 +1296,18 @@ class DouyinLiveSpider:
                     ws.on("close", on_ws_close)
 
                 self._browser_page.on("websocket", on_websocket)
-                self._browser_page.goto(page_url, wait_until="domcontentloaded", timeout=30_000)
+                goto_error = ""
+                try:
+                    self._browser_page.goto(page_url, wait_until="domcontentloaded", timeout=20_000)
+                except Exception as exc:
+                    # 有些直播页资源较慢，DOMContentLoaded 超时不代表 WebSocket
+                    # 一定没有建立；继续等待页面自己的弹幕 WS，避免前端只看到
+                    # 泛化的“弹幕连接超时”。
+                    goto_error = str(exc)
+                    if not ws_seen.is_set():
+                        logger.warning("抖音直播页打开超时/失败，继续等待弹幕 WebSocket: {}", goto_error[:300])
 
-                deadline = time.time() + self.LIVE_BROWSER_WS_WAIT_SECONDS
+                deadline = time.time() + ws_wait_seconds
                 while self.is_running is False and time.time() < deadline:
                     if ws_seen.is_set():
                         break
@@ -1291,9 +1315,11 @@ class DouyinLiveSpider:
 
                 if not ws_seen.is_set():
                     info = self._browser_page_diagnostics()
+                    goto_hint = f"打开页面错误: {goto_error[:200]}；" if goto_error else ""
                     raise RuntimeError(
                         "真实浏览器未捕获到抖音直播弹幕 WebSocket；"
-                        "请确认直播间正在直播、抖音直播 Cookie 有效。"
+                        f"{goto_hint}"
+                        "请确认直播间正在直播、抖音直播 Cookie 有效，并允许浏览器窗口正常打开。"
                         f"页面诊断: url={info.get('href') or info.get('url') or page_url}, "
                         f"title={info.get('title') or ''}, text={info.get('text') or ''}"
                     )

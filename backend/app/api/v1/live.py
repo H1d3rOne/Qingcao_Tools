@@ -143,9 +143,10 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
         logger.info("WebSocket: 弹幕采集线程已启动")
         
         # 5. 等待连接建立
-        # 真实浏览器弹幕监听需要打开直播页并等待页面自己的 WebSocket，
-        # 比直接连接略慢，给 Windows/低配置机器更充足的启动时间。
-        max_wait = 20
+        # 真实浏览器弹幕监听需要启动浏览器、打开直播页并等待页面自己的
+        # WebSocket。给 Windows/低配置机器更充足的启动时间，避免后端
+        # 还在打开页面时前端先收到泛化的“弹幕连接超时”。
+        max_wait = 60
         wait_count = 0
         startup_error = None
         while not spider.is_running and wait_count < max_wait * 10:
@@ -167,7 +168,7 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
             logger.warning("WebSocket: 弹幕连接超时")
             await websocket.send_json({
                 'type': 'error',
-                'message': '弹幕连接超时'
+                'message': '弹幕连接超时：真实浏览器未在 60 秒内捕获到抖音直播弹幕 WebSocket，请确认浏览器可正常打开、直播间正在直播且抖音直播 Cookie 有效'
             })
             return
         
