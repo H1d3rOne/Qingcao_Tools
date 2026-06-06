@@ -150,6 +150,119 @@ def notify_windows_proxy_settings_changed() -> None:
         pass
 
 
+def _windows_proxy_value(values: dict, name: str, default=None):
+    item = values.get(name)
+    if item is None:
+        return default
+    return item[1]
+
+
+def _windows_proxy_bool(values: dict, name: str) -> bool:
+    try:
+        return int(_windows_proxy_value(values, name, 0) or 0) != 0
+    except (TypeError, ValueError):
+        return False
+
+
+def is_windows_proxy_active(values: dict) -> bool:
+    return (
+        _windows_proxy_bool(values, "ProxyEnable")
+        or bool(str(_windows_proxy_value(values, "AutoConfigURL", "") or "").strip())
+        or _windows_proxy_bool(values, "AutoDetect")
+    )
+
+
+def apply_windows_proxy_settings_via_wininet(values: dict) -> None:
+    """用 WinINet API 应用当前用户代理，确保 Windows 10/11 设置界面同步刷新。"""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        INTERNET_OPTION_PER_CONNECTION_OPTION = 75
+        INTERNET_PER_CONN_FLAGS = 1
+        INTERNET_PER_CONN_PROXY_SERVER = 2
+        INTERNET_PER_CONN_PROXY_BYPASS = 3
+        INTERNET_PER_CONN_AUTOCONFIG_URL = 4
+
+        PROXY_TYPE_DIRECT = 0x00000001
+        PROXY_TYPE_PROXY = 0x00000002
+        PROXY_TYPE_AUTO_PROXY_URL = 0x00000004
+        PROXY_TYPE_AUTO_DETECT = 0x00000008
+
+        class INTERNET_PER_CONN_OPTION_VALUE(ctypes.Union):
+            _fields_ = [
+                ("dwValue", wintypes.DWORD),
+                ("pszValue", wintypes.LPWSTR),
+                ("ftValue", wintypes.FILETIME),
+            ]
+
+        class INTERNET_PER_CONN_OPTION(ctypes.Structure):
+            _fields_ = [
+                ("dwOption", wintypes.DWORD),
+                ("Value", INTERNET_PER_CONN_OPTION_VALUE),
+            ]
+
+        class INTERNET_PER_CONN_OPTION_LIST(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("pszConnection", wintypes.LPWSTR),
+                ("dwOptionCount", wintypes.DWORD),
+                ("dwOptionError", wintypes.DWORD),
+                ("pOptions", ctypes.POINTER(INTERNET_PER_CONN_OPTION)),
+            ]
+
+        proxy_enabled = _windows_proxy_bool(values, "ProxyEnable")
+        proxy_server = str(_windows_proxy_value(values, "ProxyServer", "") or "").strip()
+        proxy_bypass = str(_windows_proxy_value(values, "ProxyOverride", "") or "").strip()
+        auto_config_url = str(_windows_proxy_value(values, "AutoConfigURL", "") or "").strip()
+        auto_detect = _windows_proxy_bool(values, "AutoDetect")
+
+        flags = 0
+        if proxy_enabled and proxy_server:
+            flags |= PROXY_TYPE_PROXY
+        if auto_config_url:
+            flags |= PROXY_TYPE_AUTO_PROXY_URL
+        if auto_detect:
+            flags |= PROXY_TYPE_AUTO_DETECT
+        if flags == 0:
+            flags = PROXY_TYPE_DIRECT
+
+        option_items = [("flags", INTERNET_PER_CONN_FLAGS, flags)]
+        if proxy_server:
+            option_items.append(("server", INTERNET_PER_CONN_PROXY_SERVER, proxy_server))
+        if proxy_bypass:
+            option_items.append(("bypass", INTERNET_PER_CONN_PROXY_BYPASS, proxy_bypass))
+        if auto_config_url:
+            option_items.append(("autoconfig", INTERNET_PER_CONN_AUTOCONFIG_URL, auto_config_url))
+
+        options_array = (INTERNET_PER_CONN_OPTION * len(option_items))()
+        for index, (_, option, value) in enumerate(option_items):
+            options_array[index].dwOption = option
+            if option == INTERNET_PER_CONN_FLAGS:
+                options_array[index].Value.dwValue = value
+            else:
+                options_array[index].Value.pszValue = value
+
+        option_list = INTERNET_PER_CONN_OPTION_LIST()
+        option_list.dwSize = ctypes.sizeof(INTERNET_PER_CONN_OPTION_LIST)
+        option_list.pszConnection = None
+        option_list.dwOptionCount = len(option_items)
+        option_list.dwOptionError = 0
+        option_list.pOptions = options_array
+
+        wininet = ctypes.windll.Wininet
+        ok = wininet.InternetSetOptionW(
+            0,
+            INTERNET_OPTION_PER_CONNECTION_OPTION,
+            ctypes.byref(option_list),
+            ctypes.sizeof(option_list),
+        )
+        if not ok:
+            raise ctypes.WinError()
+    finally:
+        notify_windows_proxy_settings_changed()
+
+
 class WechatProxyAddon:
     def __init__(
         self,
@@ -444,7 +557,8 @@ class ProxyController:
     def _read_windows_proxy_settings(self) -> dict:
         import winreg
 
-        values = {name: None for name in ("ProxyEnable", "ProxyServer", "ProxyOverride")}
+        names = ("ProxyEnable", "ProxyServer", "ProxyOverride", "AutoConfigURL", "AutoDetect")
+        values = {name: None for name in names}
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
@@ -480,15 +594,27 @@ class ProxyController:
     def _enable_windows_user_proxy(self) -> None:
         import winreg
 
+        self._startup_stage = "检测 Windows 系统代理"
         if self._windows_previous_proxy_settings is None:
             self._windows_previous_proxy_settings = self._read_windows_proxy_settings()
 
+        if is_windows_proxy_active(self._windows_previous_proxy_settings):
+            self._startup_stage = "覆盖已有 Windows 系统代理"
+        else:
+            self._startup_stage = "开启 Windows 系统代理"
+
         proxy_server = f"{self.proxy_host}:{self.proxy_port}"
-        self._write_windows_proxy_settings({
+        next_settings = {
+            # 手动代理已开启时覆盖旧地址；未开启时打开手动代理。
             "ProxyEnable": (winreg.REG_DWORD, 1),
             "ProxyServer": (winreg.REG_SZ, proxy_server),
             "ProxyOverride": (winreg.REG_SZ, get_windows_proxy_override()),
-        })
+            # PAC/自动检测会干扰手动代理，监听期间先关闭，停止监听时恢复。
+            "AutoConfigURL": None,
+            "AutoDetect": (winreg.REG_DWORD, 0),
+        }
+        self._write_windows_proxy_settings(next_settings)
+        apply_windows_proxy_settings_via_wininet(next_settings)
 
         current = self._read_windows_proxy_settings()
         enabled = (current.get("ProxyEnable") or (None, 0))[1]
@@ -500,6 +626,7 @@ class ProxyController:
         try:
             if self._windows_previous_proxy_settings is not None:
                 self._write_windows_proxy_settings(self._windows_previous_proxy_settings)
+                apply_windows_proxy_settings_via_wininet(self._windows_previous_proxy_settings)
                 self._windows_previous_proxy_settings = None
             return True
         except Exception:
