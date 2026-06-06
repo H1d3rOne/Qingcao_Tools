@@ -52,6 +52,21 @@ def get_platform() -> str:
     return "linux"
 
 
+def get_proxy_start_timeout_seconds() -> int:
+    """mitmproxy 冷启动超时时间。
+
+    Windows ARM64 首次导入 mitmproxy/cryptography 或初始化证书时明显更慢，
+    原来的 10 秒容易误报“代理服务器启动超时”。
+    """
+    system = platform.system()
+    machine = (platform.machine() or "").lower()
+    if system == "Windows" and ("arm" in machine or "aarch64" in machine):
+        return 60
+    if system == "Windows":
+        return 45
+    return 30
+
+
 def _looks_like_permission_error(text: str) -> bool:
     lowered = (text or "").lower()
     keywords = [
@@ -292,10 +307,12 @@ class ProxyController:
         self._ready = threading.Event()
         self._system_proxy_enabled = False
         self._last_error: Optional[str] = None
+        self._startup_stage = "未启动"
+        self._stop_requested = False
 
     @property
     def is_running(self) -> bool:
-        return bool(self._thread and self._thread.is_alive())
+        return bool(self._thread and self._thread.is_alive() and not self._stop_requested)
 
     @property
     def system_proxy_enabled(self) -> bool:
@@ -306,19 +323,31 @@ class ProxyController:
         return self._last_error
 
     def start(self) -> None:
-        if self.is_running:
+        if self._thread and self._thread.is_alive():
+            if self._stop_requested:
+                raise RuntimeError("代理服务器上次启动仍在清理中，请稍后重试")
             return
 
         self._last_error = None
+        self._startup_stage = "准备启动"
+        self._stop_requested = False
         self._ready.clear()
         self._thread = threading.Thread(target=self._run, name="wechat-proxy-server", daemon=True)
         self._thread.start()
-        if not self._ready.wait(timeout=10):
-            raise RuntimeError("代理服务器启动超时")
+        timeout = get_proxy_start_timeout_seconds()
+        if not self._ready.wait(timeout=timeout):
+            self._stop_requested = True
+            self._last_error = (
+                f"代理服务器启动超时（等待 {timeout} 秒，当前阶段：{self._startup_stage}）。"
+                "Windows ARM64 首次初始化 mitmproxy 可能较慢；如果反复出现，"
+                "请检查 mitmproxy 是否安装完整、端口是否被占用，或安全软件是否拦截 Python。"
+            )
+            raise RuntimeError(self._last_error)
         if self._last_error:
             raise RuntimeError(self._last_error)
 
     def stop(self) -> None:
+        self._stop_requested = True
         self._disable_system_proxy()
 
         if self._loop and self._master:
@@ -330,16 +359,28 @@ class ProxyController:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=6)
 
+        if self._thread and self._thread.is_alive():
+            self._last_error = self._last_error or "代理服务器停止超时，请稍后重试"
+            return
+
         self._thread = None
         self._master = None
         self._loop = None
         self._ready.clear()
+        self._startup_stage = "已停止"
+        self._stop_requested = False
 
     def _run(self) -> None:
+        self._startup_stage = "初始化事件循环"
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         try:
+            self._startup_stage = "导入 mitmproxy"
             _ensure_mitmproxy_imported()
+            if self._stop_requested:
+                return
+
+            self._startup_stage = f"初始化 mitmproxy 代理端口 {self.proxy_port}"
             opts = options.Options(listen_host="0.0.0.0", listen_port=self.proxy_port)
             master = DumpMaster(opts, loop=self._loop, with_termlog=False, with_dumper=False)
             master.addons.add(
@@ -350,18 +391,29 @@ class ProxyController:
                 )
             )
             self._master = master
+            if self._stop_requested:
+                return
+
+            self._startup_stage = "设置系统代理"
             self._system_proxy_enabled = self._enable_system_proxy()
+            if self._stop_requested:
+                return
+
+            self._startup_stage = "启动代理主循环"
             self._ready.set()
             self._loop.run_until_complete(master.run())
         except Exception as exc:
             self._last_error = str(exc)
             self._ready.set()
         finally:
+            self._startup_stage = "停止中"
             self._disable_system_proxy()
             if self._loop and not self._loop.is_closed():
                 self._loop.close()
             self._loop = None
             self._master = None
+            self._startup_stage = "已停止"
+            self._stop_requested = False
 
     def _enable_system_proxy(self) -> bool:
         current_platform = get_platform()

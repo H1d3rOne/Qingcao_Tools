@@ -527,9 +527,14 @@ class WechatService:
         if not self.local_server or self.local_server.port != self.local_server_port:
             self.local_server = self._create_local_server()
         self.local_server.start()
+        controller = self._get_proxy_controller()
         try:
-            self._get_proxy_controller().start()
+            controller.start()
         except Exception as exc:
+            try:
+                controller.stop()
+            except Exception:
+                pass
             self.local_server.stop()
             self._last_error = str(exc)
             raise
