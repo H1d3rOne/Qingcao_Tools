@@ -55,7 +55,7 @@ def get_platform() -> str:
 def get_proxy_start_timeout_seconds() -> int:
     """mitmproxy 冷启动超时时间。
 
-    Windows ARM64 首次导入 mitmproxy/cryptography 或初始化证书时明显更慢，
+    Windows 10/11 ARM64 首次导入 mitmproxy/cryptography 或初始化证书时明显更慢，
     原来的 10 秒容易误报“代理服务器启动超时”。
     """
     system = platform.system()
@@ -124,6 +124,30 @@ def get_network_services_macos() -> list[str]:
         return services or ["Wi-Fi"]
     except Exception:
         return ["Wi-Fi"]
+
+
+def get_windows_proxy_override() -> str:
+    return (
+        "localhost;127.0.0.1;::1;0.0.0.0;10.*;172.16.*;172.17.*;172.18.*;172.19.*;"
+        "172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;"
+        "172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>"
+    )
+
+
+def notify_windows_proxy_settings_changed() -> None:
+    """通知 WinINet/系统设置刷新代理配置。
+
+    只写注册表时，Windows 10/11 的“系统代理”界面和已运行应用不一定立即刷新；
+    InternetSetOptionW 会广播设置变更。
+    """
+    try:
+        import ctypes
+
+        internet_set_option = ctypes.windll.Wininet.InternetSetOptionW
+        internet_set_option(0, 39, 0, 0)  # INTERNET_OPTION_SETTINGS_CHANGED
+        internet_set_option(0, 37, 0, 0)  # INTERNET_OPTION_REFRESH
+    except Exception:
+        pass
 
 
 class WechatProxyAddon:
@@ -309,6 +333,8 @@ class ProxyController:
         self._last_error: Optional[str] = None
         self._startup_stage = "未启动"
         self._stop_requested = False
+        self._windows_previous_proxy_settings: Optional[dict] = None
+        self._windows_winhttp_proxy_changed = False
 
     @property
     def is_running(self) -> bool:
@@ -339,7 +365,7 @@ class ProxyController:
             self._stop_requested = True
             self._last_error = (
                 f"代理服务器启动超时（等待 {timeout} 秒，当前阶段：{self._startup_stage}）。"
-                "Windows ARM64 首次初始化 mitmproxy 可能较慢；如果反复出现，"
+                "Windows 10/11 ARM64 首次初始化 mitmproxy 可能较慢；如果反复出现，"
                 "请检查 mitmproxy 是否安装完整、端口是否被占用，或安全软件是否拦截 Python。"
             )
             raise RuntimeError(self._last_error)
@@ -415,6 +441,104 @@ class ProxyController:
             self._startup_stage = "已停止"
             self._stop_requested = False
 
+    def _read_windows_proxy_settings(self) -> dict:
+        import winreg
+
+        values = {name: None for name in ("ProxyEnable", "ProxyServer", "ProxyOverride")}
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+        except FileNotFoundError:
+            return values
+
+        with key:
+            for name in values:
+                try:
+                    value, value_type = winreg.QueryValueEx(key, name)
+                    values[name] = (value_type, value)
+                except FileNotFoundError:
+                    pass
+        return values
+
+    def _write_windows_proxy_settings(self, values: dict) -> None:
+        import winreg
+
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+        access = winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, access) as key:
+            for name, item in values.items():
+                if item is None:
+                    try:
+                        winreg.DeleteValue(key, name)
+                    except FileNotFoundError:
+                        pass
+                    continue
+                value_type, value = item
+                winreg.SetValueEx(key, name, 0, value_type, value)
+        notify_windows_proxy_settings_changed()
+
+    def _enable_windows_user_proxy(self) -> None:
+        import winreg
+
+        if self._windows_previous_proxy_settings is None:
+            self._windows_previous_proxy_settings = self._read_windows_proxy_settings()
+
+        proxy_server = f"{self.proxy_host}:{self.proxy_port}"
+        self._write_windows_proxy_settings({
+            "ProxyEnable": (winreg.REG_DWORD, 1),
+            "ProxyServer": (winreg.REG_SZ, proxy_server),
+            "ProxyOverride": (winreg.REG_SZ, get_windows_proxy_override()),
+        })
+
+        current = self._read_windows_proxy_settings()
+        enabled = (current.get("ProxyEnable") or (None, 0))[1]
+        server = (current.get("ProxyServer") or (None, ""))[1]
+        if int(enabled or 0) != 1 or str(server) != proxy_server:
+            raise RuntimeError("Windows 当前用户代理写入后校验失败")
+
+    def _restore_windows_user_proxy(self) -> bool:
+        try:
+            if self._windows_previous_proxy_settings is not None:
+                self._write_windows_proxy_settings(self._windows_previous_proxy_settings)
+                self._windows_previous_proxy_settings = None
+            return True
+        except Exception:
+            return False
+
+    def _enable_windows_winhttp_proxy_best_effort(self) -> None:
+        try:
+            result = subprocess.run(
+                [
+                    "netsh",
+                    "winhttp",
+                    "set",
+                    "proxy",
+                    f"proxy-server={self.proxy_host}:{self.proxy_port}",
+                    f"bypass-list={get_windows_proxy_override()}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self._windows_winhttp_proxy_changed = result.returncode == 0
+        except Exception:
+            pass
+
+    def _disable_windows_winhttp_proxy_best_effort(self) -> None:
+        if not self._windows_winhttp_proxy_changed:
+            return
+        try:
+            result = subprocess.run(
+                ["netsh", "winhttp", "reset", "proxy"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                self._windows_winhttp_proxy_changed = False
+        except Exception:
+            pass
+
     def _enable_system_proxy(self) -> bool:
         current_platform = get_platform()
 
@@ -465,36 +589,15 @@ class ProxyController:
 
         if current_platform == "windows":
             try:
-                subprocess.run(
-                    ["netsh", "winhttp", "set", "proxy", f"{self.proxy_host}:{self.proxy_port}"],
-                    check=True,
-                    shell=True,
-                )
-                import winreg
-
-                key = winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    r"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
-                    0,
-                    winreg.KEY_WRITE,
-                )
-                winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
-                winreg.SetValueEx(key, "ProxyServer", 0, winreg.REG_SZ, f"{self.proxy_host}:{self.proxy_port}")
-                winreg.SetValueEx(
-                    key,
-                    "ProxyOverride",
-                    0,
-                    winreg.REG_SZ,
-                    "localhost;127.0.0.1;::1;0.0.0.0;10.*;172.16.*;172.17.*;172.18.*;172.19.*;"
-                    "172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;"
-                    "172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>",
-                )
-                winreg.CloseKey(key)
+                # 视频号页面/浏览器走的是 WinINet 当前用户系统代理；
+                # netsh winhttp 在普通用户权限下可能失败，不能让它阻断注册表代理写入。
+                self._enable_windows_user_proxy()
+                self._enable_windows_winhttp_proxy_best_effort()
                 self._system_proxy_enabled = True
                 return True
-            except Exception:
+            except Exception as exc:
                 self._system_proxy_enabled = False
-                return False
+                raise RuntimeError(f"设置 Windows 系统代理失败: {exc}") from exc
 
         self._system_proxy_enabled = False
         return False
@@ -514,29 +617,8 @@ class ProxyController:
                 success = ok or success
 
         elif current_platform == "windows":
-            try:
-                subprocess.run(["netsh", "winhttp", "reset", "proxy"], check=True, shell=True)
-                import winreg
-
-                key = winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    r"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
-                    0,
-                    winreg.KEY_WRITE,
-                )
-                winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
-                try:
-                    winreg.DeleteValue(key, "ProxyServer")
-                except FileNotFoundError:
-                    pass
-                try:
-                    winreg.DeleteValue(key, "ProxyOverride")
-                except FileNotFoundError:
-                    pass
-                winreg.CloseKey(key)
-                success = True
-            except Exception:
-                success = False
+            self._disable_windows_winhttp_proxy_best_effort()
+            success = self._restore_windows_user_proxy()
 
         self._system_proxy_enabled = False
         return success
