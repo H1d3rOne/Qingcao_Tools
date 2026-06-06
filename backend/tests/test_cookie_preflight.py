@@ -40,28 +40,25 @@ def test_douyin_js_dependency_error_is_user_friendly():
     assert str(exc_info.value) == "后端 JS 依赖未安装（缺少 jsrsasign），请在 backend 目录执行 npm ci 后重启后端"
 
 
-def test_douyin_live_signature_does_not_require_sdenv(monkeypatch):
+def test_douyin_live_signature_requires_sdenv(monkeypatch):
     dy_util._sign_js = None
     captured = {}
 
     class FakeContext:
         def call(self, function_name, *args):
-            assert function_name == "get_signature"
-            assert len(args) == 1
-            assert len(args[0]) == 32
+            assert function_name == "sign"
+            assert args == ("room-id", "user-id")
             return "mock-signature"
 
-    def fake_compile_js(script_path, *module_names, **kwargs):
+    def fake_compile_js(script_path, *module_names):
         captured["module_names"] = module_names
-        captured["live_danmu"] = kwargs.get("live_danmu")
         return FakeContext()
 
     monkeypatch.setattr(dy_util, "_compile_js", fake_compile_js)
 
     try:
         assert dy_util.generate_signature("room-id", "user-id") == "mock-signature"
-        assert captured["module_names"] == ()
-        assert captured["live_danmu"] is True
+        assert captured["module_names"] == ("sdenv",)
     finally:
         dy_util._sign_js = None
 
