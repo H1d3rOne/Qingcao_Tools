@@ -145,7 +145,19 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
         # 5. 等待连接建立
         max_wait = 10
         wait_count = 0
+        startup_error = None
         while not spider.is_running and wait_count < max_wait * 10:
+            # start_ws 在线程内启动失败时会通过 message_callback 推送 error。
+            # 这里先把明确错误转发给前端，不再让前端等到“弹幕连接超时”。
+            while message_queue:
+                msg = message_queue.pop(0)
+                await websocket.send_json(msg)
+                if msg.get('type') == 'error':
+                    startup_error = msg.get('message') or '弹幕连接失败'
+                    break
+            if startup_error:
+                logger.warning(f"WebSocket: 弹幕启动失败: {startup_error}")
+                return
             await asyncio.sleep(0.1)
             wait_count += 1
         
@@ -192,13 +204,15 @@ async def websocket_live_danmaku(websocket: WebSocket, live_url: str):
             """发送消息到客户端"""
             try:
                 msg_count = 0
-                while is_running and spider.is_running:
+                while is_running and (spider.is_running or message_queue):
                     # 发送队列中的消息
                     while message_queue:
                         msg = message_queue.pop(0)
                         await websocket.send_json(msg)
                         msg_count += 1
                         logger.info(f"✓ 已发送第 {msg_count} 条消息到前端: type={msg.get('type')}, nickname={msg.get('nickname')}")
+                    if not spider.is_running:
+                        break
                     await asyncio.sleep(0.02)  # 20ms 检查一次
             except WebSocketDisconnect:
                 logger.info("WebSocket: 客户端断开连接")

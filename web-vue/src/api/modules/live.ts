@@ -125,6 +125,7 @@ export function createLiveWebSocket(
   let heartbeatTimer: number | null = null
   const maxReconnectDelay = 30000 // 最大重连延迟 30 秒
   let reconnectAttempts = 0
+  let serverErrorReceived = false
 
   function connect() {
     console.log('connect() 被调用, 当前 ws 状态:', ws?.readyState)
@@ -142,6 +143,7 @@ export function createLiveWebSocket(
     
     try {
       console.log('创建 WebSocket 实例...')
+      serverErrorReceived = false
       ws = new WebSocket(wsUrl)
       console.log('WebSocket 实例已创建, readyState:', ws.readyState)
       
@@ -169,6 +171,7 @@ export function createLiveWebSocket(
               // 心跳响应
               break
             case 'error':
+              serverErrorReceived = true
               console.error('错误消息:', msg.message)
               callbacks.onError?.(msg.message || '未知错误')
               break
@@ -203,7 +206,7 @@ export function createLiveWebSocket(
         stopHeartbeat()
         
         // 非正常关闭时尝试重连
-        if (event.code !== 1000 && event.code !== 1001) {
+        if (!serverErrorReceived && event.code !== 1000 && event.code !== 1001) {
           scheduleReconnect()
         } else {
           callbacks.onDisconnected?.()

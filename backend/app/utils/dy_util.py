@@ -36,6 +36,12 @@ _sign_js = None
 
 def _format_node_dependency_message(module_name=None):
     module_hint = f"（缺少 {module_name}）" if module_name else ""
+    if module_name and "sdenv" in module_name:
+        return (
+            f"抖音直播弹幕 JS 依赖未安装{module_hint}，"
+            "直播链接解析/播放不受影响；如需实时弹幕，请在 backend 目录执行 "
+            "npm ci --include=optional 后重启后端。Windows 如遇 node-gyp 编译失败，请安装 Visual Studio C++ Build Tools。"
+        )
     return f"后端 JS 依赖未安装{module_hint}，请在 backend 目录执行 npm ci 后重启后端"
 
 
@@ -53,11 +59,12 @@ def _ensure_node_modules(*module_names):
         raise RuntimeError(_format_node_dependency_message(", ".join(missing)))
 
 
-def _raise_friendly_js_error(exc):
+def _raise_friendly_js_error(exc, live_danmu=False):
     message = str(exc)
     missing_module = _extract_missing_node_module(message)
     if missing_module or "MODULE_NOT_FOUND" in message:
-        raise RuntimeError(_format_node_dependency_message(missing_module)) from exc
+        module_name = "sdenv" if live_danmu else missing_module
+        raise RuntimeError(_format_node_dependency_message(module_name)) from exc
     if (
         "Could not find an available JavaScript runtime" in message
         or "No such file or directory: 'node'" in message
@@ -74,7 +81,7 @@ def _compile_js(script_path, *module_names):
     try:
         return execjs.compile(script_path.read_text(encoding="utf-8"), cwd=str(BACKEND_ROOT))
     except Exception as exc:
-        _raise_friendly_js_error(exc)
+        _raise_friendly_js_error(exc, live_danmu="sdenv" in module_names)
 
 
 def _get_dy_js():
@@ -87,7 +94,7 @@ def _get_dy_js():
 def _get_sign_js():
     global _sign_js
     if _sign_js is None:
-        _sign_js = _compile_js(sign_path)
+        _sign_js = _compile_js(sign_path, "sdenv")
     return _sign_js
 
 
@@ -95,7 +102,7 @@ def _call_js(get_context, function_name, *args):
     try:
         return get_context().call(function_name, *args)
     except Exception as exc:
-        _raise_friendly_js_error(exc)
+        _raise_friendly_js_error(exc, live_danmu=get_context is _get_sign_js)
 
 
 def trans_cookies(cookies_str):

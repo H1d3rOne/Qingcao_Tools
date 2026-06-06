@@ -753,13 +753,19 @@ class DouyinLiveSpider:
     def _on_error(self, ws, error):
         """WebSocket 错误回调"""
         logger.error(f"直播 WebSocket 错误: {error}")
-        import traceback
-        logger.error(traceback.format_exc())
+        self.is_running = False
+        self._emit_error(f"直播弹幕连接失败: {error}")
     
     def _on_close(self, ws, close_status_code, close_msg):
         """WebSocket 关闭回调"""
         logger.warning(f"直播间 {self.live_url} 连接关闭: {close_status_code}, {close_msg}")
         self.is_running = False
+
+    def _emit_error(self, message: str):
+        """向前端推送弹幕错误，避免启动失败时只显示超时。"""
+        logger.error(message)
+        if self.message_callback:
+            self.message_callback({'type': 'error', 'message': message})
     
     def start_ws(self, room_info: Dict = None):
         """启动 WebSocket 连接"""
@@ -776,7 +782,7 @@ class DouyinLiveSpider:
         logger.info(f"room_id: {room_id}")
         
         if not room_id:
-            logger.error("无法获取 room_id，无法建立 WebSocket 连接")
+            self._emit_error("无法获取 room_id，无法建立弹幕连接")
             return
         
         # 生成随机 user_id
@@ -788,10 +794,14 @@ class DouyinLiveSpider:
             cookies.update(self.auth.cookie)
         ttwid = cookies.get('ttwid', '')
         if not ttwid:
-            message = "Cookie 中缺少 ttwid，无法建立弹幕连接"
-            logger.error(message)
-            if self.message_callback:
-                self.message_callback({'type': 'error', 'message': message})
+            self._emit_error("Cookie 中缺少 ttwid，无法建立弹幕连接")
+            return
+
+        try:
+            signature = generate_signature(room_id, user_id)
+        except Exception as e:
+            message = str(e) or "抖音直播弹幕签名生成失败"
+            self._emit_error(message)
             return
         
         # 构建参数
@@ -826,7 +836,7 @@ class DouyinLiveSpider:
          .add_param('live_reason', '')
          .add_param('room_id', room_id)
          .add_param('heartbeatDuration', '0')
-         .add_param('signature', generate_signature(room_id, user_id))
+         .add_param('signature', signature)
         )
         
         wss_url = f"wss://webcast5-ws-web-lf.douyin.com/webcast/im/push/v2/?{urlencode(params.get())}"
@@ -856,10 +866,11 @@ class DouyinLiveSpider:
             self.ws.run_forever(origin='https://live.douyin.com')
             logger.info("run_forever() 已返回")
         except Exception as e:
-            logger.error(f"WebSocket 运行错误: {e}")
+            self._emit_error(f"直播弹幕连接失败: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            self.ws.close()
+            if self.ws:
+                self.ws.close()
     
     def stop(self):
         """停止 WebSocket 连接"""

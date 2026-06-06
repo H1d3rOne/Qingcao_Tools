@@ -113,6 +113,7 @@
 | Node.js / npm | 推荐 Node.js `20.19+` 或更新 LTS | 后端 JS 辅助依赖、前端依赖都需要 Node 环境 |
 | pnpm | 推荐 | 没有 pnpm 时可改用 npm |
 | Git | 任意新版 | 用于拉取项目代码 |
+| Visual Studio C++ Build Tools | Windows 可选 | 仅使用抖音直播实时弹幕时可能需要，用于编译 `sdenv` 原生依赖 |
 | Playwright 浏览器 / Chrome / Edge | 可选 | 抖音搜索、闲鱼浏览器登录需要；可安装 Playwright 自带 Chromium，也可使用系统已安装的 Chrome/Edge |
 | 系统 | Windows 10/11、macOS、Linux、Windows WSL2 | 桌面系统在打开目录、证书安装等场景体验更完整 |
 
@@ -148,7 +149,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
-npm ci
+npm ci --omit=optional
 
 cd ../web-vue
 pnpm install
@@ -171,7 +172,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
 
-npm ci
+npm ci --omit=optional
 
 cd ..\web-vue
 pnpm install
@@ -182,6 +183,16 @@ pnpm install
 ```bat
 npm install
 ```
+
+#### 可选：安装抖音直播实时弹幕依赖
+
+上面的安装命令会跳过 `sdenv`，不影响直播链接解析和播放；如果需要实时弹幕，在 `backend` 目录执行：
+
+```bash
+npm ci --include=optional
+```
+
+Windows 如果编译 `sdenv` 失败，需要先安装 Visual Studio C++ Build Tools，并勾选 **Desktop development with C++**。macOS 如遇原生依赖编译失败，先执行 `xcode-select --install` 安装命令行工具。
 
 #### 可选：安装 Playwright 浏览器
 
@@ -385,7 +396,7 @@ cd backend
 
 # 安装依赖
 .venv/bin/python -m pip install -r requirements.txt
-npm ci
+npm ci --omit=optional
 
 # 启动开发服务
 .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 3121 --reload
@@ -510,7 +521,7 @@ py -3.11-64 -m venv .venv
 
 ```bash
 cd backend
-npm ci
+npm ci --omit=optional
 ```
 
 执行后重新启动后端。
@@ -525,10 +536,22 @@ npm ci
 cd backend
 taskkill /F /IM node.exe 2>nul
 rmdir /s /q node_modules
-npm ci
+npm ci --omit=optional
 ```
 
-### 6. 功能提示未配置 Cookie
+如果需要抖音直播实时弹幕，最后一行改为 `npm ci --include=optional`。
+
+### 6. 抖音直播弹幕提示连接超时或 `sdenv` 未安装
+
+直播链接解析/播放不需要 `sdenv`；实时弹幕需要。请在 `backend` 目录安装可选依赖后重启后端：
+
+```bash
+npm ci --include=optional
+```
+
+Windows 如出现 `node-gyp` / Visual Studio 相关报错，安装 Visual Studio C++ Build Tools，并勾选 **Desktop development with C++** 后重试。
+
+### 7. 功能提示未配置 Cookie
 
 先到前端“系统设置”配置对应平台 Cookie：
 
@@ -537,7 +560,7 @@ npm ci
 - 夸克网盘：配置夸克 Cookie 或使用夸克登录；
 - 闲鱼工具：配置闲鱼 Cookie。
 
-### 7. 前端无法访问后端
+### 8. 前端无法访问后端
 
 确认后端运行在 `3121`，前端 Vite 代理会将 `/api` 转发到：
 
