@@ -98,7 +98,7 @@ cd "$PROJECT_ROOT/web-vue"
 
 : > /tmp/qingcao-frontend.log
 if [ "$FRONTEND_PM" = "pnpm" ]; then
-    nohup pnpm run dev -- --host 0.0.0.0 --port 3120 > /tmp/qingcao-frontend.log 2>&1 &
+    nohup pnpm run dev --host 0.0.0.0 --port 3120 > /tmp/qingcao-frontend.log 2>&1 &
     FRONTEND_PID=$!
 else
     nohup npm run dev -- --host 0.0.0.0 --port 3120 > /tmp/qingcao-frontend.log 2>&1 &
@@ -151,13 +151,21 @@ for _ in $(seq 1 30); do
 import sys
 from urllib.request import urlopen
 
-try:
-    with urlopen("http://127.0.0.1:3120/", timeout=1) as resp:
-        sys.exit(0 if 200 <= resp.status < 500 else 1)
-except Exception:
-    sys.exit(1)
+for url in ("http://127.0.0.1:3120/", "http://localhost:3120/"):
+    try:
+        with urlopen(url, timeout=1) as resp:
+            if 200 <= resp.status < 500:
+                sys.exit(0)
+    except Exception:
+        pass
+sys.exit(1)
 INNER_PY
     then
+        FRONTEND_READY=1
+        break
+    fi
+
+    if grep -q "ready in" /tmp/qingcao-frontend.log 2>/dev/null; then
         FRONTEND_READY=1
         break
     fi

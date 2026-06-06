@@ -5,6 +5,35 @@ const signText = "LyoqIDEuMC4wLjUzICovCmlmICghd2luZG93LmJ5dGVkX2FjcmF3bGVyKSB7Ci
 
 let globalDom = null;
 
+function applyBrowserEnvironment(dom) {
+  const originalDefineProperty = Object.defineProperty;
+
+  try {
+    // sdenv 1.1.3 在新版 sdenv-jsdom/Node 下会尝试重定义
+    // window.location.replace/assign，但这两个属性已是 non-configurable，
+    // 会抛出 TypeError: Cannot redefine property: replace。
+    // 这里仅跳过这两个 location 方法的重定义，保留 sdenv 其它补环境逻辑。
+    Object.defineProperty = function(target, property, descriptor) {
+      try {
+        return originalDefineProperty.call(Object, target, property, descriptor);
+      } catch (e) {
+        if (
+          target === dom.window.location &&
+          (property === "replace" || property === "assign") &&
+          /Cannot redefine property/.test(String(e && e.message || e))
+        ) {
+          return target;
+        }
+        throw e;
+      }
+    };
+
+    browser(dom.window, "chrome");
+  } finally {
+    Object.defineProperty = originalDefineProperty;
+  }
+}
+
 function getOrCreateDom() {
   if (globalDom && globalDom.window) {
     return globalDom;
@@ -17,7 +46,7 @@ function getOrCreateDom() {
     runScripts: "outside-only",
   }, "<html></html>");
 
-  browser(dom.window, "chrome");
+  applyBrowserEnvironment(dom);
   new Script(atob(signText)).runInContext(dom.getInternalVMContext());
 
   globalDom = dom;

@@ -112,7 +112,7 @@ cd /d "%PROJECT_ROOT%\web-vue"
 set "FRONTEND_LOG=%TEMP%\qingcao-frontend.log"
 break > "%FRONTEND_LOG%"
 if "%FRONTEND_PM%"=="pnpm" (
-  start "Qingcao Frontend" /B cmd /c pnpm run dev -- --host 0.0.0.0 --port 3120 ^> "%FRONTEND_LOG%" 2^>^&1
+  start "Qingcao Frontend" /B cmd /c pnpm run dev --host 0.0.0.0 --port 3120 ^> "%FRONTEND_LOG%" 2^>^&1
 ) else (
   start "Qingcao Frontend" /B cmd /c npm run dev -- --host 0.0.0.0 --port 3120 ^> "%FRONTEND_LOG%" 2^>^&1
 )
@@ -125,7 +125,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-call :wait_url "http://127.0.0.1:3120/"
+call :wait_url "http://127.0.0.1:3120/" "http://localhost:3120/"
 if errorlevel 1 (
   echo.
   echo Frontend failed to start. Recent frontend log:
@@ -160,9 +160,10 @@ pause >nul
 exit /b 0
 
 :wait_url
-set "TARGET_URL=%~1"
+set "TARGET_URL_1=%~1"
+set "TARGET_URL_2=%~2"
 for /L %%I in (1,1,30) do (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri '%TARGET_URL%' -TimeoutSec 1; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>nul
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$urls = @('%TARGET_URL_1%'); if ('%TARGET_URL_2%' -ne '') { $urls += '%TARGET_URL_2%' }; foreach ($u in $urls) { try { $r = Invoke-WebRequest -UseBasicParsing -Uri $u -TimeoutSec 1; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500) { exit 0 } } catch {} }; exit 1" >nul 2>nul
   if !errorlevel! EQU 0 exit /b 0
   timeout /t 1 /nobreak >nul
 )
