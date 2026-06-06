@@ -172,8 +172,15 @@ def is_windows_proxy_active(values: dict) -> bool:
     )
 
 
-def apply_windows_proxy_settings_via_wininet(values: dict) -> None:
-    """用 WinINet API 应用当前用户代理，确保 Windows 10/11 设置界面同步刷新。"""
+def sync_windows_proxy_settings_best_effort(values: dict) -> bool:
+    """用 WinINet API 刷新当前用户代理。
+
+    微软文档说明全局代理可通过当前用户 Internet Settings 配置并调用
+    INTERNET_OPTION_SETTINGS_CHANGED / INTERNET_OPTION_REFRESH 让 WinINet 重读。
+    INTERNET_OPTION_PER_CONNECTION_OPTION 可同步默认连接配置，但不同 Windows
+    版本/策略下可能失败，不能因为刷新失败阻断 mitmproxy 启动。
+    """
+    success = False
     try:
         import ctypes
         from ctypes import wintypes
@@ -257,10 +264,12 @@ def apply_windows_proxy_settings_via_wininet(values: dict) -> None:
             ctypes.byref(option_list),
             ctypes.sizeof(option_list),
         )
-        if not ok:
-            raise ctypes.WinError()
+        success = bool(ok)
+    except Exception:
+        success = False
     finally:
         notify_windows_proxy_settings_changed()
+    return success
 
 
 class WechatProxyAddon:
@@ -614,7 +623,7 @@ class ProxyController:
             "AutoDetect": (winreg.REG_DWORD, 0),
         }
         self._write_windows_proxy_settings(next_settings)
-        apply_windows_proxy_settings_via_wininet(next_settings)
+        sync_windows_proxy_settings_best_effort(next_settings)
 
         current = self._read_windows_proxy_settings()
         enabled = (current.get("ProxyEnable") or (None, 0))[1]
@@ -626,7 +635,7 @@ class ProxyController:
         try:
             if self._windows_previous_proxy_settings is not None:
                 self._write_windows_proxy_settings(self._windows_previous_proxy_settings)
-                apply_windows_proxy_settings_via_wininet(self._windows_previous_proxy_settings)
+                sync_windows_proxy_settings_best_effort(self._windows_previous_proxy_settings)
                 self._windows_previous_proxy_settings = None
             return True
         except Exception:
